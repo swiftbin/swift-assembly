@@ -585,7 +585,7 @@ private enum A64MoveEncoder {
         let rm = try parseIntegerRegister(source, allowSP: true)
         guard rd.width == rm.width else { throw AssemblerError.invalidRegister(instruction.original) }
         if rd.kind == .stackPointer || rm.kind == .stackPointer {
-            return try encodeAddSub(ParsedInstruction(mnemonic: "add", operands: [instruction.operands[0], instruction.operands[1], "#0"], original: instruction.original), mnemonic: "add")
+            return try A64AddSubEncoder.addSub(ParsedInstruction(mnemonic: "add", operands: [instruction.operands[0], instruction.operands[1], "#0"], original: instruction.original), mnemonic: "add")
         }
         return try A64LogicalEncoder.shiftedRegister(
             ParsedInstruction(mnemonic: "orr", operands: [instruction.operands[0], rd.is64Bit ? "xzr" : "wzr", instruction.operands[1]], original: instruction.original),
@@ -1124,7 +1124,7 @@ private func encodeInstruction(_ instruction: ParsedInstruction, pc: Int64, labe
     case "eret":
         return try A64ExceptionEncoder.exceptionReturn(instruction)
     case "isb", "dsb", "dmb":
-        return try encodeBarrier(instruction, mnemonic: mnemonic)
+        return try A64SystemEncoder.barrier(instruction, mnemonic: mnemonic)
     case "b":
         if let suffix {
             return try A64BranchEncoder.conditional(instruction, conditionSuffix: suffix, pc: pc, labels: labels)
@@ -1137,37 +1137,37 @@ private func encodeInstruction(_ instruction: ParsedInstruction, pc: Int64, labe
     case "tbz", "tbnz":
         return try A64BranchEncoder.testAndBranch(instruction, mnemonic: mnemonic, pc: pc, labels: labels)
     case "mov":
-        return try encodeMovAlias(instruction)
+        return try A64MoveEncoder.movAlias(instruction)
     case "movz", "movn", "movk":
-        return try encodeMoveWide(instruction, mnemonic: mnemonic)
+        return try A64MoveEncoder.moveWide(instruction, mnemonic: mnemonic)
     case "adr", "adrp":
         return try A64AddressEncoder.adr(instruction, mnemonic: mnemonic, pc: pc, labels: labels)
     case "add", "adds", "sub", "subs":
-        return try encodeAddSub(instruction, mnemonic: mnemonic)
+        return try A64AddSubEncoder.addSub(instruction, mnemonic: mnemonic)
     case "cmp", "cmn":
-        return try encodeCompareAlias(instruction, mnemonic: mnemonic)
+        return try A64AddSubEncoder.compareAlias(instruction, mnemonic: mnemonic)
     case "and", "ands", "orr", "eor", "bic", "bics", "orn", "eon":
         if instruction.operands.count >= 3, instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#") {
             guard ["and", "ands", "orr", "eor"].contains(mnemonic) else {
                 throw AssemblerError.unsupportedOperand(instruction.original)
             }
-            return try encodeLogicalImmediate(instruction, mnemonic: mnemonic)
+            return try A64LogicalEncoder.immediate(instruction, mnemonic: mnemonic)
         }
-        return try encodeLogicalShiftedRegister(instruction, mnemonic: mnemonic)
+        return try A64LogicalEncoder.shiftedRegister(instruction, mnemonic: mnemonic)
     case "mvn":
-        return try encodeMvnAlias(instruction)
+        return try A64LogicalEncoder.mvnAlias(instruction)
     case "lsl", "lsr", "asr":
-        return try encodeShiftAlias(instruction, mnemonic: mnemonic)
+        return try A64DataProcessingEncoder.shiftAlias(instruction, mnemonic: mnemonic)
     case "extr", "ror":
-        return try mnemonic == "ror" ? encodeRORAlias(instruction) : encodeEXTR(instruction)
+        return try mnemonic == "ror" ? A64DataProcessingEncoder.rorAlias(instruction) : A64DataProcessingEncoder.extract(instruction)
     case "mul", "mneg", "madd", "msub":
-        return try encodeMultiply(instruction, mnemonic: mnemonic)
+        return try A64DataProcessingEncoder.multiply(instruction, mnemonic: mnemonic)
     case "udiv", "sdiv":
-        return try encodeDivide(instruction, mnemonic: mnemonic)
+        return try A64DataProcessingEncoder.divide(instruction, mnemonic: mnemonic)
     case "ldr", "ldrb", "ldrh", "ldrsb", "ldrsh", "ldrsw", "str", "strb", "strh", "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw", "stur", "sturb", "sturh":
-        return try encodeLoadStore(instruction, mnemonic: mnemonic)
+        return try A64LoadStoreEncoder.single(instruction, mnemonic: mnemonic)
     case "ldp", "stp":
-        return try encodeLoadStorePair(instruction, mnemonic: mnemonic)
+        return try A64LoadStoreEncoder.pair(instruction, mnemonic: mnemonic)
     case "paciasp", "autiasp", "pacibsp", "autibsp", "xpaci", "xpacd":
         return try A64PointerAuthenticationEncoder.encode(instruction, mnemonic: mnemonic, architecture: architecture)
     default:
@@ -1233,89 +1233,3 @@ private func parseExtend(_ text: String) throws -> (ExtendKind, Int) {
     try A64Parser.extend(text)
 }
 
-private func encodeMovAlias(_ instruction: ParsedInstruction) throws -> UInt32 {
-    try A64MoveEncoder.movAlias(instruction)
-}
-
-private func encodeMoveImmediateAlias(_ instruction: ParsedInstruction, destination rd: IntegerRegister) throws -> UInt32 {
-    try A64MoveEncoder.moveImmediateAlias(instruction, destination: rd)
-}
-private func encodeLogicalImmediate(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64LogicalEncoder.immediate(instruction, mnemonic: mnemonic)
-}
-
-private func encodeBitmaskImmediate(_ value: UInt64, width: Int) -> (n: UInt32, immr: UInt32, imms: UInt32)? {
-    A64BitmaskImmediate.encode(value, width: width)
-}
-
-private func mask(width: Int) -> UInt64 {
-    A64BitmaskImmediate.mask(width: width)
-}
-
-private func replicate(_ value: UInt64, elementSize: Int, width: Int) -> UInt64 {
-    A64BitmaskImmediate.replicate(value, elementSize: elementSize, width: width)
-}
-
-private func rotateRight(_ value: UInt64, by amount: Int, width: Int) -> UInt64 {
-    A64BitmaskImmediate.rotateRight(value, by: amount, width: width)
-}
-
-private func encodeBarrier(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64SystemEncoder.barrier(instruction, mnemonic: mnemonic)
-}
-
-private func encodeMoveWide(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64MoveEncoder.moveWide(instruction, mnemonic: mnemonic)
-}
-
-private func encodeADR(_ instruction: ParsedInstruction, mnemonic: String, pc: Int64, labels: [String: Int64]) throws -> UInt32 {
-    try A64AddressEncoder.adr(instruction, mnemonic: mnemonic, pc: pc, labels: labels)
-}
-
-private func encodeAddSub(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64AddSubEncoder.addSub(instruction, mnemonic: mnemonic)
-}
-
-private func encodeCompareAlias(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64AddSubEncoder.compareAlias(instruction, mnemonic: mnemonic)
-}
-
-private func encodeLogicalShiftedRegister(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64LogicalEncoder.shiftedRegister(instruction, mnemonic: mnemonic)
-}
-
-private func encodeMvnAlias(_ instruction: ParsedInstruction) throws -> UInt32 {
-    try A64LogicalEncoder.mvnAlias(instruction)
-}
-
-private func encodeShiftAlias(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64DataProcessingEncoder.shiftAlias(instruction, mnemonic: mnemonic)
-}
-
-private func encodeEXTR(_ instruction: ParsedInstruction) throws -> UInt32 {
-    try A64DataProcessingEncoder.extract(instruction)
-}
-
-private func encodeRORAlias(_ instruction: ParsedInstruction) throws -> UInt32 {
-    try A64DataProcessingEncoder.rorAlias(instruction)
-}
-
-private func encodeMultiply(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64DataProcessingEncoder.multiply(instruction, mnemonic: mnemonic)
-}
-
-private func encodeDivide(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64DataProcessingEncoder.divide(instruction, mnemonic: mnemonic)
-}
-
-private func parseMemoryOperand(_ operands: [String], startIndex: Int) throws -> MemoryOperand {
-    try A64MemoryOperandParser.parse(operands, startIndex: startIndex)
-}
-
-private func encodeLoadStore(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64LoadStoreEncoder.single(instruction, mnemonic: mnemonic)
-}
-
-private func encodeLoadStorePair(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
-    try A64LoadStoreEncoder.pair(instruction, mnemonic: mnemonic)
-}
