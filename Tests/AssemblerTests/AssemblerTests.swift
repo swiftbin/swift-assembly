@@ -38,6 +38,35 @@ final class AssemblerTests: XCTestCase {
         )
     }
 
+    func testDisassembleStructuredInstructionSubset() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503201f), "nop")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd65f03c0), "ret")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd65f0000), "ret x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd61f0200), "br x16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd63f0200), "blr x16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4001001), "svc #128")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4200020), "brk #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4400000), "hlt #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd69f03e0), "eret")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5033fdf), "isb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5033f9f), "dsb sy")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5033bbf), "dmb ish")
+    }
+
+    func testDisassembleBytesUseEndianness() throws {
+        XCTAssertEqual(
+            try ARM64Assembler.disassemble([0xc0, 0x03, 0x5f, 0xd6, 0x1f, 0x20, 0x03, 0xd5]),
+            """
+            ret
+            nop
+            """
+        )
+        XCTAssertEqual(
+            try ARM64Assembler.disassemble([0xd6, 0x5f, 0x03, 0xc0], endianness: .big),
+            "ret"
+        )
+    }
+
     func testMoveWideInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("movz x0, #1"), 0xd2800020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("mov x0, #1"), 0xd2800020)
@@ -129,6 +158,13 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("adrp x0, #4096"), 0xb0000000)
     }
 
+    func testDisassembleAdrAndAdrp() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x10000000), "adr x0, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x10000020), "adr x0, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x90000000), "adrp x0, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb0000000), "adrp x0, #4096")
+    }
+
     func testUnconditionalBranchesWithLabels() throws {
         XCTAssertEqual(
             try ARM64Assembler.assembleWords("""
@@ -189,6 +225,18 @@ final class AssemblerTests: XCTestCase {
                 0xd65f03c0,
             ]
         )
+    }
+
+    func testDisassembleBranchInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x14000002), "b #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x94000002), "bl #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x17ffffff), "b #-4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x54000040), "b.eq #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x54ffffe1), "b.ne #-4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb4000080), "cbz x0, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x35000061), "cbnz w1, #12")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x36080042), "tbz w2, #1, #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x37100023), "tbnz w3, #2, #4")
     }
 
     func testLoadStoreUnsignedOffsetInstructions() throws {
