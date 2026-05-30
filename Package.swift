@@ -1,26 +1,22 @@
 // swift-tools-version: 6.3
-// The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
 let package = Package(
     name: "swift-assembler",
     products: [
-        // Products define the executables and libraries a package produces, making them visible to other packages.
         .library(
-            name: "swift-assembler",
-            targets: ["swift-assembler"]
+            name: "Assembler",
+            targets: ["Assembler"]
         ),
     ],
     targets: [
-        // Targets are the basic building blocks of a package, defining a module or a test suite.
-        // Targets can depend on other targets in this package and products from dependencies.
         .target(
-            name: "swift-assembler"
+            name: "Assembler"
         ),
         .testTarget(
-            name: "swift-assemblerTests",
-            dependencies: ["swift-assembler"]
+            name: "AssemblerTests",
+            dependencies: ["Assembler"]
         ),
     ],
     swiftLanguageModes: [.v6]
