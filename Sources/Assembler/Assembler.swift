@@ -15,7 +15,7 @@ public enum AssemblerError: Error, Equatable, CustomStringConvertible {
     case unsupportedCondition(String)
     case labelNotFound(String)
     case branchOutOfRange(instruction: String, label: String, byteOffset: Int64)
-    
+
     public var description: String {
         switch self {
         case .emptyInput: return "Input is empty."
@@ -45,12 +45,12 @@ public enum ARM64Assembler {
         case arm64
         case arm64e
     }
-    
+
     public enum Endianness: Equatable, Sendable {
         case little
         case big
     }
-    
+
     public static func assemble(_ source: String, architecture: Architecture = .arm64, endianness: Endianness = .little) throws -> [UInt8] {
         let words = try assembleWords(source, architecture: architecture)
         return words.flatMap { word in
@@ -72,14 +72,14 @@ public enum ARM64Assembler {
             }
         }
     }
-    
+
     public static func assembleWords(_ source: String, architecture: Architecture = .arm64) throws -> [UInt32] {
         let program = try parseProgram(source)
         return try program.instructions.enumerated().map { index, instruction in
             try encode(instruction, pc: Int64(index * 4), labels: program.labels, architecture: architecture)
         }
     }
-    
+
     public static func assembleWord(_ instruction: String, architecture: Architecture = .arm64) throws -> UInt32 {
         let words = try assembleWords(instruction, architecture: architecture)
         guard words.count == 1 else {
@@ -106,30 +106,30 @@ private enum A64 {
         case zero
         case stackPointer
     }
-    
+
     struct Register: Equatable {
         var number: UInt32
         var width: Int
         var kind: RegisterKind
-        
+
         var encodedNumber: UInt32 { number & 0x1f }
         var is64Bit: Bool { width == 64 }
     }
-    
+
     enum Condition: UInt32 {
         case eq = 0x0, ne = 0x1, hs = 0x2, lo = 0x3
         case mi = 0x4, pl = 0x5, vs = 0x6, vc = 0x7
         case hi = 0x8, ls = 0x9, ge = 0xa, lt = 0xb
         case gt = 0xc, le = 0xd, al = 0xe, nv = 0xf
     }
-    
+
     enum ShiftKind: UInt32 {
         case lsl = 0
         case lsr = 1
         case asr = 2
         case ror = 3
     }
-    
+
     enum ExtendKind: UInt32 {
         case uxtb = 0
         case uxth = 1
@@ -140,7 +140,7 @@ private enum A64 {
         case sxtw = 6
         case sxtx = 7
     }
-    
+
     enum MemoryOperand: Equatable {
         case unsignedOffset(base: Register, offset: Int64)
         case signedUnscaled(base: Register, offset: Int64)
@@ -174,7 +174,7 @@ private enum A64Parser {
         guard let parsed else { throw AssemblerError.invalidImmediate(text) }
         return sign * parsed
     }
-    
+
     static func integerRegister(_ text: String, allowSP: Bool) throws -> A64.Register {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if lower == "sp" {
@@ -196,19 +196,19 @@ private enum A64Parser {
         }
         return A64.Register(number: number, width: prefix == "x" ? 64 : 32, kind: .general)
     }
-    
+
     static func xRegister(_ text: String) throws -> A64.Register {
         let register = try integerRegister(text, allowSP: false)
         guard register.is64Bit else { throw AssemblerError.invalidRegister(text) }
         return register
     }
-    
+
     static func xRegisterAllowingSP(_ text: String) throws -> A64.Register {
         let register = try integerRegister(text, allowSP: true)
         guard register.is64Bit else { throw AssemblerError.invalidRegister(text) }
         return register
     }
-    
+
     static func condition(_ text: String) throws -> A64.Condition {
         switch text.lowercased() {
         case "eq": return .eq
@@ -230,7 +230,7 @@ private enum A64Parser {
         default: throw AssemblerError.unsupportedCondition(text)
         }
     }
-    
+
     static func shift(_ text: String) throws -> (A64.ShiftKind, Int) {
         let parts = text.split(separator: " ", omittingEmptySubsequences: true).map { String($0).lowercased() }
         guard parts.count == 2 else { throw AssemblerError.unsupportedShift(text) }
@@ -246,7 +246,7 @@ private enum A64Parser {
         try checkRange(amount, 0...63, instruction: parts[0])
         return (kind, Int(amount))
     }
-    
+
     static func extend(_ text: String) throws -> (A64.ExtendKind, Int) {
         let parts = text.split(separator: " ", omittingEmptySubsequences: true).map { String($0).lowercased() }
         guard (1...2).contains(parts.count) else { throw AssemblerError.unsupportedExtend(text) }
@@ -266,7 +266,7 @@ private enum A64Parser {
         try checkRange(amount, 0...4, instruction: parts[0])
         return (kind, Int(amount))
     }
-    
+
     static func barrierOption(_ text: String) throws -> UInt32 {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if lower.hasPrefix("#") {
@@ -296,18 +296,18 @@ private enum A64SourceParser {
     static func program(_ source: String) throws -> ParsedProgram {
         var labels: [String: Int64] = [:]
         var instructions: [ParsedInstruction] = []
-        
+
         for rawLine in source.components(separatedBy: .newlines) {
             var line = stripComment(rawLine).trimmingCharacters(in: .whitespacesAndNewlines)
             guard !line.isEmpty else { continue }
-            
+
             while let colonIndex = labelColonIndex(in: line) {
                 let label = String(line[..<colonIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
                 if !label.isEmpty { labels[label] = Int64(instructions.count * 4) }
                 line = String(line[line.index(after: colonIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
                 if line.isEmpty { break }
             }
-            
+
             guard !line.isEmpty else { continue }
             let parts = line.split(maxSplits: 1, whereSeparator: { $0.isWhitespace })
             guard let first = parts.first else { continue }
@@ -319,11 +319,11 @@ private enum A64SourceParser {
                 )
             )
         }
-        
+
         guard !instructions.isEmpty else { throw AssemblerError.emptyInput }
         return ParsedProgram(labels: labels, instructions: instructions)
     }
-    
+
     static func stripComment(_ line: String) -> String {
         var depth = 0
         for index in line.indices {
@@ -339,7 +339,7 @@ private enum A64SourceParser {
         }
         return line
     }
-    
+
     static func labelColonIndex(in line: String) -> String.Index? {
         var depth = 0
         for index in line.indices {
@@ -351,12 +351,12 @@ private enum A64SourceParser {
         }
         return nil
     }
-    
+
     static func splitOperands(_ text: String) -> [String] {
         var result: [String] = []
         var current = ""
         var depth = 0
-        
+
         for ch in text {
             switch ch {
             case "[":
@@ -373,7 +373,7 @@ private enum A64SourceParser {
                 current.append(ch)
             }
         }
-        
+
         let operand = current.trimmingCharacters(in: .whitespacesAndNewlines)
         if !operand.isEmpty { result.append(operand) }
         return result
@@ -412,12 +412,12 @@ private enum A64BitmaskImmediate {
         let fullMask: UInt64 = width == 64 ? UInt64.max : 0xffff_ffff
         let value = value & fullMask
         guard value != 0, value != fullMask else { return nil }
-        
+
         for elementSize in [2, 4, 8, 16, 32, 64] where elementSize <= width {
             let elementMask = mask(width: elementSize)
             let element = value & elementMask
             guard replicate(element, elementSize: elementSize, width: width) == value else { continue }
-            
+
             for onesLength in 1..<elementSize {
                 let ones = mask(width: onesLength)
                 for rotation in 0..<elementSize {
@@ -431,14 +431,14 @@ private enum A64BitmaskImmediate {
                 }
             }
         }
-        
+
         return nil
     }
-    
+
     static func mask(width: Int) -> UInt64 {
         width >= 64 ? UInt64.max : ((UInt64(1) << UInt64(width)) - 1)
     }
-    
+
     static func replicate(_ value: UInt64, elementSize: Int, width: Int) -> UInt64 {
         var result: UInt64 = 0
         let element = value & mask(width: elementSize)
@@ -449,7 +449,7 @@ private enum A64BitmaskImmediate {
         }
         return result & mask(width: width)
     }
-    
+
     static func rotateRight(_ value: UInt64, by amount: Int, width: Int) -> UInt64 {
         let amount = amount % width
         let value = value & mask(width: width)
@@ -467,7 +467,7 @@ private enum A64SystemEncoder {
             option = try instruction.operands.first.map(A64Parser.barrierOption) ?? 0xf
             return 0xd50330df | (option << 8)
         }
-        
+
         try expectOperandCount(instruction, exactly: 1)
         option = try A64Parser.barrierOption(instruction.operands[0])
         switch mnemonic {
@@ -484,13 +484,13 @@ private enum A64BranchRegisterEncoder {
         let rn = try instruction.operands.first.map(parseXRegisterAllowingSP) ?? IntegerRegister(number: 30, width: 64, kind: .general)
         return 0xd65f0000 | (rn.encodedNumber << 5)
     }
-    
+
     static func br(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 1)
         let rn = try parseXRegisterAllowingSP(instruction.operands[0])
         return 0xd61f0000 | (rn.encodedNumber << 5)
     }
-    
+
     static func blr(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 1)
         let rn = try parseXRegisterAllowingSP(instruction.operands[0])
@@ -505,21 +505,21 @@ private enum A64ExceptionEncoder {
         try checkRange(imm, 0...0xffff, instruction: "svc")
         return 0xd4000001 | (UInt32(imm) << 5)
     }
-    
+
     static func breakpoint(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 1)
         let imm = try parseImmediate(instruction.operands[0])
         try checkRange(imm, 0...0xffff, instruction: "brk")
         return 0xd4200000 | (UInt32(imm) << 5)
     }
-    
+
     static func halt(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 1)
         let imm = try parseImmediate(instruction.operands[0])
         try checkRange(imm, 0...0xffff, instruction: "hlt")
         return 0xd4400000 | (UInt32(imm) << 5)
     }
-    
+
     static func exceptionReturn(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 0)
         return 0xd69f03e0
@@ -577,11 +577,11 @@ private enum A64MoveEncoder {
         try expectOperandCount(instruction, exactly: 2)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: true)
         let source = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
-        
+
         if source.hasPrefix("#") {
             return try moveImmediateAlias(instruction, destination: rd)
         }
-        
+
         let rm = try parseIntegerRegister(source, allowSP: true)
         guard rd.width == rm.width else { throw AssemblerError.invalidRegister(instruction.original) }
         if rd.kind == .stackPointer || rm.kind == .stackPointer {
@@ -592,17 +592,17 @@ private enum A64MoveEncoder {
             mnemonic: "orr"
         )
     }
-    
+
     static func moveImmediateAlias(_ instruction: ParsedInstruction, destination rd: IntegerRegister) throws -> UInt32 {
         let value = try parseImmediate(instruction.operands[1])
         let width = rd.is64Bit ? 64 : 32
         let mask: UInt64 = width == 64 ? UInt64.max : 0xffff_ffff
         let unsigned = UInt64(bitPattern: value) & mask
-        
+
         if unsigned <= 0xffff {
             return try moveWide(ParsedInstruction(mnemonic: "movz", operands: instruction.operands, original: instruction.original), mnemonic: "movz")
         }
-        
+
         for shift in stride(from: 0, through: width - 16, by: 16) {
             if unsigned & ~(UInt64(0xffff) << UInt64(shift)) == 0 {
                 return try moveWide(
@@ -611,12 +611,12 @@ private enum A64MoveEncoder {
                 )
             }
         }
-        
+
         let inverted = (~unsigned) & mask
         if inverted <= 0xffff {
             return try moveWide(ParsedInstruction(mnemonic: "movn", operands: [instruction.operands[0], "#\(inverted)"], original: instruction.original), mnemonic: "movn")
         }
-        
+
         for shift in stride(from: 0, through: width - 16, by: 16) {
             if inverted & ~(UInt64(0xffff) << UInt64(shift)) == 0 {
                 return try moveWide(
@@ -625,13 +625,13 @@ private enum A64MoveEncoder {
                 )
             }
         }
-        
+
         return try A64LogicalEncoder.immediate(
             ParsedInstruction(mnemonic: "orr", operands: [instruction.operands[0], rd.is64Bit ? "xzr" : "wzr", instruction.operands[1]], original: instruction.original),
             mnemonic: "orr"
         )
     }
-    
+
     static func moveWide(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
         try expectOperandCount(instruction, 2...3)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -663,7 +663,7 @@ private enum A64LogicalEncoder {
         guard let encoding = A64BitmaskImmediate.encode(value, width: width) else {
             throw AssemblerError.invalidImmediate(instruction.operands[2])
         }
-        
+
         let opc: UInt32
         switch mnemonic {
         case "and": opc = 0
@@ -672,7 +672,7 @@ private enum A64LogicalEncoder {
         case "ands": opc = 3
         default: throw AssemblerError.unknownInstruction(mnemonic)
         }
-        
+
         return ((rd.is64Bit ? UInt32(1) : 0) << 31)
         | (opc << 29)
         | 0x12000000
@@ -682,7 +682,7 @@ private enum A64LogicalEncoder {
         | (rn.encodedNumber << 5)
         | rd.encodedNumber
     }
-    
+
     static func shiftedRegister(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
         try expectOperandCount(instruction, 3...4)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -712,7 +712,7 @@ private enum A64LogicalEncoder {
         }
         return ((rd.is64Bit ? UInt32(1) : 0) << 31) | (opc << 29) | 0x0a000000 | (shiftKind.rawValue << 22) | (n << 21) | (rm.encodedNumber << 16) | (UInt32(amount) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
-    
+
     static func mvnAlias(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, 2...3)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -733,7 +733,7 @@ private enum A64MemoryOperandParser {
         let components = splitOperands(inside)
         guard let baseText = components.first else { throw AssemblerError.invalidMemoryOperand(first) }
         let base = try parseXRegisterAllowingSP(baseText)
-        
+
         if !after.isEmpty {
             guard after == "!" else { throw AssemblerError.invalidMemoryOperand(first) }
             return .preIndexed(base: base, offset: components.count >= 2 ? try parseImmediate(components[1]) : 0)
@@ -766,7 +766,7 @@ private enum A64LoadStoreEncoder {
         let descriptor = try SingleDescriptor(mnemonic: mnemonic, rtText: instruction.operands[0])
         let rt = descriptor.rt
         let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
-        
+
         switch memory {
         case .unsignedOffset(let base, let offset):
             if descriptor.forceUnscaled {
@@ -779,7 +779,7 @@ private enum A64LoadStoreEncoder {
             let scaled = offset / descriptor.byteSize
             try checkRange(scaled, 0...0xfff, instruction: mnemonic)
             return descriptor.unsignedBase | (UInt32(scaled) << 10) | (base.encodedNumber << 5) | rt.encodedNumber
-            
+
         case .signedUnscaled(let base, let offset), .preIndexed(let base, let offset), .postIndexed(let base, let offset):
             try checkRange(offset, -256...255, instruction: mnemonic)
             let mode: UInt32
@@ -790,7 +790,7 @@ private enum A64LoadStoreEncoder {
             default: mode = 0
             }
             return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (mode << 10) | (base.encodedNumber << 5) | rt.encodedNumber
-            
+
         case .registerOffset(let base, let offset, let ext, let shift):
             let option = ext ?? (offset.is64Bit ? ExtendKind.uxtx : ExtendKind.uxtw)
             let naturalShift = Int(log2(Double(descriptor.byteSize)))
@@ -798,7 +798,7 @@ private enum A64LoadStoreEncoder {
             return descriptor.registerOffsetBase | (offset.encodedNumber << 16) | (option.rawValue << 13) | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
         }
     }
-    
+
     static func pair(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
         try expectOperandCount(instruction, 3...4)
         let rt = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -820,7 +820,7 @@ private enum A64LoadStoreEncoder {
         try checkRange(imm7, -64...63, instruction: mnemonic)
         return ((rt.is64Bit ? UInt32(2) : 0) << 30) | modeBase | ((mnemonic == "ldp" ? UInt32(1) : 0) << 22) | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
     }
-    
+
     private struct SingleDescriptor {
         let rt: IntegerRegister
         let normalizedMnemonic: String
@@ -828,7 +828,7 @@ private enum A64LoadStoreEncoder {
         let byteSize: Int64
         let size: UInt32
         let opc: UInt32
-        
+
         init(mnemonic: String, rtText: String) throws {
             switch mnemonic {
             case "ldur": normalizedMnemonic = "ldr"; forceUnscaled = true
@@ -842,7 +842,7 @@ private enum A64LoadStoreEncoder {
             case "sturh": normalizedMnemonic = "strh"; forceUnscaled = true
             default: normalizedMnemonic = mnemonic; forceUnscaled = false
             }
-            
+
             rt = try parseIntegerRegister(rtText, allowSP: false)
             let isLoad = normalizedMnemonic.hasPrefix("ldr")
             switch normalizedMnemonic {
@@ -855,15 +855,15 @@ private enum A64LoadStoreEncoder {
             default: throw AssemblerError.unknownInstruction(mnemonic)
             }
         }
-        
+
         var unsignedBase: UInt32 {
             (size << 30) | 0x39000000 | (opc << 22)
         }
-        
+
         var unscaledBase: UInt32 {
             (size << 30) | 0x38000000 | (opc << 22)
         }
-        
+
         var registerOffsetBase: UInt32 {
             (size << 30) | 0x38200800 | (opc << 22)
         }
@@ -882,7 +882,7 @@ private enum A64BranchEncoder {
         let base: UInt32 = mnemonic == "bl" ? 0x94000000 : 0x14000000
         return base | (UInt32(bitPattern: Int32(imm26)) & 0x03ff_ffff)
     }
-    
+
     static func conditional(_ instruction: ParsedInstruction, conditionSuffix: String, pc: Int64, labels: [String: Int64]) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 1)
         let condition = try parseCondition(conditionSuffix)
@@ -894,7 +894,7 @@ private enum A64BranchEncoder {
         }
         return 0x54000000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | condition.rawValue
     }
-    
+
     static func compareAndBranch(_ instruction: ParsedInstruction, mnemonic: String, pc: Int64, labels: [String: Int64]) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 2)
         let rt = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -910,7 +910,7 @@ private enum A64BranchEncoder {
         | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5)
         | rt.encodedNumber
     }
-    
+
     static func testAndBranch(_ instruction: ParsedInstruction, mnemonic: String, pc: Int64, labels: [String: Int64]) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 3)
         let rt = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -936,14 +936,14 @@ private enum A64AddSubEncoder {
         try expectOperandCount(instruction, 3...4)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: mnemonic == "add" || mnemonic == "sub")
         let rn = try parseIntegerRegister(instruction.operands[1], allowSP: true)
-        
+
         if instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#") {
             return try immediate(instruction, mnemonic: mnemonic, rd: rd, rn: rn)
         }
-        
+
         return try shiftedRegister(instruction, mnemonic: mnemonic, rd: rd, rn: rn)
     }
-    
+
     static func compareAlias(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
         try expectOperandCount(instruction, 2...3)
         let rn = try parseIntegerRegister(instruction.operands[0], allowSP: true)
@@ -954,7 +954,7 @@ private enum A64AddSubEncoder {
             mnemonic: realMnemonic
         )
     }
-    
+
     private static func immediate(_ instruction: ParsedInstruction, mnemonic: String, rd: IntegerRegister, rn: IntegerRegister) throws -> UInt32 {
         let imm = try parseImmediate(instruction.operands[2])
         var shift = 0
@@ -973,7 +973,7 @@ private enum A64AddSubEncoder {
         | (rn.encodedNumber << 5)
         | rd.encodedNumber
     }
-    
+
     private static func shiftedRegister(_ instruction: ParsedInstruction, mnemonic: String, rd: IntegerRegister, rn: IntegerRegister) throws -> UInt32 {
         let rm = try parseIntegerRegister(instruction.operands[2], allowSP: false)
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(instruction.original) }
@@ -1026,7 +1026,7 @@ private enum A64DataProcessingEncoder {
         }
         return (sf << 31) | 0x53000000 | (n << 22) | (immr << 16) | (imms << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
-    
+
     static func extract(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 4)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -1043,14 +1043,14 @@ private enum A64DataProcessingEncoder {
         | (rn.encodedNumber << 5)
         | rd.encodedNumber
     }
-    
+
     static func rorAlias(_ instruction: ParsedInstruction) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 3)
         return try extract(
             ParsedInstruction(mnemonic: "extr", operands: [instruction.operands[0], instruction.operands[1], instruction.operands[1], instruction.operands[2]], original: instruction.original)
         )
     }
-    
+
     static func multiply(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
         switch mnemonic {
         case "mul", "mneg":
@@ -1084,7 +1084,7 @@ private enum A64DataProcessingEncoder {
             throw AssemblerError.unknownInstruction(mnemonic)
         }
     }
-    
+
     static func divide(_ instruction: ParsedInstruction, mnemonic: String) throws -> UInt32 {
         try expectOperandCount(instruction, exactly: 3)
         let rd = try parseIntegerRegister(instruction.operands[0], allowSP: false)
@@ -1104,7 +1104,7 @@ private func encodeInstruction(_ instruction: ParsedInstruction, pc: Int64, labe
     let parts = instruction.mnemonic.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
     let mnemonic = parts[0]
     let suffix = parts.count > 1 ? parts[1] : nil
-    
+
     switch mnemonic {
     case "nop":
         try expectOperandCount(instruction, exactly: 0)
