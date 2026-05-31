@@ -1,5 +1,5 @@
 import XCTest
-@testable import Assembler
+@testable import Assembly
 
 final class AssemblerTests: XCTestCase {
     func testBasicSystemAndBranchRegisterInstructions() throws {

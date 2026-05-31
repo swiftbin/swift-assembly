@@ -3,20 +3,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "swift-assembler",
+    name: "swift-assembly",
     products: [
         .library(
-            name: "Assembler",
-            targets: ["Assembler"]
+            name: "Assembly",
+            targets: ["Assembly"]
         ),
     ],
     targets: [
         .target(
-            name: "Assembler"
+            name: "Assembly"
         ),
         .testTarget(
-            name: "AssemblerTests",
-            dependencies: ["Assembler"]
+            name: "AssemblyTests",
+            dependencies: ["Assembly"]
         ),
     ],
     swiftLanguageModes: [.v6]
