@@ -1,0 +1,126 @@
+# swift-assembler
+
+Library for assembling and disassembling ARM64 (AArch64) machine code.
+
+In addition to turning assembly text into raw bytes, the reverse direction — decoding machine words back into assembly — is also supported, so instructions round-trip between the two representations.
+
+<!-- # Badges -->
+
+[![Github issues](https://img.shields.io/github/issues/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/issues)
+[![Github forks](https://img.shields.io/github/forks/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/network/members)
+[![Github stars](https://img.shields.io/github/stars/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/stargazers)
+[![Github top language](https://img.shields.io/github/languages/top/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/)
+
+## Features
+
+- assemble ARM64 assembly text into machine code
+- disassemble machine code back into assembly text
+- move (wide / immediate / register aliases)
+- add / sub, compare (cmp / cmn)
+- logical (and / orr / eor / bic / orn / ...) and mvn
+- shifts (lsl / lsr / asr), extract and rotate (extr / ror)
+- multiply / divide (mul / madd / msub / udiv / sdiv)
+- load / store (single and pair, including pre/post-indexed)
+- branches, labels, and address generation (adr / adrp)
+- pointer authentication on arm64e (paciasp / xpaci / ...)
+- ...
+
+## Usage
+
+The entry point is the `ARM64Assembler` enum. All operations are static, so there is no instance to create.
+
+### Assemble
+
+To assemble a single instruction into a 32-bit word, use `assembleWord`.
+
+```swift
+import Assembler
+
+let word = try ARM64Assembler.assembleWord("movz x0, #1")
+// 0xd2800020
+```
+
+A multi-line program, with labels and comments, can be assembled into raw bytes with `assemble`.
+
+```swift
+let source = """
+loop:
+    subs x0, x0, #1   // decrement
+    b.ne loop
+    ret
+"""
+
+let bytes = try ARM64Assembler.assemble(source)
+```
+
+When you only need the encoded words rather than a byte buffer, use `assembleWords`.
+
+```swift
+let words = try ARM64Assembler.assembleWords(source)
+```
+
+### Disassemble
+
+To decode a single machine word into its assembly text, use `disassembleWord`.
+
+```swift
+let text = try ARM64Assembler.disassembleWord(0xd2800020)
+// "movz x0, #1"
+```
+
+A byte buffer can be disassembled into a newline-separated listing with `disassemble`, or into an array of strings with `disassembleWords`.
+
+```swift
+let listing = try ARM64Assembler.disassemble(bytes)
+let lines = try ARM64Assembler.disassembleWords(words)
+```
+
+### arm64e
+
+Pointer authentication instructions are gated behind the `arm64e` architecture. Pass it explicitly when assembling them.
+
+```swift
+let word = try ARM64Assembler.assembleWord("paciasp", architecture: .arm64e)
+```
+
+### Endianness
+
+Both `assemble` and `disassemble` default to little-endian byte order. Pass `.big` to override it.
+
+```swift
+let bytes = try ARM64Assembler.assemble(source, endianness: .big)
+```
+
+### Error handling
+
+Every operation can throw `AssemblerError`. It conforms to `Error`, `Equatable`, and `CustomStringConvertible`, so failures can be matched against specific cases or surfaced as a human-readable message.
+
+```swift
+do {
+    _ = try ARM64Assembler.assembleWord("movz x0, #1")
+} catch let error as AssemblerError {
+    print(error.description)
+}
+```
+
+Because it is `Equatable`, a particular failure can also be matched directly.
+
+```swift
+catch AssemblerError.unknownInstruction(let mnemonic) {
+    // an unsupported or misspelled mnemonic
+}
+```
+
+## Installation
+
+### SwiftPM
+
+Add the following to the dependencies of your `Package.swift`.
+
+```swift
+.package(url: "https://github.com/swiftbin/swift-assembler.git", from: "0.0.1")
+```
+
+## License
+
+swift-assembler is released under the MIT License. See [LICENSE](./LICENSE)
