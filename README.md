@@ -1,4 +1,4 @@
-# swift-assembler
+# swift-assembly
 
 Library for assembling and disassembling ARM64 (AArch64) machine code.
 
@@ -6,10 +6,10 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 
 <!-- # Badges -->
 
-[![Github issues](https://img.shields.io/github/issues/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/issues)
-[![Github forks](https://img.shields.io/github/forks/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/network/members)
-[![Github stars](https://img.shields.io/github/stars/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/stargazers)
-[![Github top language](https://img.shields.io/github/languages/top/swiftbin/swift-assembler)](https://github.com/swiftbin/swift-assembler/)
+[![Github issues](https://img.shields.io/github/issues/swiftbin/swift-assembly)](https://github.com/swiftbin/swift-assembly/issues)
+[![Github forks](https://img.shields.io/github/forks/swiftbin/swift-assembly)](https://github.com/swiftbin/swift-assembly/network/members)
+[![Github stars](https://img.shields.io/github/stars/swiftbin/swift-assembly)](https://github.com/swiftbin/swift-assembly/stargazers)
+[![Github top language](https://img.shields.io/github/languages/top/swiftbin/swift-assembly)](https://github.com/swiftbin/swift-assembly/)
 
 ## Features
 
@@ -118,9 +118,9 @@ catch AssemblerError.unknownInstruction(let mnemonic) {
 Add the following to the dependencies of your `Package.swift`.
 
 ```swift
-.package(url: "https://github.com/swiftbin/swift-assembler.git", from: "0.0.1")
+.package(url: "https://github.com/swiftbin/swift-assembly.git", from: "0.0.1")
 ```
 
 ## License
 
-swift-assembler is released under the MIT License. See [LICENSE](./LICENSE)
+swift-assembly is released under the MIT License. See [LICENSE](./LICENSE)
