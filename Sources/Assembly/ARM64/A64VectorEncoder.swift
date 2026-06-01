@@ -50,4 +50,52 @@ internal enum A64VectorEncoder {
         let head: UInt32 = 0x6e30_0800 | (o1 << 23)
         return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
+
+    static func twoRegisterMisc(_ kind: A64.VectorTwoRegisterMiscKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        guard rd.arrangement == rn.arrangement else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        guard isValidTwoRegisterMiscArrangement(kind, rn.arrangement) else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+
+        let u: UInt32
+        let opcode: UInt32
+        switch kind {
+        case .rev64: u = 0; opcode = 0b00000
+        case .rev32: u = 1; opcode = 0b00000
+        case .rev16: u = 0; opcode = 0b00001
+        case .cnt: u = 0; opcode = 0b00101
+        case .mvn: u = 1; opcode = 0b00101
+        case .rbit: u = 1; opcode = 0b00101
+        case .cls: u = 0; opcode = 0b00100
+        case .clz: u = 1; opcode = 0b00100
+        case .sqabs: u = 0; opcode = 0b00111
+        case .sqneg: u = 1; opcode = 0b00111
+        case .abs: u = 0; opcode = 0b01011
+        case .neg: u = 1; opcode = 0b01011
+        case .fabs: u = 0; opcode = 0b01111
+        case .fneg: u = 1; opcode = 0b01111
+        case .fsqrt: u = 1; opcode = 0b11111
+        }
+
+        let size = kind == .rbit ? UInt32(0b01) : rn.arrangement.elementSize
+        let head = (rn.arrangement.q << 30) | (u << 29) | 0x0e20_0800 | (size << 22)
+        return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    private static func isValidTwoRegisterMiscArrangement(_ kind: A64.VectorTwoRegisterMiscKind, _ arrangement: A64.VectorArrangement) -> Bool {
+        switch kind {
+        case .rev64, .cls, .clz:
+            return [.b8, .b16, .h4, .h8, .s2, .s4].contains(arrangement)
+        case .rev32:
+            return [.b8, .b16, .h4, .h8].contains(arrangement)
+        case .rev16, .cnt, .mvn, .rbit:
+            return [.b8, .b16].contains(arrangement)
+        case .abs, .neg, .sqabs, .sqneg:
+            return [.b8, .b16, .h4, .h8, .s2, .s4, .d2].contains(arrangement)
+        case .fabs, .fneg, .fsqrt:
+            return [.s2, .s4, .d2].contains(arrangement)
+        }
+    }
 }

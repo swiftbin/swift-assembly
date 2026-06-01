@@ -523,6 +523,69 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv b0, v1.foo"))  // bad arrangement
     }
 
+    func testVectorTwoRegisterMiscInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev64 v0.8b, v1.8b"), 0x0e200820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev32 v6.8b, v7.8b"), 0x2e2008e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev16 v10.8b, v11.8b"), 0x0e20196a)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("abs v0.8b, v1.8b"), 0x0e20b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("neg v2.4h, v3.4h"), 0x2e60b862)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mvn v4.16b, v5.16b"), 0x6e2058a4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("not v4.16b, v5.16b"), 0x6e2058a4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rbit v0.8b, v1.8b"), 0x2e605820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cnt v6.8b, v7.8b"), 0x0e2058e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cls v8.4s, v9.4s"), 0x4ea04928)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clz v10.2s, v11.2s"), 0x2ea0496a)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqabs v12.8b, v13.8b"), 0x0e2079ac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqneg v14.4h, v15.4h"), 0x2e6079ee)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fabs v12.4s, v13.4s"), 0x4ea0f9ac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fneg v14.2d, v15.2d"), 0x6ee0f9ee)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fsqrt v16.4s, v17.4s"), 0x6ea1fa30)
+    }
+
+    func testDisassembleVectorTwoRegisterMisc() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e200820), "rev64 v0.8b, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e2008e6), "rev32 v6.8b, v7.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e20196a), "rev16 v10.8b, v11.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e20b820), "abs v0.8b, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e60b862), "neg v2.4h, v3.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e2058a4), "mvn v4.16b, v5.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e605820), "rbit v0.8b, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e2058e6), "cnt v6.8b, v7.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea04928), "cls v8.4s, v9.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2ea0496a), "clz v10.2s, v11.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e2079ac), "sqabs v12.8b, v13.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e6079ee), "sqneg v14.4h, v15.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea0f9ac), "fabs v12.4s, v13.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ee0f9ee), "fneg v14.2d, v15.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea1fa30), "fsqrt v16.4s, v17.4s")
+    }
+
+    func testVectorTwoRegisterMiscRoundTrip() throws {
+        let sources = [
+            "rev64 v0.8b, v1.8b", "rev64 v2.4h, v3.4h", "rev64 v4.2s, v5.2s",
+            "rev32 v6.8b, v7.8b", "rev32 v8.4h, v9.4h", "rev16 v10.8b, v11.8b",
+            "abs v0.2d, v1.2d", "neg v2.2d, v3.2d", "mvn v4.16b, v5.16b", "rbit v6.16b, v7.16b", "cnt v6.8b, v7.8b",
+            "cls v8.4s, v9.4s", "clz v10.2s, v11.2s", "sqabs v12.2d, v13.2d", "sqneg v14.2d, v15.2d",
+            "fabs v12.4s, v13.4s", "fneg v14.2d, v15.2d", "fsqrt v16.4s, v17.4s",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorTwoRegisterMiscInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cnt v0.4h, v1.4h"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rev32 v0.2s, v1.2s"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rev16 v0.4h, v1.4h"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rbit v0.4h, v1.4h"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz v0.2d, v1.2d"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fabs v0.8b, v1.8b"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("abs v0.8b, v1.16b"))
+    }
+
     func testCommentsBlankLinesAndInlineLabels() throws {
         XCTAssertEqual(
             try ARM64Assembler.assembleWords("""

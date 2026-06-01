@@ -318,6 +318,13 @@ internal enum A64InstructionParser {
         case "mvn":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)
+            if instruction.operands.count == 2, operandsAreVectorRegisters(instruction) {
+                return .vectorTwoRegisterMisc(
+                    .mvn,
+                    destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                    source: try A64Parser.vectorRegister(instruction.operands[1])
+                )
+            }
             return .mvnAlias(
                 destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
                 source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
@@ -403,6 +410,13 @@ internal enum A64InstructionParser {
         case "fabs", "fneg", "fsqrt":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
+            if operandsAreVectorRegisters(instruction) {
+                return .vectorTwoRegisterMisc(
+                    A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                    source: try A64Parser.vectorRegister(instruction.operands[1])
+                )
+            }
             return .fpDataProcessing1(
                 A64.FPDataProcessing1Kind(rawValue: mnemonic)!,
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
@@ -491,6 +505,15 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "rev64", "rev32", "rev16", "abs", "neg", "not", "rbit", "cnt", "cls", "clz", "sqabs", "sqneg":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = mnemonic == "not" ? A64.VectorTwoRegisterMiscKind.mvn : A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!
+            return .vectorTwoRegisterMisc(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
         default:
             return nil
         }
@@ -536,6 +559,14 @@ internal enum A64InstructionParser {
             shift: try instruction.operands.count == 4 ? shift(instruction.operands[3]) : nil
         )
     }
+
+    private static func operandsAreVectorRegisters(_ instruction: ParsedInstruction) -> Bool {
+        guard instruction.operands.count == 2 else { return false }
+        return instruction.operands.allSatisfy {
+            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+            return trimmed.hasPrefix("v") && trimmed.contains(".")
+        }
+    }
 }
 
 internal enum A64MemoryOperandParser {
@@ -574,4 +605,3 @@ internal enum A64MemoryOperandParser {
         throw AssemblerError.invalidMemoryOperand(first)
     }
 }
-

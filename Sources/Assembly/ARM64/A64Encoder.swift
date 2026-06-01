@@ -136,6 +136,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.acrossLanesInteger(kind, destination: destination, source: source)
         case .acrossLanesFP(let kind, let destination, let source):
             return try A64VectorEncoder.acrossLanesFP(kind, destination: destination, source: source)
+        case .vectorTwoRegisterMisc(let kind, let destination, let source):
+            return try A64VectorEncoder.twoRegisterMisc(kind, destination: destination, source: source)
         }
     }
 }
@@ -491,4 +493,3 @@ internal enum A64DataProcessingEncoder {
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 }
-

@@ -95,6 +95,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatVectorRegister(source))"
         case .acrossLanesFP(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatVectorRegister(source))"
+        case .vectorTwoRegisterMisc(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         }
     }
 
@@ -254,4 +256,3 @@ internal enum A64InstructionFormatter {
         }
     }
 }
-

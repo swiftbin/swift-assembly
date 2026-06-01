@@ -219,6 +219,13 @@ internal enum A64 {
         case fmaxv, fminv, fmaxnmv, fminnmv
     }
 
+    enum VectorTwoRegisterMiscKind: String, Equatable {
+        case rev64, rev32, rev16
+        case abs, neg, mvn, rbit, cnt, cls, clz
+        case sqabs, sqneg
+        case fabs, fneg, fsqrt
+    }
+
     enum MoveAliasSource: Equatable {
         case immediate(Int64)
         case register(Register)
@@ -275,6 +282,7 @@ internal enum A64 {
         case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
         case acrossLanesInteger(AcrossLanesIntegerKind, destination: FPRegister, source: VectorRegister)
         case acrossLanesFP(AcrossLanesFPKind, destination: FPRegister, source: VectorRegister)
+        case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -288,4 +296,3 @@ internal typealias ExtendKind = A64.ExtendKind
 internal typealias MemoryOperand = A64.MemoryOperand
 internal typealias Instruction = A64.Instruction
 internal typealias ParsedShift = A64.Shift
-

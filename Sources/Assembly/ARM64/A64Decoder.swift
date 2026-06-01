@@ -32,6 +32,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPMoveImmediate(word) { return instruction }
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
+        if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -582,6 +583,42 @@ internal enum A64InstructionDecoder {
         return .acrossLanesInteger(kind, destination: floatRegister(number: rdNum, width: destinationWidth), source: VectorRegister(number: rnNum, arrangement: arrangement))
     }
 
+    private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        let kind: A64.VectorTwoRegisterMiscKind
+        switch (u, opcode) {
+        case (0, 0b00000): kind = .rev64
+        case (1, 0b00000): kind = .rev32
+        case (0, 0b00001): kind = .rev16
+        case (0, 0b00101): kind = .cnt
+        case (1, 0b00101): kind = size == 0b01 ? .rbit : .mvn
+        case (0, 0b00100): kind = .cls
+        case (1, 0b00100): kind = .clz
+        case (0, 0b00111): kind = .sqabs
+        case (1, 0b00111): kind = .sqneg
+        case (0, 0b01011): kind = .abs
+        case (1, 0b01011): kind = .neg
+        case (0, 0b01111): kind = .fabs
+        case (1, 0b01111): kind = .fneg
+        case (1, 0b11111): kind = .fsqrt
+        default: return nil
+        }
+
+        guard let arrangement = vectorTwoRegisterMiscArrangement(kind, size: size, q: q) else { return nil }
+        return .vectorTwoRegisterMisc(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            source: VectorRegister(number: rnNum, arrangement: arrangement)
+        )
+    }
+
     /// Reconstructs an integer across-lanes source arrangement; `2s`/`1d`/`2d` are reserved.
     private static func vectorArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
         switch (size, q) {
@@ -591,6 +628,59 @@ internal enum A64InstructionDecoder {
         case (0b01, 1): return .h8
         case (0b10, 1): return .s4
         default: return nil
+        }
+    }
+
+    private static func vectorTwoRegisterMiscArrangement(_ kind: A64.VectorTwoRegisterMiscKind, size: UInt32, q: UInt32) -> A64.VectorArrangement? {
+        switch kind {
+        case .rev64, .cls, .clz:
+            switch (size, q) {
+            case (0b00, 0): return .b8
+            case (0b00, 1): return .b16
+            case (0b01, 0): return .h4
+            case (0b01, 1): return .h8
+            case (0b10, 0): return .s2
+            case (0b10, 1): return .s4
+            default: return nil
+            }
+        case .rev32:
+            switch (size, q) {
+            case (0b00, 0): return .b8
+            case (0b00, 1): return .b16
+            case (0b01, 0): return .h4
+            case (0b01, 1): return .h8
+            default: return nil
+            }
+        case .rev16, .cnt, .mvn:
+            switch (size, q) {
+            case (0b00, 0): return .b8
+            case (0b00, 1): return .b16
+            default: return nil
+            }
+        case .rbit:
+            switch (size, q) {
+            case (0b01, 0): return .b8
+            case (0b01, 1): return .b16
+            default: return nil
+            }
+        case .abs, .neg, .sqabs, .sqneg:
+            switch (size, q) {
+            case (0b00, 0): return .b8
+            case (0b00, 1): return .b16
+            case (0b01, 0): return .h4
+            case (0b01, 1): return .h8
+            case (0b10, 0): return .s2
+            case (0b10, 1): return .s4
+            case (0b11, 1): return .d2
+            default: return nil
+            }
+        case .fabs, .fneg, .fsqrt:
+            switch (size, q) {
+            case (0b10, 0): return .s2
+            case (0b10, 1): return .s4
+            case (0b11, 1): return .d2
+            default: return nil
+            }
         }
     }
 
@@ -627,4 +717,3 @@ internal enum A64InstructionDecoder {
         return Int64(Int32(bitPattern: value | ~mask))
     }
 }
-
