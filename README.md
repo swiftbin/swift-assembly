@@ -24,6 +24,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
+- Advanced SIMD across-lanes reductions (addv / saddlv / uaddlv / smaxv / umaxv / sminv / uminv / fmaxv / fminv / fmaxnmv / fminnmv)
 - ...
 
 ## Usage

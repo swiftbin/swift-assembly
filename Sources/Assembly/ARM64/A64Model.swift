@@ -33,6 +33,52 @@ internal enum A64 {
         }
     }
 
+    enum VectorArrangement: String, Equatable {
+        case b8 = "8b"
+        case b16 = "16b"
+        case h4 = "4h"
+        case h8 = "8h"
+        case s2 = "2s"
+        case s4 = "4s"
+        case d1 = "1d"
+        case d2 = "2d"
+
+        /// The `size` field (element size code: B=0, H=1, S=2, D=3).
+        var elementSize: UInt32 {
+            switch self {
+            case .b8, .b16: return 0b00
+            case .h4, .h8: return 0b01
+            case .s2, .s4: return 0b10
+            case .d1, .d2: return 0b11
+            }
+        }
+
+        /// The element width in bits.
+        var elementWidth: Int {
+            switch self {
+            case .b8, .b16: return 8
+            case .h4, .h8: return 16
+            case .s2, .s4: return 32
+            case .d1, .d2: return 64
+            }
+        }
+
+        /// The `Q` bit (1 for 128-bit / fully populated arrangements).
+        var q: UInt32 {
+            switch self {
+            case .b16, .h8, .s4, .d2: return 1
+            case .b8, .h4, .s2, .d1: return 0
+            }
+        }
+    }
+
+    struct VectorRegister: Equatable {
+        var number: UInt32
+        var arrangement: VectorArrangement
+
+        var encodedNumber: UInt32 { number & 0x1f }
+    }
+
     enum Condition: UInt32 {
         case eq = 0x0, ne = 0x1, hs = 0x2, lo = 0x3
         case mi = 0x4, pl = 0x5, vs = 0x6, vc = 0x7
@@ -165,6 +211,14 @@ internal enum A64 {
         case zero
     }
 
+    enum AcrossLanesIntegerKind: String, Equatable {
+        case saddlv, uaddlv, smaxv, umaxv, sminv, uminv, addv
+    }
+
+    enum AcrossLanesFPKind: String, Equatable {
+        case fmaxv, fminv, fmaxnmv, fminnmv
+    }
+
     enum MoveAliasSource: Equatable {
         case immediate(Int64)
         case register(Register)
@@ -219,12 +273,15 @@ internal enum A64 {
         case fpMoveFromGeneral(destination: FPRegister, source: Register)
         case fpConvertToInt(FPConvertToIntKind, destination: Register, source: FPRegister)
         case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
+        case acrossLanesInteger(AcrossLanesIntegerKind, destination: FPRegister, source: VectorRegister)
+        case acrossLanesFP(AcrossLanesFPKind, destination: FPRegister, source: VectorRegister)
     }
 }
 
 internal typealias IntegerRegisterKind = A64.RegisterKind
 internal typealias IntegerRegister = A64.Register
 internal typealias FloatRegister = A64.FPRegister
+internal typealias VectorRegister = A64.VectorRegister
 internal typealias Condition = A64.Condition
 internal typealias ShiftKind = A64.ShiftKind
 internal typealias ExtendKind = A64.ExtendKind

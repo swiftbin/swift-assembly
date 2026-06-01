@@ -31,6 +31,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPCompare(word) { return instruction }
         if let instruction = decodeFPMoveImmediate(word) { return instruction }
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
+        if let instruction = decodeAcrossLanes(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -536,6 +537,60 @@ internal enum A64InstructionDecoder {
             return .fpMoveFromGeneral(destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
         default:
             return nil
+        }
+    }
+
+    private static func decodeAcrossLanes(_ word: UInt32) -> Instruction? {
+        guard word & 0x9f3e_0c00 == 0x0e30_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // Floating-point across lanes (U=1, opcode 01100 / 01111).
+        if u == 1 && (opcode == 0b01100 || opcode == 0b01111) {
+            let sz = (word >> 22) & 1
+            let o1 = (word >> 23) & 1
+            guard sz == 0, q == 1 else { return nil }   // only `.4s` supported
+            let kind: A64.AcrossLanesFPKind
+            switch (opcode, o1) {
+            case (0b01111, 0): kind = .fmaxv
+            case (0b01111, 1): kind = .fminv
+            case (0b01100, 0): kind = .fmaxnmv
+            case (0b01100, 1): kind = .fminnmv
+            default: return nil
+            }
+            return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 32), source: VectorRegister(number: rnNum, arrangement: .s4))
+        }
+
+        let kind: A64.AcrossLanesIntegerKind
+        switch (u, opcode) {
+        case (0, 0b00011): kind = .saddlv
+        case (1, 0b00011): kind = .uaddlv
+        case (0, 0b01010): kind = .smaxv
+        case (1, 0b01010): kind = .umaxv
+        case (0, 0b11010): kind = .sminv
+        case (1, 0b11010): kind = .uminv
+        case (0, 0b11011): kind = .addv
+        default: return nil
+        }
+        guard let arrangement = vectorArrangement(size: size, q: q) else { return nil }
+        let isLong = kind == .saddlv || kind == .uaddlv
+        let destinationWidth = isLong ? arrangement.elementWidth * 2 : arrangement.elementWidth
+        return .acrossLanesInteger(kind, destination: floatRegister(number: rdNum, width: destinationWidth), source: VectorRegister(number: rnNum, arrangement: arrangement))
+    }
+
+    /// Reconstructs an integer across-lanes source arrangement; `2s`/`1d`/`2d` are reserved.
+    private static func vectorArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
+        switch (size, q) {
+        case (0b00, 0): return .b8
+        case (0b00, 1): return .b16
+        case (0b01, 0): return .h4
+        case (0b01, 1): return .h8
+        case (0b10, 1): return .s4
+        default: return nil
         }
     }
 

@@ -132,6 +132,10 @@ internal enum A64InstructionEncoder {
             return try A64FloatEncoder.convertToInt(kind, destination: destination, source: source)
         case .fpConvertFromInt(let kind, let destination, let source):
             return try A64FloatEncoder.convertFromInt(kind, destination: destination, source: source)
+        case .acrossLanesInteger(let kind, let destination, let source):
+            return try A64VectorEncoder.acrossLanesInteger(kind, destination: destination, source: source)
+        case .acrossLanesFP(let kind, let destination, let source):
+            return try A64VectorEncoder.acrossLanesFP(kind, destination: destination, source: source)
         }
     }
 }

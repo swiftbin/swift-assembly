@@ -462,6 +462,67 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov w0, x1"))
     }
 
+    func testAcrossLanesIntegerInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addv s0, v1.4s"), 0x4eb1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addv b2, v3.16b"), 0x4e31b862)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addv h4, v5.8h"), 0x4e71b8a4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlv h0, v1.8b"), 0x0e303820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlv s0, v1.4h"), 0x0e703820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlv d0, v1.4s"), 0x4eb03820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddlv h0, v1.8b"), 0x2e303820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddlv d0, v1.4s"), 0x6eb03820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smaxv b0, v1.8b"), 0x0e30a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umaxv b0, v1.16b"), 0x6e30a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sminv h0, v1.8h"), 0x4e71a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uminv s0, v1.4s"), 0x6eb1a820)
+    }
+
+    func testAcrossLanesFPInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxv s0, v1.4s"), 0x6e30f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminv s0, v1.4s"), 0x6eb0f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmv s0, v1.4s"), 0x6e30c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmv s0, v1.4s"), 0x6eb0c820)
+    }
+
+    func testDisassembleAcrossLanes() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e31b820), "addv b0, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4eb1b820), "addv s0, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e303820), "saddlv h0, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4eb03820), "saddlv d0, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e303820), "uaddlv h0, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6eb1a820), "uminv s0, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e30f820), "fmaxv s0, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6eb0c820), "fminnmv s0, v1.4s")
+    }
+
+    func testAcrossLanesRoundTrip() throws {
+        let sources = [
+            "addv b0, v1.8b", "addv h0, v1.4h", "addv s0, v1.4s", "addv b2, v3.16b", "addv h4, v5.8h",
+            "saddlv h0, v1.8b", "saddlv s0, v1.4h", "saddlv d0, v1.4s", "saddlv h2, v3.16b", "saddlv s4, v5.8h",
+            "uaddlv h0, v1.8b", "uaddlv d0, v1.4s",
+            "smaxv b0, v1.8b", "smaxv h0, v1.4h", "smaxv s0, v1.4s",
+            "umaxv b0, v1.16b", "sminv h0, v1.8h", "uminv s0, v1.4s",
+            "fmaxv s0, v1.4s", "fminv s0, v1.4s", "fmaxnmv s0, v1.4s", "fminnmv s0, v1.4s",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testAcrossLanesInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv s0, v1.2s"))   // 2s reserved
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv d0, v1.2d"))   // D forms invalid
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv h0, v1.8b"))   // dst width mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlv b0, v1.8b")) // long dst must widen
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmaxv s0, v1.2s"))  // FP only .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv b0, v1.foo"))  // bad arrangement
+    }
+
     func testCommentsBlankLinesAndInlineLabels() throws {
         XCTAssertEqual(
             try ARM64Assembler.assembleWords("""

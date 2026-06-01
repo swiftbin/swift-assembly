@@ -91,7 +91,15 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatFloatRegister(source))"
         case .fpConvertFromInt(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatRegister(source))"
+        case .acrossLanesInteger(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatVectorRegister(source))"
+        case .acrossLanesFP(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatVectorRegister(source))"
         }
+    }
+
+    private static func formatVectorRegister(_ register: VectorRegister) -> String {
+        "v\(register.number).\(register.arrangement.rawValue)"
     }
 
     private static func formatFloatRegister(_ register: FloatRegister) -> String {

@@ -81,6 +81,17 @@ internal enum A64Parser {
         return .general(try integerRegister(text, allowSP: false))
     }
 
+    static func vectorRegister(_ text: String) throws -> A64.VectorRegister {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let parts = lower.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, let prefix = parts[0].first, prefix == "v",
+              let number = UInt32(parts[0].dropFirst()), number <= 31,
+              let arrangement = A64.VectorArrangement(rawValue: parts[1]) else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        return A64.VectorRegister(number: number, arrangement: arrangement)
+    }
+
     static func floatImmediate(_ text: String) throws -> Double {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("#") { value.removeFirst() }
@@ -463,6 +474,22 @@ internal enum A64InstructionParser {
                 A64.FPConvertFromIntKind(rawValue: mnemonic)!,
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            )
+        case "saddlv", "uaddlv", "smaxv", "umaxv", "sminv", "uminv", "addv":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .acrossLanesInteger(
+                A64.AcrossLanesIntegerKind(rawValue: mnemonic)!,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        case "fmaxv", "fminv", "fmaxnmv", "fminnmv":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .acrossLanesFP(
+                A64.AcrossLanesFPKind(rawValue: mnemonic)!,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
             )
         default:
             return nil
