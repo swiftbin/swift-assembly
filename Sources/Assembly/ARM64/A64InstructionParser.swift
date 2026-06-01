@@ -52,6 +52,42 @@ internal enum A64Parser {
         return register
     }
 
+    static func floatRegister(_ text: String) throws -> A64.FPRegister {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard lower.count >= 2 else { throw AssemblerError.invalidRegister(text) }
+        let width: Int
+        switch lower.first! {
+        case "b": width = 8
+        case "h": width = 16
+        case "s": width = 32
+        case "d": width = 64
+        case "q": width = 128
+        default: throw AssemblerError.invalidRegister(text)
+        }
+        guard let number = UInt32(lower.dropFirst()), number <= 31 else { throw AssemblerError.invalidRegister(text) }
+        return A64.FPRegister(number: number, width: width)
+    }
+
+    enum AnyRegister {
+        case float(A64.FPRegister)
+        case general(A64.Register)
+    }
+
+    /// Classifies a register operand as scalar floating-point or general purpose.
+    static func anyRegister(_ text: String) throws -> AnyRegister {
+        if let register = try? floatRegister(text) {
+            return .float(register)
+        }
+        return .general(try integerRegister(text, allowSP: false))
+    }
+
+    static func floatImmediate(_ text: String) throws -> Double {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("#") { value.removeFirst() }
+        guard let parsed = Double(value) else { throw AssemblerError.invalidImmediate(text) }
+        return parsed
+    }
+
     static func condition(_ text: String) throws -> A64.Condition {
         switch text.lowercased() {
         case "eq": return .eq
@@ -343,6 +379,90 @@ internal enum A64InstructionParser {
                 kind,
                 register: try instruction.operands.first.map(A64Parser.xRegister),
                 architecture: architecture
+            )
+        case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .fpDataProcessing2(
+                A64.FPDataProcessing2Kind(rawValue: mnemonic)!,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                second: try A64Parser.floatRegister(instruction.operands[2])
+            )
+        case "fabs", "fneg", "fsqrt":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .fpDataProcessing1(
+                A64.FPDataProcessing1Kind(rawValue: mnemonic)!,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        case "fcvt":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .fpConvertPrecision(
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        case "fmadd", "fmsub", "fnmadd", "fnmsub":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            return .fpDataProcessing3(
+                A64.FPDataProcessing3Kind(rawValue: mnemonic)!,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                second: try A64Parser.floatRegister(instruction.operands[2]),
+                third: try A64Parser.floatRegister(instruction.operands[3])
+            )
+        case "fcmp", "fcmpe":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let first = try A64Parser.floatRegister(instruction.operands[0])
+            let secondText = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            let second: A64.FPCompareOperand
+            if secondText.hasPrefix("#") {
+                guard try A64Parser.floatImmediate(secondText) == 0 else { throw AssemblerError.invalidImmediate(secondText) }
+                second = .zero
+            } else {
+                second = .register(try A64Parser.floatRegister(secondText))
+            }
+            return .fpCompare(A64.FPCompareKind(rawValue: mnemonic)!, first: first, second: second)
+        case "fmov":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let destinationText = instruction.operands[0].trimmingCharacters(in: .whitespacesAndNewlines)
+            let sourceText = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
+            if sourceText.hasPrefix("#") {
+                return .fpMoveImmediate(
+                    destination: try A64Parser.floatRegister(destinationText),
+                    value: try A64Parser.floatImmediate(sourceText)
+                )
+            }
+            switch (try A64Parser.anyRegister(destinationText), try A64Parser.anyRegister(sourceText)) {
+            case (.float(let rd), .float(let rn)):
+                return .fpDataProcessing1(.fmov, destination: rd, source: rn)
+            case (.general(let rd), .float(let rn)):
+                return .fpMoveToGeneral(destination: rd, source: rn)
+            case (.float(let rd), .general(let rn)):
+                return .fpMoveFromGeneral(destination: rd, source: rn)
+            case (.general, .general):
+                throw AssemblerError.invalidRegister("fmov")
+            }
+        case "fcvtzs", "fcvtzu":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .fpConvertToInt(
+                A64.FPConvertToIntKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        case "scvtf", "ucvtf":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .fpConvertFromInt(
+                A64.FPConvertFromIntKind(rawValue: mnemonic)!,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
             )
         default:
             return nil

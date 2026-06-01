@@ -66,7 +66,49 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .pointerAuthentication(let kind, let register, _):
             return ([kind.rawValue] + (register.map { [formatRegister($0)] } ?? [])).joined(separator: " ")
+        case .fpDataProcessing2(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
+        case .fpDataProcessing1(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(source))"
+        case .fpDataProcessing3(let kind, let destination, let first, let second, let third):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second)), \(formatFloatRegister(third))"
+        case .fpCompare(let kind, let first, let second):
+            switch second {
+            case .register(let register):
+                return "\(kind.rawValue) \(formatFloatRegister(first)), \(formatFloatRegister(register))"
+            case .zero:
+                return "\(kind.rawValue) \(formatFloatRegister(first)), #0.0"
+            }
+        case .fpConvertPrecision(let destination, let source):
+            return "fcvt \(formatFloatRegister(destination)), \(formatFloatRegister(source))"
+        case .fpMoveImmediate(let destination, let value):
+            return "fmov \(formatFloatRegister(destination)), \(formatFloatImmediate(value))"
+        case .fpMoveToGeneral(let destination, let source):
+            return "fmov \(formatRegister(destination)), \(formatFloatRegister(source))"
+        case .fpMoveFromGeneral(let destination, let source):
+            return "fmov \(formatFloatRegister(destination)), \(formatRegister(source))"
+        case .fpConvertToInt(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatFloatRegister(source))"
+        case .fpConvertFromInt(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatRegister(source))"
         }
+    }
+
+    private static func formatFloatRegister(_ register: FloatRegister) -> String {
+        let prefix: String
+        switch register.width {
+        case 8: prefix = "b"
+        case 16: prefix = "h"
+        case 32: prefix = "s"
+        case 64: prefix = "d"
+        case 128: prefix = "q"
+        default: prefix = "?"
+        }
+        return "\(prefix)\(register.number)"
+    }
+
+    private static func formatFloatImmediate(_ value: Double) -> String {
+        "#\(value)"
     }
 
     private static func formatRegister(_ register: IntegerRegister) -> String {

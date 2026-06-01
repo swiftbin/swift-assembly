@@ -382,6 +382,86 @@ final class AssemblerTests: XCTestCase {
         }
     }
 
+    func testFloatingPointDataProcessingInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fadd d0, d1, d2"), 0x1e622820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fsub s3, s4, s5"), 0x1e253883)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul d6, d7, d8"), 0x1e6808e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fdiv s9, s10, s11"), 0x1e2b1949)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fnmul s0, s1, s2"), 0x1e228820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmax s0, s1, s2"), 0x1e224820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnm d0, d1, d2"), 0x1e627820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fabs s0, s1"), 0x1e20c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fneg d0, d1"), 0x1e614020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fsqrt s0, s1"), 0x1e21c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov s0, s1"), 0x1e204020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmadd s0, s1, s2, s3"), 0x1f020c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fnmsub d0, d1, d2, d3"), 0x1f628c20)
+    }
+
+    func testFloatingPointCompareConvertAndMove() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvt d0, s1"), 0x1e22c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvt s0, d1"), 0x1e624020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmp s0, s1"), 0x1e212000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmp s0, #0.0"), 0x1e202008)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmpe d0, d1"), 0x1e612010)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov s0, #1.0"), 0x1e2e1000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov d0, #2.0"), 0x1e601000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov s0, #-0.5"), 0x1e3c1000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, w0"), 0x1e220000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf d0, x0"), 0x9e620000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf s0, w1"), 0x1e230020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs w0, s0"), 0x1e380000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu x0, d0"), 0x9e790000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov w0, s0"), 0x1e260000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x0, d0"), 0x9e660000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov s0, w0"), 0x1e270000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov d0, x0"), 0x9e670000)
+    }
+
+    func testDisassembleFloatingPointInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e222820), "fadd s0, s1, s2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e6808e6), "fmul d6, d7, d8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e614020), "fneg d0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e22c020), "fcvt d0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e212000), "fcmp s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e202008), "fcmp s0, #0.0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e2e1000), "fmov s0, #1.0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e3c1000), "fmov s0, #-0.5")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1f020c20), "fmadd s0, s1, s2, s3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9e620000), "scvtf d0, x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e380000), "fcvtzs w0, s0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e270000), "fmov s0, w0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9e660000), "fmov x0, d0")
+    }
+
+    func testFloatingPointRoundTrip() throws {
+        let sources = [
+            "fadd s0, s1, s2", "fadd d0, d1, d2", "fsub s3, s4, s5", "fmul d6, d7, d8",
+            "fdiv s9, s10, s11", "fnmul s0, s1, s2", "fmax s0, s1, s2", "fminnm d0, d1, d2",
+            "fabs s0, s1", "fneg d0, d1", "fsqrt s0, s1", "fmov s0, s1", "fmov d0, d1",
+            "fcvt d0, s1", "fcvt s0, d1", "fcmp s0, s1", "fcmp s0, #0.0", "fcmpe d0, d1",
+            "fmov s0, #1.0", "fmov d0, #2.0", "fmov s0, #-0.5", "fmadd s0, s1, s2, s3",
+            "fnmsub d0, d1, d2, d3", "scvtf s0, w0", "scvtf d0, x0", "ucvtf s0, w1",
+            "fcvtzs w0, s0", "fcvtzu x0, d0", "fmov w0, s0", "fmov x0, d0", "fmov s0, w0", "fmov d0, x0",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testFloatingPointInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fadd s0, d1, s2"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fadd b0, b1, b2"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvt s0, s1"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov s0, #1.3"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmp s0, #1.0"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov w0, x1"))
+    }
+
     func testCommentsBlankLinesAndInlineLabels() throws {
         XCTAssertEqual(
             try ARM64Assembler.assembleWords("""

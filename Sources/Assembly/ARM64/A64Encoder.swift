@@ -112,6 +112,26 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.pair(kind, first: first, second: second, memory: memory)
         case .pointerAuthentication(let kind, let register, let architecture):
             return try A64PointerAuthenticationEncoder.encode(kind, register: register, architecture: architecture)
+        case .fpDataProcessing2(let kind, let destination, let first, let second):
+            return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
+        case .fpDataProcessing1(let kind, let destination, let source):
+            return try A64FloatEncoder.dataProcessing1(kind, destination: destination, source: source)
+        case .fpDataProcessing3(let kind, let destination, let first, let second, let third):
+            return try A64FloatEncoder.dataProcessing3(kind, destination: destination, first: first, second: second, third: third)
+        case .fpCompare(let kind, let first, let second):
+            return try A64FloatEncoder.compare(kind, first: first, second: second)
+        case .fpConvertPrecision(let destination, let source):
+            return try A64FloatEncoder.convertPrecision(destination: destination, source: source)
+        case .fpMoveImmediate(let destination, let value):
+            return try A64FloatEncoder.moveImmediate(destination: destination, value: value)
+        case .fpMoveToGeneral(let destination, let source):
+            return try A64FloatEncoder.moveToGeneral(destination: destination, source: source)
+        case .fpMoveFromGeneral(let destination, let source):
+            return try A64FloatEncoder.moveFromGeneral(destination: destination, source: source)
+        case .fpConvertToInt(let kind, let destination, let source):
+            return try A64FloatEncoder.convertToInt(kind, destination: destination, source: source)
+        case .fpConvertFromInt(let kind, let destination, let source):
+            return try A64FloatEncoder.convertFromInt(kind, destination: destination, source: source)
         }
     }
 }

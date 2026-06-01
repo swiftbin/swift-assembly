@@ -25,6 +25,12 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeDivide(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
+        if let instruction = decodeFPDataProcessing3(word) { return instruction }
+        if let instruction = decodeFPDataProcessing2(word) { return instruction }
+        if let instruction = decodeFPDataProcessing1(word) { return instruction }
+        if let instruction = decodeFPCompare(word) { return instruction }
+        if let instruction = decodeFPMoveImmediate(word) { return instruction }
+        if let instruction = decodeFPIntegerConversion(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -410,6 +416,138 @@ internal enum A64InstructionDecoder {
         case (2, 2): return (.ldrsw, .ldursw, 64, 4)
         case (3, 0): return (.str, .stur, 64, 8)
         case (3, 1): return (.ldr, .ldur, 64, 8)
+        default: return nil
+        }
+    }
+
+    private static func decodeFPDataProcessing2(_ word: UInt32) -> Instruction? {
+        guard word & 0xff20_0c00 == 0x1e20_0800 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let kind: A64.FPDataProcessing2Kind
+        switch (word >> 12) & 0xf {
+        case 0b0000: kind = .fmul
+        case 0b0001: kind = .fdiv
+        case 0b0010: kind = .fadd
+        case 0b0011: kind = .fsub
+        case 0b0100: kind = .fmax
+        case 0b0101: kind = .fmin
+        case 0b0110: kind = .fmaxnm
+        case 0b0111: kind = .fminnm
+        case 0b1000: kind = .fnmul
+        default: return nil
+        }
+        return .fpDataProcessing2(
+            kind,
+            destination: floatRegister(number: word & 0x1f, width: width),
+            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
+            second: floatRegister(number: (word >> 16) & 0x1f, width: width)
+        )
+    }
+
+    private static func decodeFPDataProcessing1(_ word: UInt32) -> Instruction? {
+        guard word & 0xff20_7c00 == 0x1e20_4000 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let opcode = (word >> 15) & 0x3f
+        let rn = floatRegister(number: (word >> 5) & 0x1f, width: width)
+        let kind: A64.FPDataProcessing1Kind
+        switch opcode {
+        case 0b000000: kind = .fmov
+        case 0b000001: kind = .fabs
+        case 0b000010: kind = .fneg
+        case 0b000011: kind = .fsqrt
+        case 0b000100, 0b000101, 0b000111:
+            guard let target = floatWidth(forPtype: opcode & 3), target != width else { return nil }
+            return .fpConvertPrecision(
+                destination: floatRegister(number: word & 0x1f, width: target),
+                source: rn
+            )
+        default:
+            return nil
+        }
+        return .fpDataProcessing1(kind, destination: floatRegister(number: word & 0x1f, width: width), source: rn)
+    }
+
+    private static func decodeFPDataProcessing3(_ word: UInt32) -> Instruction? {
+        guard word & 0xff00_0000 == 0x1f00_0000 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let o1 = (word >> 21) & 1
+        let o0 = (word >> 15) & 1
+        let kind: A64.FPDataProcessing3Kind
+        switch (o1, o0) {
+        case (0, 0): kind = .fmadd
+        case (0, 1): kind = .fmsub
+        case (1, 0): kind = .fnmadd
+        case (1, 1): kind = .fnmsub
+        default: return nil
+        }
+        return .fpDataProcessing3(
+            kind,
+            destination: floatRegister(number: word & 0x1f, width: width),
+            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
+            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
+            third: floatRegister(number: (word >> 10) & 0x1f, width: width)
+        )
+    }
+
+    private static func decodeFPCompare(_ word: UInt32) -> Instruction? {
+        guard word & 0xff20_fc07 == 0x1e20_2000 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let opcode2 = word & 0x1f
+        let kind: A64.FPCompareKind = (opcode2 >> 4) & 1 == 1 ? .fcmpe : .fcmp
+        let rn = floatRegister(number: (word >> 5) & 0x1f, width: width)
+        let second: A64.FPCompareOperand
+        if (opcode2 >> 3) & 1 == 1 {
+            guard (word >> 16) & 0x1f == 0 else { return nil }
+            second = .zero
+        } else {
+            second = .register(floatRegister(number: (word >> 16) & 0x1f, width: width))
+        }
+        return .fpCompare(kind, first: rn, second: second)
+    }
+
+    private static func decodeFPMoveImmediate(_ word: UInt32) -> Instruction? {
+        guard word & 0xff20_1fe0 == 0x1e20_1000 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let value = A64FloatImmediate.decode((word >> 13) & 0xff)
+        return .fpMoveImmediate(destination: floatRegister(number: word & 0x1f, width: width), value: value)
+    }
+
+    private static func decodeFPIntegerConversion(_ word: UInt32) -> Instruction? {
+        guard word & 0x7f20_fc00 == 0x1e20_0000 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let sf = (word >> 31) & 1
+        let generalWidth = sf == 1 ? 64 : 32
+        let rmode = (word >> 19) & 3
+        let opcode = (word >> 16) & 7
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        switch (rmode, opcode) {
+        case (0b11, 0b000), (0b11, 0b001):
+            let kind: A64.FPConvertToIntKind = opcode == 0b000 ? .fcvtzs : .fcvtzu
+            return .fpConvertToInt(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width))
+        case (0b00, 0b010), (0b00, 0b011):
+            let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
+            return .fpConvertFromInt(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
+        case (0b00, 0b110):
+            guard width == 32 || width == 64 else { return nil }
+            return .fpMoveToGeneral(destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width))
+        case (0b00, 0b111):
+            guard width == 32 || width == 64 else { return nil }
+            return .fpMoveFromGeneral(destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
+        default:
+            return nil
+        }
+    }
+
+    private static func floatRegister(number: UInt32, width: Int) -> FloatRegister {
+        FloatRegister(number: number, width: width)
+    }
+
+    private static func floatWidth(forPtype ptype: UInt32) -> Int? {
+        switch ptype {
+        case 0b00: return 32
+        case 0b01: return 64
+        case 0b11: return 16
         default: return nil
         }
     }

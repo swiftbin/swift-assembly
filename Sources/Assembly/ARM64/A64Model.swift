@@ -16,6 +16,23 @@ internal enum A64 {
         var is64Bit: Bool { width == 64 }
     }
 
+    struct FPRegister: Equatable {
+        var number: UInt32
+        var width: Int
+
+        var encodedNumber: UInt32 { number & 0x1f }
+
+        /// The `ptype`/`type` field used by scalar floating-point encodings.
+        var ptype: UInt32? {
+            switch width {
+            case 32: return 0b00
+            case 64: return 0b01
+            case 16: return 0b11
+            default: return nil
+            }
+        }
+    }
+
     enum Condition: UInt32 {
         case eq = 0x0, ne = 0x1, hs = 0x2, lo = 0x3
         case mi = 0x4, pl = 0x5, vs = 0x6, vc = 0x7
@@ -119,6 +136,35 @@ internal enum A64 {
         case paciasp, autiasp, pacibsp, autibsp, xpaci, xpacd
     }
 
+    enum FPDataProcessing2Kind: String, Equatable {
+        case fmul, fdiv, fadd, fsub, fmax, fmin, fmaxnm, fminnm, fnmul
+    }
+
+    enum FPDataProcessing1Kind: String, Equatable {
+        case fmov, fabs, fneg, fsqrt
+    }
+
+    enum FPDataProcessing3Kind: String, Equatable {
+        case fmadd, fmsub, fnmadd, fnmsub
+    }
+
+    enum FPCompareKind: String, Equatable {
+        case fcmp, fcmpe
+    }
+
+    enum FPConvertToIntKind: String, Equatable {
+        case fcvtzs, fcvtzu
+    }
+
+    enum FPConvertFromIntKind: String, Equatable {
+        case scvtf, ucvtf
+    }
+
+    enum FPCompareOperand: Equatable {
+        case register(FPRegister)
+        case zero
+    }
+
     enum MoveAliasSource: Equatable {
         case immediate(Int64)
         case register(Register)
@@ -163,11 +209,22 @@ internal enum A64 {
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
+        case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
+        case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
+        case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
+        case fpCompare(FPCompareKind, first: FPRegister, second: FPCompareOperand)
+        case fpConvertPrecision(destination: FPRegister, source: FPRegister)
+        case fpMoveImmediate(destination: FPRegister, value: Double)
+        case fpMoveToGeneral(destination: Register, source: FPRegister)
+        case fpMoveFromGeneral(destination: FPRegister, source: Register)
+        case fpConvertToInt(FPConvertToIntKind, destination: Register, source: FPRegister)
+        case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
     }
 }
 
 internal typealias IntegerRegisterKind = A64.RegisterKind
 internal typealias IntegerRegister = A64.Register
+internal typealias FloatRegister = A64.FPRegister
 internal typealias Condition = A64.Condition
 internal typealias ShiftKind = A64.ShiftKind
 internal typealias ExtendKind = A64.ExtendKind
