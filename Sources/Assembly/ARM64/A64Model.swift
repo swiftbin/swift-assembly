@@ -599,6 +599,31 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar shift by immediate (`Vd, Vn, #shift`, double-width forms).
+    enum ScalarShiftImmediateKind: String, Equatable, CaseIterable {
+        case sshr, ushr, ssra, usra, srshr, urshr, srsra, ursra, sri   // right shifts
+        case shl, sli, sqshl, uqshl, sqshlu                            // left shifts
+
+        var spec: (u: UInt32, opcode: UInt32, isLeft: Bool) {
+            switch self {
+            case .sshr:   return (0, 0b00000, false)
+            case .ushr:   return (1, 0b00000, false)
+            case .ssra:   return (0, 0b00010, false)
+            case .usra:   return (1, 0b00010, false)
+            case .srshr:  return (0, 0b00100, false)
+            case .urshr:  return (1, 0b00100, false)
+            case .srsra:  return (0, 0b00110, false)
+            case .ursra:  return (1, 0b00110, false)
+            case .sri:    return (1, 0b01000, false)
+            case .shl:    return (0, 0b01010, true)
+            case .sli:    return (1, 0b01010, true)
+            case .sqshl:  return (0, 0b01110, true)
+            case .uqshl:  return (1, 0b01110, true)
+            case .sqshlu: return (1, 0b01100, true)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar two-register misc (`Vd, Vn`, plus the compare-against-`#0` forms).
     enum ScalarTwoRegisterMiscKind: String, Equatable, CaseIterable {
         case abs, neg, sqabs, sqneg, suqadd, usqadd
@@ -718,6 +743,7 @@ internal enum A64 {
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
         case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
+        case scalarShiftImmediate(ScalarShiftImmediateKind, destination: FPRegister, source: FPRegister, shift: Int)
     }
 }
 
@@ -742,3 +768,4 @@ internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
 internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
 internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind
+internal typealias ScalarShiftImmediateKind = A64.ScalarShiftImmediateKind

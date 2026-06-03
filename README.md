@@ -36,6 +36,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD scalar three-same (add / sub / cmeq / cmge / cmgt / cmhi / cmhs / cmtst / sqadd / uqadd / sqsub / uqsub / sshl / ushl / srshl / urshl / sqshl / uqshl / sqrshl / uqrshl / sqdmulh / sqrdmulh)
 - Advanced SIMD scalar pairwise reductions (addp / faddp / fmaxp / fminp / fmaxnmp / fminnmp)
 - Advanced SIMD scalar two-register misc (abs / neg / sqabs / sqneg / suqadd / usqadd and the compare-against-zero cmeq / cmge / cmgt / cmle / cmlt)
+- Advanced SIMD scalar shift by immediate (sshr / ushr / ssra / usra / srshr / urshr / srsra / ursra / sri / shl / sli / sqshl / uqshl / sqshlu — double-width forms)
 - ...
 
 ## Usage

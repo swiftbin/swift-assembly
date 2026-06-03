@@ -1269,6 +1269,59 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmeq d0, d1, #1"))    // only #0 is allowed
     }
 
+    func testScalarShiftImmediateInstructions() throws {
+        // Right shifts (amount 1...64).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshr d0, d1, #1"), 0x5f7f0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshr d0, d1, #64"), 0x5f400420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ushr d0, d1, #32"), 0x7f600420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ssra d0, d1, #5"), 0x5f7b1420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usra d0, d1, #5"), 0x7f7b1420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("srshr d0, d1, #5"), 0x5f7b2420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("urshr d0, d1, #5"), 0x7f7b2420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("srsra d0, d1, #5"), 0x5f7b3420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ursra d0, d1, #5"), 0x7f7b3420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sri d0, d1, #7"), 0x7f794420)
+        // Left shifts (amount 0...63).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shl d0, d1, #0"), 0x5f405420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shl d0, d1, #63"), 0x5f7f5420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sli d0, d1, #7"), 0x7f475420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshl d0, d1, #5"), 0x5f457420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqshl d0, d1, #5"), 0x7f457420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshlu d0, d1, #5"), 0x7f456420)
+    }
+
+    func testDisassembleScalarShiftImmediate() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f7f0420), "sshr d0, d1, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f400420), "sshr d0, d1, #64")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f405420), "shl d0, d1, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f475420), "sli d0, d1, #7")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f456420), "sqshlu d0, d1, #5")
+    }
+
+    func testScalarShiftImmediateRoundTrip() throws {
+        let sources = [
+            "sshr d0, d1, #1", "sshr d2, d3, #64", "ushr d4, d5, #33",
+            "ssra d6, d7, #16", "usra d8, d9, #48", "srshr d10, d11, #1",
+            "urshr d12, d13, #64", "srsra d14, d15, #7", "ursra d16, d17, #23",
+            "sri d18, d19, #40",
+            "shl d20, d21, #0", "shl d22, d23, #63", "sli d24, d25, #31",
+            "sqshl d26, d27, #12", "uqshl d28, d29, #50", "sqshlu d30, d31, #5",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarShiftImmediateInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr d0, d1, #0"))    // right shift min is 1
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr d0, d1, #65"))   // right shift max is 64
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shl d0, d1, #64"))    // left shift max is 63
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr s0, s1, #1"))    // only double-width supported
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

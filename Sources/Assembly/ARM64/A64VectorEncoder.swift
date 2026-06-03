@@ -481,6 +481,29 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (size << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarShiftImmediate(_ kind: A64.ScalarShiftImmediateKind, destination rd: FloatRegister, source rn: FloatRegister, shift: Int) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // Only the double-width (`d`) scalar forms are supported.
+        guard rd.width == 64, rn.width == 64 else { throw fail() }
+
+        let immhb: UInt32
+        if spec.isLeft {
+            guard shift >= 0, shift <= 63 else { throw fail() }
+            immhb = UInt32(64 + shift)        // esize + shift
+        } else {
+            guard shift >= 1, shift <= 64 else { throw fail() }
+            immhb = UInt32(128 - shift)       // 2*esize - shift
+        }
+        let immh = (immhb >> 3) & 0xf
+        let immb = immhb & 0x7
+
+        // Base: bit30=1, bits[28:23]=111110, bit10=1.
+        let base: UInt32 = 0x5f00_0400
+        return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarTwoRegisterMisc(_ kind: A64.ScalarTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }

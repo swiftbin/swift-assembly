@@ -168,6 +168,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.scalarPairwise(kind, destination: destination, source: source)
         case .scalarTwoRegisterMisc(let kind, let destination, let source):
             return try A64VectorEncoder.scalarTwoRegisterMisc(kind, destination: destination, source: source)
+        case .scalarShiftImmediate(let kind, let destination, let source, let shift):
+            return try A64VectorEncoder.scalarShiftImmediate(kind, destination: destination, source: source, shift: shift)
         }
     }
 }

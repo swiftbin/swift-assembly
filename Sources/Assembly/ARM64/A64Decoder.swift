@@ -44,6 +44,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarThreeSame(word) { return instruction }
         if let instruction = decodeScalarPairwise(word) { return instruction }
         if let instruction = decodeScalarTwoRegisterMisc(word) { return instruction }
+        if let instruction = decodeScalarShiftImmediate(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1046,6 +1047,32 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: width),
             first: floatRegister(number: rnNum, width: width),
             second: floatRegister(number: rmNum, width: width))
+    }
+
+    private static func decodeScalarShiftImmediate(_ word: UInt32) -> Instruction? {
+        // bit31=0, bit30=1, bits[28:23]=111110, bit10=1.
+        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        let u = (word >> 29) & 1
+        let immh = (word >> 19) & 0xf
+        let immb = (word >> 16) & 0x7
+        // Only the double-width form (immh = 1xxx) is supported.
+        guard immh & 0b1000 != 0 else { return nil }
+        let opcode = (word >> 11) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarShiftImmediateKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        let immhb = Int((immh << 3) | immb)
+        let shift = kind.spec.isLeft ? (immhb - 64) : (128 - immhb)
+
+        return .scalarShiftImmediate(kind,
+            destination: floatRegister(number: rdNum, width: 64),
+            source: floatRegister(number: rnNum, width: 64),
+            shift: shift)
     }
 
     private static func decodeScalarTwoRegisterMisc(_ word: UInt32) -> Instruction? {
