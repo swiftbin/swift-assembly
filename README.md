@@ -46,6 +46,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD scalar two-register misc, saturating extract-narrow (sqxtn / uqxtn / sqxtun)
 - Advanced SIMD scalar shift by immediate, fixed-point convert (scvtf / ucvtf / fcvtzs / fcvtzu with #fbits)
 - SIMD&FP load/store register (ldr / str / ldur / stur of b/h/s/d/q) and pair (ldp / stp of s/d/q), with all addressing modes
+- Advanced SIMD load/store multiple structures (ld1–ld4 / st1–st4) with brace-delimited register lists and the `[Xn]`, `[Xn], #imm`, `[Xn], Xm` addressing forms
 - ...
 
 ## Usage

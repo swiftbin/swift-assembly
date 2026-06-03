@@ -114,6 +114,8 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.singleFP(kind, target: target, memory: memory)
         case .loadStorePairFP(let kind, let first, let second, let memory):
             return try A64LoadStoreEncoder.pairFP(kind, first: first, second: second, memory: memory)
+        case .loadStoreMultiple(let kind, let registers, let address):
+            return try A64LoadStoreEncoder.multiple(kind, registers: registers, address: address)
         case .pointerAuthentication(let kind, let register, let architecture):
             return try A64PointerAuthenticationEncoder.encode(kind, register: register, architecture: architecture)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
@@ -441,6 +443,25 @@ internal enum A64LoadStoreEncoder {
         try checkRange(imm7, -64...63, instruction: mnemonic)
         let head = (opc << 30) | modeBase | ((kind == .ldp ? UInt32(1) : 0) << 22)
         return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    static func multiple(_ kind: A64.LoadStoreMultipleKind, registers list: A64.VectorRegisterList, address: A64.VectorMemoryOperand) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard kind.allows(count: list.count), let opcode = kind.opcode(count: list.count) else { throw fail() }
+        let q = list.arrangement.q
+        let size = list.arrangement.elementSize
+        let l: UInt32 = kind.isLoad ? 1 : 0
+        let common = (q << 30) | (l << 22) | (opcode << 12) | (size << 10) | list.encodedNumber
+
+        switch address {
+        case .base(let rn):
+            return 0x0c00_0000 | common | (rn.encodedNumber << 5)
+        case .postImmediate(let rn):
+            // Immediate post-index: Rm = 0b11111, the transfer size is implicit.
+            return 0x0c80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
+        case .postRegister(let rn, let rm):
+            return 0x0c80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
+        }
     }
 
     private struct FPSingleDescriptor {

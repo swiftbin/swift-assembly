@@ -68,6 +68,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(([formatFloatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStorePairFP(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatFloatRegister(first), formatFloatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .loadStoreMultiple(let kind, let registers, let address):
+            return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, registers: registers))"
         case .pointerAuthentication(let kind, let register, _):
             return ([kind.rawValue] + (register.map { [formatRegister($0)] } ?? [])).joined(separator: " ")
         case .fpDataProcessing2(let kind, let destination, let first, let second):
@@ -225,6 +227,23 @@ internal enum A64InstructionFormatter {
 
     private static func formatVectorRegister(_ register: VectorRegister) -> String {
         "v\(register.number).\(register.arrangement.rawValue)"
+    }
+
+    private static func formatVectorRegisterList(_ list: VectorRegisterList) -> String {
+        let names = (0..<list.count).map { "v\((list.firstNumber + UInt32($0)) % 32).\(list.arrangement.rawValue)" }
+        return "{" + names.joined(separator: ", ") + "}"
+    }
+
+    private static func formatVectorMemoryOperand(_ address: VectorMemoryOperand, registers: VectorRegisterList) -> String {
+        switch address {
+        case .base(let base):
+            return "[\(formatRegister(base))]"
+        case .postImmediate(let base):
+            let bytes = registers.count * (registers.arrangement.q == 1 ? 16 : 8)
+            return "[\(formatRegister(base))], #\(bytes)"
+        case .postRegister(let base, let offset):
+            return "[\(formatRegister(base))], \(formatRegister(offset))"
+        }
     }
 
     private static func formatFloatRegister(_ register: FloatRegister) -> String {

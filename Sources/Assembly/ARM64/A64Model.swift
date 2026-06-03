@@ -79,6 +79,23 @@ internal enum A64 {
         var encodedNumber: UInt32 { number & 0x1f }
     }
 
+    /// A brace-delimited list of consecutively numbered vector registers sharing a single
+    /// arrangement, e.g. `{v0.16b, v1.16b}` used by the structured load/store instructions.
+    struct VectorRegisterList: Equatable {
+        var firstNumber: UInt32
+        var count: Int
+        var arrangement: VectorArrangement
+
+        var encodedNumber: UInt32 { firstNumber & 0x1f }
+    }
+
+    /// Addressing forms used by the Advanced SIMD structured load/store instructions.
+    enum VectorMemoryOperand: Equatable {
+        case base(Register)                         // [Xn]
+        case postImmediate(Register)                // [Xn], #imm  (imm is implicit = bytes transferred)
+        case postRegister(Register, offset: Register) // [Xn], Xm
+    }
+
     enum Condition: UInt32 {
         case eq = 0x0, ne = 0x1, hs = 0x2, lo = 0x3
         case mi = 0x4, pl = 0x5, vs = 0x6, vc = 0x7
@@ -176,6 +193,63 @@ internal enum A64 {
 
     enum LoadStorePairKind: String, Equatable {
         case ldp, stp
+    }
+
+    /// Advanced SIMD load/store multiple structures (`LD1`–`LD4` / `ST1`–`ST4`).
+    enum LoadStoreMultipleKind: String, Equatable, CaseIterable {
+        case st1, ld1, st2, ld2, st3, ld3, st4, ld4
+
+        var isLoad: Bool { rawValue.hasPrefix("ld") }
+
+        /// The structure size (1 for LD1/ST1 … 4 for LD4/ST4).
+        var structure: Int { Int(String(rawValue.dropFirst(2)))! }
+
+        /// Whether the given register count is valid for this kind.
+        func allows(count: Int) -> Bool {
+            structure == 1 ? (1...4).contains(count) : count == structure
+        }
+
+        /// The `opcode` field (bits[15:12]) for the given register count.
+        func opcode(count: Int) -> UInt32? {
+            switch (structure, count) {
+            case (1, 1): return 0b0111
+            case (1, 2): return 0b1010
+            case (1, 3): return 0b0110
+            case (1, 4): return 0b0010
+            case (2, 2): return 0b1000
+            case (3, 3): return 0b0100
+            case (4, 4): return 0b0000
+            default: return nil
+            }
+        }
+
+        /// Reverse mapping from a decoded `opcode` to (structure, register count).
+        static func decode(opcode: UInt32) -> (structure: Int, count: Int)? {
+            switch opcode {
+            case 0b0111: return (1, 1)
+            case 0b1010: return (1, 2)
+            case 0b0110: return (1, 3)
+            case 0b0010: return (1, 4)
+            case 0b1000: return (2, 2)
+            case 0b0100: return (3, 3)
+            case 0b0000: return (4, 4)
+            default: return nil
+            }
+        }
+
+        static func forStructure(_ structure: Int, isLoad: Bool) -> LoadStoreMultipleKind? {
+            switch (structure, isLoad) {
+            case (1, false): return .st1
+            case (1, true):  return .ld1
+            case (2, false): return .st2
+            case (2, true):  return .ld2
+            case (3, false): return .st3
+            case (3, true):  return .ld3
+            case (4, false): return .st4
+            case (4, true):  return .ld4
+            default: return nil
+            }
+        }
     }
 
     enum PointerAuthenticationKind: String, Equatable {
@@ -831,6 +905,7 @@ internal enum A64 {
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
         case loadStorePairFP(LoadStorePairKind, first: FPRegister, second: FPRegister, memory: MemoryOperand)
+        case loadStoreMultiple(LoadStoreMultipleKind, registers: VectorRegisterList, address: VectorMemoryOperand)
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
@@ -876,6 +951,9 @@ internal typealias IntegerRegisterKind = A64.RegisterKind
 internal typealias IntegerRegister = A64.Register
 internal typealias FloatRegister = A64.FPRegister
 internal typealias VectorRegister = A64.VectorRegister
+internal typealias VectorRegisterList = A64.VectorRegisterList
+internal typealias VectorMemoryOperand = A64.VectorMemoryOperand
+internal typealias LoadStoreMultipleKind = A64.LoadStoreMultipleKind
 internal typealias Condition = A64.Condition
 internal typealias ShiftKind = A64.ShiftKind
 internal typealias ExtendKind = A64.ExtendKind

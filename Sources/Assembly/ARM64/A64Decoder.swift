@@ -27,6 +27,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
         if let instruction = decodeLoadStorePairFP(word) { return instruction }
+        if let instruction = decodeLoadStoreMultiple(word) { return instruction }
         if let instruction = decodeFPDataProcessing3(word) { return instruction }
         if let instruction = decodeFPDataProcessing2(word) { return instruction }
         if let instruction = decodeFPDataProcessing1(word) { return instruction }
@@ -509,6 +510,51 @@ internal enum A64InstructionDecoder {
         default: return nil
         }
         return .loadStorePairFP(kind, first: rt, second: rt2, memory: memory)
+    }
+
+    private static func decodeLoadStoreMultiple(_ word: UInt32) -> Instruction? {
+        // Advanced SIMD load/store multiple structures: bit31=0, bits[29:24]=001100, bit24=0.
+        guard word & 0xbf00_0000 == 0x0c00_0000 else { return nil }
+        let post = (word >> 23) & 1
+        if post == 0 {
+            // The non-post form requires bits[21:16] == 0.
+            guard (word >> 16) & 0x3f == 0 else { return nil }
+        }
+        let q = (word >> 30) & 1
+        let l = (word >> 22) & 1
+        let opcode = (word >> 12) & 0xf
+        let size = (word >> 10) & 3
+        let rn = (word >> 5) & 0x1f
+        let rt = word & 0x1f
+
+        guard let (structure, count) = A64.LoadStoreMultipleKind.decode(opcode: opcode),
+              let kind = A64.LoadStoreMultipleKind.forStructure(structure, isLoad: l == 1),
+              let arrangement = fullVectorArrangement(size: size, q: q) else { return nil }
+
+        let list = A64.VectorRegisterList(firstNumber: rt, count: count, arrangement: arrangement)
+        let base = xRegister(number: rn)
+        let address: A64.VectorMemoryOperand
+        if post == 0 {
+            address = .base(base)
+        } else {
+            let rm = (word >> 16) & 0x1f
+            address = rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
+        }
+        return .loadStoreMultiple(kind, registers: list, address: address)
+    }
+
+    private static func fullVectorArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
+        switch (size, q) {
+        case (0b00, 0): return .b8
+        case (0b00, 1): return .b16
+        case (0b01, 0): return .h4
+        case (0b01, 1): return .h8
+        case (0b10, 0): return .s2
+        case (0b10, 1): return .s4
+        case (0b11, 0): return .d1
+        case (0b11, 1): return .d2
+        default: return nil
+        }
     }
 
     private static func loadStoreSingleKind(size: UInt32, opc: UInt32) -> (scaled: A64.LoadStoreSingleKind, unscaled: A64.LoadStoreSingleKind, rtWidth: Int, byteSize: Int64)? {

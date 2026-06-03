@@ -67,10 +67,10 @@ internal enum SourceParser {
 
         for ch in text {
             switch ch {
-            case "[":
+            case "[", "{":
                 depth += 1
                 current.append(ch)
-            case "]":
+            case "]", "}":
                 depth = max(0, depth - 1)
                 current.append(ch)
             case "," where depth == 0:

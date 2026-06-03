@@ -109,6 +109,42 @@ internal enum A64Parser {
         return A64.VectorRegister(number: number, arrangement: arrangement)
     }
 
+    /// Parses a brace-delimited register list such as `{v0.16b, v1.16b}`. The registers must
+    /// share an arrangement and be numbered consecutively (wrapping at v31).
+    static func vectorRegisterList(_ text: String) throws -> A64.VectorRegisterList {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("{"), trimmed.hasSuffix("}") else { throw AssemblerError.invalidRegister(text) }
+        let inner = String(trimmed.dropFirst().dropLast())
+        let items = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard !items.isEmpty, items.count <= 4 else { throw AssemblerError.invalidRegister(text) }
+        let registers = try items.map { try vectorRegister($0) }
+        let arrangement = registers[0].arrangement
+        guard registers.allSatisfy({ $0.arrangement == arrangement }) else { throw AssemblerError.invalidRegister(text) }
+        let first = registers[0].number
+        for (offset, register) in registers.enumerated() {
+            guard register.number == (first + UInt32(offset)) % 32 else { throw AssemblerError.invalidRegister(text) }
+        }
+        return A64.VectorRegisterList(firstNumber: first, count: registers.count, arrangement: arrangement)
+    }
+
+    /// Parses the addressing form for structured load/store: `[Xn]`, `[Xn], #imm`, or `[Xn], Xm`.
+    /// For the immediate post-index form the literal must equal `expectedPostImmediate`.
+    static func vectorMemoryOperand(_ operands: [String], baseIndex: Int, expectedPostImmediate: Int64) throws -> A64.VectorMemoryOperand {
+        let baseText = operands[baseIndex].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard baseText.hasPrefix("["), baseText.hasSuffix("]") else { throw AssemblerError.invalidRegister(baseText) }
+        let inner = String(baseText.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        let base = try integerRegister(inner, allowSP: true)
+        guard operands.count > baseIndex + 1 else { return .base(base) }
+
+        let post = operands[baseIndex + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+        if post.hasPrefix("#") {
+            let value = try immediate(post)
+            guard value == expectedPostImmediate else { throw AssemblerError.invalidImmediate(post) }
+            return .postImmediate(base)
+        }
+        return .postRegister(base, offset: try integerRegister(post, allowSP: false))
+    }
+
     /// Parses an addressed vector lane such as `v1.s[2]`.
     static func vectorElement(_ text: String) throws -> A64.VectorElement {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -706,6 +742,18 @@ internal enum A64InstructionParser {
                 first: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
                 second: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 memory: try A64MemoryOperandParser.parse(instruction.operands, startIndex: 2)
+            )
+        case "ld1", "st1", "ld2", "st2", "ld3", "st3", "ld4", "st4":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            let kind = A64.LoadStoreMultipleKind(rawValue: mnemonic)!
+            let list = try A64Parser.vectorRegisterList(instruction.operands[0])
+            let bytesPerRegister: Int64 = list.arrangement.q == 1 ? 16 : 8
+            let expected = Int64(list.count) * bytesPerRegister
+            return .loadStoreMultiple(
+                kind,
+                registers: list,
+                address: try A64Parser.vectorMemoryOperand(instruction.operands, baseIndex: 1, expectedPostImmediate: expected)
             )
         case "paciasp", "autiasp", "pacibsp", "autibsp", "xpaci", "xpacd":
             guard parts.count == 1 else { return nil }
