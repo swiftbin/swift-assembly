@@ -37,6 +37,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
         if let instruction = decodeVectorCopy(word) { return instruction }
+        if let instruction = decodeVectorPermute(word) { return instruction }
+        if let instruction = decodeVectorExtract(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -859,6 +861,41 @@ internal enum A64InstructionDecoder {
         default:
             return nil
         }
+    }
+
+    private static func decodeVectorPermute(_ word: UInt32) -> Instruction? {
+        // bit31=0, bits[29:24]=001110, bit21=0, bit15=0, bits[11:10]=10.
+        guard word & 0xbf20_8c00 == 0x0e00_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let size = (word >> 22) & 0x3
+        let opcode = (word >> 12) & 0x7
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        guard let kind = A64.VectorPermuteKind.allCases.first(where: { $0.opcode == opcode }),
+              let arrangement = threeSameIntegerArrangement(size: size, q: q) else { return nil }
+        return .vectorPermute(kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            first: VectorRegister(number: rnNum, arrangement: arrangement),
+            second: VectorRegister(number: rmNum, arrangement: arrangement))
+    }
+
+    private static func decodeVectorExtract(_ word: UInt32) -> Instruction? {
+        // bit31=0, bits[29:24]=101110, bits[23:22]=00, bit21=0, bit15=0, bit10=0.
+        guard word & 0xbfe0_8400 == 0x2e00_0000 else { return nil }
+        let q = (word >> 30) & 1
+        let imm4 = (word >> 11) & 0xf
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        // The 8-byte form only addresses lanes 0..7.
+        guard q == 1 || imm4 <= 7 else { return nil }
+        let arrangement: A64.VectorArrangement = q == 1 ? .b16 : .b8
+        return .vectorExtract(
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            first: VectorRegister(number: rnNum, arrangement: arrangement),
+            second: VectorRegister(number: rmNum, arrangement: arrangement),
+            index: Int(imm4))
     }
 
     /// Maps an element width and `Q` to a vector arrangement; `(D, Q=0)` is the

@@ -604,6 +604,24 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "zip1", "zip2", "uzp1", "uzp2", "trn1", "trn2":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .vectorPermute(
+                A64.VectorPermuteKind(rawValue: mnemonic)!,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                first: try A64Parser.vectorRegister(instruction.operands[1]),
+                second: try A64Parser.vectorRegister(instruction.operands[2])
+            )
+        case "ext":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            return .vectorExtract(
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                first: try A64Parser.vectorRegister(instruction.operands[1]),
+                second: try A64Parser.vectorRegister(instruction.operands[2]),
+                index: Int(try A64Parser.immediate(instruction.operands[3]))
+            )
         case "movi", "mvni":
             guard parts.count == 1 else { return nil }
             return try vectorModifiedImmediate(instruction, kind: A64.VectorModifiedImmediateKind(rawValue: mnemonic)!)

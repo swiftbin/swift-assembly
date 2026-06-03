@@ -320,6 +320,38 @@ internal enum A64VectorEncoder {
         return encodeCopy(q: 1, op: 1, imm5: imm5, imm4: imm4, rn: src.encodedNumber, rd: dst.encodedNumber)
     }
 
+    // MARK: - Permute (ZIP / UZP / TRN) and Extract (EXT)
+
+    /// Arrangements permitted by the permute group (`1d` is reserved).
+    private static let allowedPermuteArrangements: Set<A64.VectorArrangement> = [.b8, .b16, .h4, .h8, .s2, .s4, .d2]
+
+    static func permute(_ kind: A64.VectorPermuteKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        let arrangement = rd.arrangement
+        guard rn.arrangement == arrangement, rm.arrangement == arrangement,
+              allowedPermuteArrangements.contains(arrangement) else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        // Base: bits[29:24]=001110, bits[11:10]=10.
+        let base: UInt32 = 0x0e00_0800
+        let head = (arrangement.q << 30) | base | (arrangement.elementSize << 22)
+        return head | (rm.encodedNumber << 16) | (kind.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func extract(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister, index: Int) throws -> UInt32 {
+        let arrangement = rd.arrangement
+        guard rn.arrangement == arrangement, rm.arrangement == arrangement,
+              arrangement == .b8 || arrangement == .b16 else {
+            throw AssemblerError.invalidRegister("ext")
+        }
+        // 8-byte form indexes 0..7; 16-byte form indexes 0..15.
+        let maxIndex = arrangement == .b16 ? 15 : 7
+        try checkRange(Int64(index), 0...Int64(maxIndex), instruction: "ext")
+        // Base: bits[29:24]=101110.
+        let base: UInt32 = 0x2e00_0000
+        let head = (arrangement.q << 30) | base
+        return head | (rm.encodedNumber << 16) | (UInt32(index) << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
         let amount: Int
         switch shift {

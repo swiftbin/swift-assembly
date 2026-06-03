@@ -462,6 +462,23 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD "permute" instructions (`Vd.T, Vn.T, Vm.T`).
+    enum VectorPermuteKind: String, Equatable, CaseIterable {
+        case uzp1, trn1, zip1, uzp2, trn2, zip2
+
+        /// The `opcode` field at bits[14:12].
+        var opcode: UInt32 {
+            switch self {
+            case .uzp1: return 0b001
+            case .trn1: return 0b010
+            case .zip1: return 0b011
+            case .uzp2: return 0b101
+            case .trn2: return 0b110
+            case .zip2: return 0b111
+            }
+        }
+    }
+
     /// The optional shift applied to a vector modified-immediate byte.
     enum VectorImmediateShift: Equatable {
         case none
@@ -534,6 +551,8 @@ internal enum A64 {
         case vectorMoveToGeneral(signed: Bool, destination: Register, source: VectorElement)
         case vectorInsertGeneral(destination: VectorElement, source: Register)
         case vectorInsertElement(destination: VectorElement, source: VectorElement)
+        case vectorPermute(VectorPermuteKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorExtract(destination: VectorRegister, first: VectorRegister, second: VectorRegister, index: Int)
     }
 }
 
@@ -552,3 +571,4 @@ internal typealias VectorModifiedImmediateKind = A64.VectorModifiedImmediateKind
 internal typealias VectorImmediateShift = A64.VectorImmediateShift
 internal typealias VectorElement = A64.VectorElement
 internal typealias VectorElementWidth = A64.VectorElementWidth
+internal typealias VectorPermuteKind = A64.VectorPermuteKind

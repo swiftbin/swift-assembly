@@ -30,6 +30,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD shift by immediate (sshr / ushr / ssra / usra / srshr / sri / shl / sli / sqshl / sqshlu / shrn(2) / rshrn(2) / sqshrn(2) / sqshrun(2) / uqshrn(2) / sshll(2) / ushll(2) / sxtl(2) / uxtl(2) / scvtf / ucvtf / fcvtzs / fcvtzu)
 - Advanced SIMD modified immediate (movi / mvni / orr / bic / fmov, with lsl / msl shifts and the 64-bit movi forms)
 - Advanced SIMD copy (dup from element / general register, smov / umov, ins from element / general register, and the mov aliases)
+- Advanced SIMD permute (zip1 / zip2 / uzp1 / uzp2 / trn1 / trn2) and extract (ext)
 - ...
 
 ## Usage

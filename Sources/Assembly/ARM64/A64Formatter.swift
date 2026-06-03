@@ -113,6 +113,10 @@ internal enum A64InstructionFormatter {
             return "ins \(formatVectorElement(destination)), \(formatRegister(source))"
         case .vectorInsertElement(let destination, let source):
             return "ins \(formatVectorElement(destination)), \(formatVectorElement(source))"
+        case .vectorPermute(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorExtract(let destination, let first, let second, let index):
+            return "ext \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second)), #\(index)"
         }
     }
 

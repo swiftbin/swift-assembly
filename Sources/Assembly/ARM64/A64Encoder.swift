@@ -154,6 +154,10 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.insertGeneral(destination: destination, source: source)
         case .vectorInsertElement(let destination, let source):
             return try A64VectorEncoder.insertElement(destination: destination, source: source)
+        case .vectorPermute(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.permute(kind, destination: destination, first: first, second: second)
+        case .vectorExtract(let destination, let first, let second, let index):
+            return try A64VectorEncoder.extract(destination: destination, first: first, second: second, index: index)
         }
     }
 }

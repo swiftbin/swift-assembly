@@ -906,6 +906,62 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ins v0.b[3], v1.h[1]")) // element width mismatch
     }
 
+    func testVectorPermuteInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("zip1 v0.8b, v1.8b, v2.8b"), 0x0e023820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("zip2 v0.8b, v1.8b, v2.8b"), 0x0e027820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("zip1 v0.16b, v1.16b, v2.16b"), 0x4e023820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("zip2 v0.16b, v1.16b, v2.16b"), 0x4e027820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uzp1 v0.4h, v1.4h, v2.4h"), 0x0e421820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uzp2 v0.4h, v1.4h, v2.4h"), 0x0e425820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("trn1 v0.2s, v1.2s, v2.2s"), 0x0e822820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("trn2 v0.2s, v1.2s, v2.2s"), 0x0e826820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("zip1 v0.2d, v1.2d, v2.2d"), 0x4ec23820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("zip2 v0.4s, v1.4s, v2.4s"), 0x4e827820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uzp1 v0.8h, v1.8h, v2.8h"), 0x4e421820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("trn2 v0.16b, v1.16b, v2.16b"), 0x4e026820)
+    }
+
+    func testVectorExtractInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ext v0.8b, v1.8b, v2.8b, #3"), 0x2e021820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ext v0.16b, v1.16b, v2.16b, #7"), 0x6e023820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ext v0.16b, v1.16b, v2.16b, #0"), 0x6e020020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ext v0.8b, v1.8b, v2.8b, #7"), 0x2e023820)
+    }
+
+    func testDisassembleVectorPermuteAndExtract() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e023820), "zip1 v0.8b, v1.8b, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ec23820), "zip1 v0.2d, v1.2d, v2.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e421820), "uzp1 v0.4h, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e826820), "trn2 v0.2s, v1.2s, v2.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e021820), "ext v0.8b, v1.8b, v2.8b, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e023820), "ext v0.16b, v1.16b, v2.16b, #7")
+    }
+
+    func testVectorPermuteAndExtractRoundTrip() throws {
+        let sources = [
+            "zip1 v0.8b, v1.8b, v2.8b", "zip2 v3.16b, v4.16b, v5.16b",
+            "uzp1 v6.4h, v7.4h, v8.4h", "uzp2 v9.8h, v10.8h, v11.8h",
+            "trn1 v12.2s, v13.2s, v14.2s", "trn2 v15.4s, v16.4s, v17.4s",
+            "zip1 v18.2d, v19.2d, v20.2d",
+            "ext v0.8b, v1.8b, v2.8b, #0", "ext v3.8b, v4.8b, v5.8b, #7",
+            "ext v6.16b, v7.16b, v8.16b, #0", "ext v9.16b, v10.16b, v11.16b, #15",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorPermuteAndExtractInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("zip1 v0.1d, v1.1d, v2.1d"))    // 1d reserved
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("zip1 v0.8b, v1.8b, v2.16b"))   // arrangement mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ext v0.4h, v1.4h, v2.4h, #1")) // ext is byte-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ext v0.8b, v1.8b, v2.8b, #8")) // index out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ext v0.16b, v1.16b, v2.16b, #16")) // index out of range
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
