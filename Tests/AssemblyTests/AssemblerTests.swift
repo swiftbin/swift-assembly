@@ -654,11 +654,106 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("add v0.8b, v1.8b, v2.4h"))
     }
 
+    func testVectorShiftImmediateSameInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshr v0.8b, v1.8b, #3"), 0x0f0d0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ushr v0.8b, v1.8b, #3"), 0x2f0d0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ssra v0.8b, v1.8b, #3"), 0x0f0d1420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usra v0.8b, v1.8b, #3"), 0x2f0d1420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("srshr v0.8b, v1.8b, #3"), 0x0f0d2420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("urshr v0.8b, v1.8b, #3"), 0x2f0d2420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("srsra v0.8b, v1.8b, #3"), 0x0f0d3420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ursra v0.8b, v1.8b, #3"), 0x2f0d3420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sri v0.8b, v1.8b, #3"), 0x2f0d4420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshr v0.4s, v1.4s, #5"), 0x4f3b0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshr v0.2d, v1.2d, #10"), 0x4f760420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shl v0.8b, v1.8b, #3"), 0x0f0b5420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sli v0.8b, v1.8b, #3"), 0x2f0b5420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshl v0.8b, v1.8b, #3"), 0x0f0b7420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqshl v0.8b, v1.8b, #3"), 0x2f0b7420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshlu v0.8b, v1.8b, #3"), 0x2f0b6420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shl v0.2d, v1.2d, #10"), 0x4f4a5420)
+    }
+
+    func testVectorShiftImmediateNarrowWidenAndConvert() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shrn v0.8b, v1.8h, #3"), 0x0f0d8420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shrn2 v0.16b, v1.8h, #3"), 0x4f0d8420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rshrn v0.8b, v1.8h, #3"), 0x0f0d8c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshrn v0.8b, v1.8h, #3"), 0x0f0d9420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrshrn v0.8b, v1.8h, #3"), 0x0f0d9c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqshrn v0.8b, v1.8h, #3"), 0x2f0d9420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqrshrn v0.8b, v1.8h, #3"), 0x2f0d9c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshrun v0.8b, v1.8h, #3"), 0x2f0d8420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrshrun v0.8b, v1.8h, #3"), 0x2f0d8c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshll v0.8h, v1.8b, #3"), 0x0f0ba420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshll2 v0.8h, v1.16b, #3"), 0x4f0ba420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ushll v0.8h, v1.8b, #3"), 0x2f0ba420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ushll2 v0.8h, v1.16b, #3"), 0x6f0ba420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sxtl v0.8h, v1.8b"), 0x0f08a420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uxtl v0.8h, v1.8b"), 0x2f08a420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf v0.4s, v1.4s, #3"), 0x4f3de420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf v0.2s, v1.2s, #3"), 0x2f3de420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs v0.4s, v1.4s, #3"), 0x4f3dfc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu v0.2d, v1.2d, #3"), 0x6f7dfc20)
+    }
+
+    func testDisassembleVectorShiftImmediate() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f0d0420), "sshr v0.8b, v1.8b, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f760420), "sshr v0.2d, v1.2d, #10")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f0b5420), "shl v0.8b, v1.8b, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f0d8420), "shrn v0.8b, v1.8h, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f0d8420), "shrn2 v0.16b, v1.8h, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f0ba420), "sshll v0.8h, v1.8b, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6f0ba420), "ushll2 v0.8h, v1.16b, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f08a420), "sxtl v0.8h, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2f08a420), "uxtl v0.8h, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f3dfc20), "fcvtzs v0.4s, v1.4s, #3")
+    }
+
+    func testVectorShiftImmediateRoundTrip() throws {
+        let sources = [
+            "sshr v0.8b, v1.8b, #3", "ushr v2.16b, v3.16b, #7", "ssra v4.4h, v5.4h, #5",
+            "usra v6.8h, v7.8h, #12", "srshr v8.2s, v9.2s, #1", "urshr v10.4s, v11.4s, #31",
+            "srsra v12.2d, v13.2d, #40", "sri v14.2d, v15.2d, #64", "shl v0.8b, v1.8b, #0",
+            "sli v2.4s, v3.4s, #20", "sqshl v4.2d, v5.2d, #33", "uqshl v6.8h, v7.8h, #9",
+            "sqshlu v8.16b, v9.16b, #5", "shrn v0.4h, v1.4s, #10", "shrn2 v2.8h, v3.4s, #16",
+            "rshrn v4.2s, v5.2d, #20", "sqshrn v6.8b, v7.8h, #8", "uqshrn2 v8.16b, v9.8h, #3",
+            "sqshrun v10.4h, v11.4s, #15", "sqrshrun2 v12.4s, v13.2d, #32",
+            "sshll v0.4s, v1.4h, #10", "ushll2 v2.2d, v3.4s, #25", "sxtl v4.8h, v5.8b",
+            "uxtl2 v6.4s, v7.8h", "scvtf v0.4s, v1.4s, #3", "ucvtf v2.2d, v3.2d, #40",
+            "fcvtzs v4.2s, v5.2s, #5", "fcvtzu v6.4s, v7.4s, #20",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorShiftImmediateInvalidInputsThrow() throws {
+        // `1d` is the scalar form, not a vector arrangement.
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr v0.1d, v1.1d, #3"))
+        // Right-shift amount must be in 1...esize.
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr v0.8b, v1.8b, #9"))
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr v0.8b, v1.8b, #0"))
+        // Left-shift amount must be in 0...esize-1.
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shl v0.8b, v1.8b, #8"))
+        // Narrowing source must be one element-size up from the destination.
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shrn v0.8b, v1.4s, #3"))
+        // Widening destination must be one element-size up from the source.
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshll v0.4s, v1.8b, #3"))
+        // Fixed-point convert is only defined for `2s`/`4s`/`2d`.
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.8b, v1.8b, #3"))
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul w0, w1, w2"), 0x1b027c20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("orr w0, w1, w2"), 0x2a020020)
+        // `sqshl`/`uqshl` still resolve to the three-same (register) form.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshl v0.8b, v1.8b, v2.8b"), 0x0e224c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqshl v0.8b, v1.8b, v2.8b"), 0x2e224c20)
     }
 
     func testCommentsBlankLinesAndInlineLabels() throws {

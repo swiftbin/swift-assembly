@@ -34,6 +34,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
+        if let instruction = decodeVectorShiftImmediate(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -672,6 +673,102 @@ internal enum A64InstructionDecoder {
             first: VectorRegister(number: rnNum, arrangement: arrangement),
             second: VectorRegister(number: rmNum, arrangement: arrangement)
         )
+    }
+
+    private static func decodeVectorShiftImmediate(_ word: UInt32) -> Instruction? {
+        // bits[28:23]=011110, bit10=1; `immh` (22:19) must be non-zero (immh=0
+        // is the modified-immediate group).
+        guard word & 0x9f80_0400 == 0x0f00_0400 else { return nil }
+        let immh = (word >> 19) & 0xf
+        guard immh != 0 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let immb = (word >> 16) & 0x7
+        let opcode = (word >> 11) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        let immhimmb = Int((immh << 3) | immb)
+
+        guard let kind = A64.VectorShiftImmediateKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        // The most-significant set bit of `immh` selects the element size.
+        let esize: Int
+        if immh & 0b1000 != 0 { esize = 64 }
+        else if immh & 0b0100 != 0 { esize = 32 }
+        else if immh & 0b0010 != 0 { esize = 16 }
+        else { esize = 8 }
+
+        switch kind.spec.category {
+        case .sameRight:
+            guard let arrangement = shiftSameArrangement(esize: esize, q: q) else { return nil }
+            let shift = 2 * esize - immhimmb
+            return .vectorShiftImmediate(kind,
+                destination: VectorRegister(number: rdNum, arrangement: arrangement),
+                source: VectorRegister(number: rnNum, arrangement: arrangement),
+                shift: shift)
+        case .sameLeft:
+            guard let arrangement = shiftSameArrangement(esize: esize, q: q) else { return nil }
+            let shift = immhimmb - esize
+            return .vectorShiftImmediate(kind,
+                destination: VectorRegister(number: rdNum, arrangement: arrangement),
+                source: VectorRegister(number: rnNum, arrangement: arrangement),
+                shift: shift)
+        case .narrow:
+            // `esize` is the destination (narrow) element size.
+            guard let destination = shiftSameArrangement(esize: esize, q: q),
+                  let source = doubledArrangement(destination) else { return nil }
+            let shift = 2 * esize - immhimmb
+            return .vectorShiftImmediate(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                source: VectorRegister(number: rnNum, arrangement: source),
+                shift: shift)
+        case .widen:
+            // `esize` is the source (narrow) element size.
+            guard let source = shiftSameArrangement(esize: esize, q: q),
+                  let destination = doubledArrangement(source) else { return nil }
+            let shift = immhimmb - esize
+            return .vectorShiftImmediate(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                source: VectorRegister(number: rnNum, arrangement: source),
+                shift: shift)
+        case .convert:
+            guard esize == 32 || esize == 64,
+                  let arrangement = shiftSameArrangement(esize: esize, q: q) else { return nil }
+            let shift = 2 * esize - immhimmb
+            return .vectorShiftImmediate(kind,
+                destination: VectorRegister(number: rdNum, arrangement: arrangement),
+                source: VectorRegister(number: rnNum, arrangement: arrangement),
+                shift: shift)
+        }
+    }
+
+    /// Maps an element size and `Q` to a same-element vector arrangement.
+    /// `64`-bit with `Q=0` is the scalar `1d` form and is rejected.
+    private static func shiftSameArrangement(esize: Int, q: UInt32) -> A64.VectorArrangement? {
+        switch (esize, q) {
+        case (8, 0): return .b8
+        case (8, 1): return .b16
+        case (16, 0): return .h4
+        case (16, 1): return .h8
+        case (32, 0): return .s2
+        case (32, 1): return .s4
+        case (64, 1): return .d2
+        default: return nil
+        }
+    }
+
+    /// Maps a "low" arrangement to the fully populated arrangement one element
+    /// size up (`8b`/`16b` → `8h`, `4h`/`8h` → `4s`, `2s`/`4s` → `2d`).
+    private static func doubledArrangement(_ arrangement: A64.VectorArrangement) -> A64.VectorArrangement? {
+        switch arrangement {
+        case .b8, .b16: return .h8
+        case .h4, .h8: return .s4
+        case .s2, .s4: return .d2
+        case .d1, .d2: return nil
+        }
     }
 
     /// Maps `size`/`Q` to an integer three-same arrangement; `1d` (size=11,Q=0) is reserved.

@@ -362,6 +362,69 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD "shift by immediate" instructions.
+    ///
+    /// Covers same-arrangement shifts, narrowing shifts (`Vd.Tb, Vn.Ta`),
+    /// widening shifts (`Vd.Ta, Vn.Tb`), and vector fixed-point conversions.
+    enum VectorShiftImmediateKind: String, Equatable, CaseIterable {
+        // Same-arrangement right shifts.
+        case sshr, ushr, ssra, usra, srshr, urshr, srsra, ursra, sri
+        // Same-arrangement left shifts.
+        case shl, sli, sqshlu, sqshl, uqshl
+        // Narrowing right shifts (`Vd.Tb, Vn.Ta`, Ta = 2× element of Tb).
+        case shrn, rshrn, sqshrn, sqrshrn, sqshrun, sqrshrun, uqshrn, uqrshrn
+        // Widening left shifts (`Vd.Ta, Vn.Tb`).
+        case sshll, ushll
+        // Vector fixed-point conversions.
+        case scvtf, ucvtf, fcvtzs, fcvtzu
+
+        enum Category: Equatable {
+            /// `immhimmb = 2*esize - shift` on a single arrangement.
+            case sameRight
+            /// `immhimmb = esize + shift` on a single arrangement.
+            case sameLeft
+            /// Narrowing: destination element is half the source element.
+            case narrow
+            /// Widening: destination element is twice the source element.
+            case widen
+            /// Fixed-point convert: `immhimmb = 2*esize - fbits`.
+            case convert
+        }
+
+        var spec: (category: Category, u: UInt32, opcode: UInt32) {
+            switch self {
+            case .sshr: return (.sameRight, 0, 0b00000)
+            case .ushr: return (.sameRight, 1, 0b00000)
+            case .ssra: return (.sameRight, 0, 0b00010)
+            case .usra: return (.sameRight, 1, 0b00010)
+            case .srshr: return (.sameRight, 0, 0b00100)
+            case .urshr: return (.sameRight, 1, 0b00100)
+            case .srsra: return (.sameRight, 0, 0b00110)
+            case .ursra: return (.sameRight, 1, 0b00110)
+            case .sri: return (.sameRight, 1, 0b01000)
+            case .shl: return (.sameLeft, 0, 0b01010)
+            case .sli: return (.sameLeft, 1, 0b01010)
+            case .sqshlu: return (.sameLeft, 1, 0b01100)
+            case .sqshl: return (.sameLeft, 0, 0b01110)
+            case .uqshl: return (.sameLeft, 1, 0b01110)
+            case .shrn: return (.narrow, 0, 0b10000)
+            case .sqshrun: return (.narrow, 1, 0b10000)
+            case .rshrn: return (.narrow, 0, 0b10001)
+            case .sqrshrun: return (.narrow, 1, 0b10001)
+            case .sqshrn: return (.narrow, 0, 0b10010)
+            case .uqshrn: return (.narrow, 1, 0b10010)
+            case .sqrshrn: return (.narrow, 0, 0b10011)
+            case .uqrshrn: return (.narrow, 1, 0b10011)
+            case .sshll: return (.widen, 0, 0b10100)
+            case .ushll: return (.widen, 1, 0b10100)
+            case .scvtf: return (.convert, 0, 0b11100)
+            case .ucvtf: return (.convert, 1, 0b11100)
+            case .fcvtzs: return (.convert, 0, 0b11111)
+            case .fcvtzu: return (.convert, 1, 0b11111)
+            }
+        }
+    }
+
     enum MoveAliasSource: Equatable {
         case immediate(Int64)
         case register(Register)
@@ -420,6 +483,7 @@ internal enum A64 {
         case acrossLanesFP(AcrossLanesFPKind, destination: FPRegister, source: VectorRegister)
         case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)
         case vectorThreeSame(VectorThreeSameKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorShiftImmediate(VectorShiftImmediateKind, destination: VectorRegister, source: VectorRegister, shift: Int)
     }
 }
 
@@ -433,3 +497,4 @@ internal typealias ExtendKind = A64.ExtendKind
 internal typealias MemoryOperand = A64.MemoryOperand
 internal typealias Instruction = A64.Instruction
 internal typealias ParsedShift = A64.Shift
+internal typealias VectorShiftImmediateKind = A64.VectorShiftImmediateKind

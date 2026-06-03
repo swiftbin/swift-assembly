@@ -487,6 +487,10 @@ internal enum A64InstructionParser {
             }
         case "fcvtzs", "fcvtzu":
             guard parts.count == 1 else { return nil }
+            // Vector fixed-point form: `Vd.T, Vn.T, #fbits`.
+            if isVectorShiftImmediate(instruction) {
+                return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: mnemonic)!)
+            }
             try expectOperandCount(instruction, exactly: 2)
             return .fpConvertToInt(
                 A64.FPConvertToIntKind(rawValue: mnemonic)!,
@@ -495,6 +499,10 @@ internal enum A64InstructionParser {
             )
         case "scvtf", "ucvtf":
             guard parts.count == 1 else { return nil }
+            // Vector fixed-point form: `Vd.T, Vn.T, #fbits`.
+            if isVectorShiftImmediate(instruction) {
+                return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: mnemonic)!)
+            }
             try expectOperandCount(instruction, exactly: 2)
             return .fpConvertFromInt(
                 A64.FPConvertFromIntKind(rawValue: mnemonic)!,
@@ -526,6 +534,25 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "sshr", "ushr", "ssra", "usra", "srshr", "urshr", "srsra", "ursra", "sri",
+             "shl", "sli", "sqshlu",
+             "shrn", "rshrn", "sqshrn", "sqrshrn", "sqshrun", "sqrshrun", "uqshrn", "uqrshrn",
+             "shrn2", "rshrn2", "sqshrn2", "sqrshrn2", "sqshrun2", "sqrshrun2", "uqshrn2", "uqrshrn2",
+             "sshll", "ushll", "sshll2", "ushll2":
+            guard parts.count == 1 else { return nil }
+            // The `2` suffix (upper-half form) is implied by the `Q=1` arrangement.
+            let base = mnemonic.hasSuffix("2") ? String(mnemonic.dropLast()) : mnemonic
+            return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: base)!)
+        case "sxtl", "uxtl", "sxtl2", "uxtl2":
+            // Aliases of `sshll`/`ushll` with a zero shift.
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .vectorShiftImmediate(
+                mnemonic.hasPrefix("s") ? .sshll : .ushll,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1]),
+                shift: 0
+            )
         case "shadd", "uhadd", "sqadd", "uqadd", "srhadd", "urhadd",
              "shsub", "uhsub", "sqsub", "uqsub",
              "cmgt", "cmhi", "cmge", "cmhs",
@@ -542,6 +569,10 @@ internal enum A64InstructionParser {
              "fmaxnmp", "faddp", "fcmge", "facge", "fmaxp",
              "fminnmp", "fabd", "fcmgt", "facgt", "fminp":
             guard parts.count == 1 else { return nil }
+            // `sqshl`/`uqshl` also have a shift-by-immediate form (`Vd.T, Vn.T, #imm`).
+            if (mnemonic == "sqshl" || mnemonic == "uqshl"), isVectorShiftImmediate(instruction) {
+                return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: mnemonic)!)
+            }
             return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
         default:
             return nil
@@ -611,6 +642,24 @@ internal enum A64InstructionParser {
             destination: try A64Parser.vectorRegister(instruction.operands[0]),
             first: try A64Parser.vectorRegister(instruction.operands[1]),
             second: try A64Parser.vectorRegister(instruction.operands[2])
+        )
+    }
+
+    /// True when the operands look like `Vd.T, Vn.T, #imm` (vector shift by immediate).
+    private static func isVectorShiftImmediate(_ instruction: ParsedInstruction) -> Bool {
+        guard instruction.operands.count == 3 else { return false }
+        return isVectorRegisterOperand(instruction.operands[0])
+            && isVectorRegisterOperand(instruction.operands[1])
+            && instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#")
+    }
+
+    static func vectorShiftImmediate(_ instruction: ParsedInstruction, kind: A64.VectorShiftImmediateKind) throws -> Instruction {
+        try expectOperandCount(instruction, exactly: 3)
+        return .vectorShiftImmediate(
+            kind,
+            destination: try A64Parser.vectorRegister(instruction.operands[0]),
+            source: try A64Parser.vectorRegister(instruction.operands[1]),
+            shift: Int(try A64Parser.immediate(instruction.operands[2]))
         )
     }
 }

@@ -99,7 +99,32 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         case .vectorThreeSame(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorShiftImmediate(let kind, let destination, let source, let shift):
+            return formatVectorShiftImmediate(kind, destination: destination, source: source, shift: shift)
         }
+    }
+
+    private static func formatVectorShiftImmediate(_ kind: VectorShiftImmediateKind, destination: VectorRegister, source: VectorRegister, shift: Int) -> String {
+        let category = kind.spec.category
+        // The `2` suffix marks the form operating on the upper 64 bits.
+        let usesUpperHalf: Bool
+        switch category {
+        case .narrow: usesUpperHalf = destination.arrangement.q == 1
+        case .widen: usesUpperHalf = source.arrangement.q == 1
+        default: usesUpperHalf = false
+        }
+
+        // `sshll`/`ushll` with a zero shift print as the `sxtl`/`uxtl` aliases.
+        var mnemonic = kind.rawValue
+        var emitShift = true
+        if category == .widen, shift == 0 {
+            mnemonic = kind == .sshll ? "sxtl" : "uxtl"
+            emitShift = false
+        }
+        if usesUpperHalf { mnemonic += "2" }
+
+        let operands = "\(formatVectorRegister(destination)), \(formatVectorRegister(source))"
+        return emitShift ? "\(mnemonic) \(operands), #\(shift)" : "\(mnemonic) \(operands)"
     }
 
     private static func formatVectorRegister(_ register: VectorRegister) -> String {

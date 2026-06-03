@@ -140,6 +140,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.twoRegisterMisc(kind, destination: destination, source: source)
         case .vectorThreeSame(let kind, let destination, let first, let second):
             return try A64VectorEncoder.threeSame(kind, destination: destination, first: first, second: second)
+        case .vectorShiftImmediate(let kind, let destination, let source, let shift):
+            return try A64VectorEncoder.shiftImmediate(kind, destination: destination, source: source, shift: shift)
         }
     }
 }

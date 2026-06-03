@@ -115,6 +115,87 @@ internal enum A64VectorEncoder {
         }
     }
 
+    /// The arrangements permitted by the same-arrangement shift forms.
+    /// `1d` is the scalar form and is not a vector arrangement here.
+    private static let allowedSameArrangements: Set<A64.VectorArrangement> = [.b8, .b16, .h4, .h8, .s2, .s4, .d2]
+
+    /// Maps a "low" arrangement (`8b`, `4h`, `2s`, ...) to the fully populated
+    /// arrangement one element-size up (`8h`, `4s`, `2d`), used by the
+    /// narrowing and widening shift forms.
+    private static func doubledArrangement(_ arrangement: A64.VectorArrangement) -> A64.VectorArrangement? {
+        switch arrangement {
+        case .b8, .b16: return .h8
+        case .h4, .h8: return .s4
+        case .s2, .s4: return .d2
+        case .d1, .d2: return nil
+        }
+    }
+
+    static func shiftImmediate(_ kind: A64.VectorShiftImmediateKind, destination rd: VectorRegister, source rn: VectorRegister, shift: Int) throws -> UInt32 {
+        let spec = kind.spec
+        let base: UInt32 = 0x0f00_0400
+
+        let q: UInt32
+        let esize: Int
+        let immhimmb: UInt32
+
+        switch spec.category {
+        case .sameRight:
+            guard rd.arrangement == rn.arrangement, allowedSameArrangements.contains(rd.arrangement) else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            esize = rd.arrangement.elementWidth
+            try checkRange(Int64(shift), 1...Int64(esize), instruction: kind.rawValue)
+            q = rd.arrangement.q
+            immhimmb = UInt32(2 * esize - shift)
+
+        case .sameLeft:
+            guard rd.arrangement == rn.arrangement, allowedSameArrangements.contains(rd.arrangement) else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            esize = rd.arrangement.elementWidth
+            try checkRange(Int64(shift), 0...Int64(esize - 1), instruction: kind.rawValue)
+            q = rd.arrangement.q
+            immhimmb = UInt32(esize + shift)
+
+        case .narrow:
+            // Destination is the narrow arrangement; the source is the fully
+            // populated arrangement one element-size up.
+            guard let expectedSource = doubledArrangement(rd.arrangement), rn.arrangement == expectedSource else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            esize = rd.arrangement.elementWidth
+            try checkRange(Int64(shift), 1...Int64(esize), instruction: kind.rawValue)
+            q = rd.arrangement.q
+            immhimmb = UInt32(2 * esize - shift)
+
+        case .widen:
+            // Source is the narrow arrangement; the destination is the fully
+            // populated arrangement one element-size up.
+            guard let expectedDestination = doubledArrangement(rn.arrangement), rd.arrangement == expectedDestination else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            esize = rn.arrangement.elementWidth
+            try checkRange(Int64(shift), 0...Int64(esize - 1), instruction: kind.rawValue)
+            q = rn.arrangement.q
+            immhimmb = UInt32(esize + shift)
+
+        case .convert:
+            guard rd.arrangement == rn.arrangement, [.s2, .s4, .d2].contains(rd.arrangement) else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            esize = rd.arrangement.elementWidth
+            try checkRange(Int64(shift), 1...Int64(esize), instruction: kind.rawValue)
+            q = rd.arrangement.q
+            immhimmb = UInt32(2 * esize - shift)
+        }
+
+        let immh = immhimmb >> 3
+        let immb = immhimmb & 0b111
+        let head = (q << 30) | (spec.u << 29) | base | (immh << 19) | (immb << 16)
+        return head | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     private static func isValidTwoRegisterMiscArrangement(_ kind: A64.VectorTwoRegisterMiscKind, _ arrangement: A64.VectorArrangement) -> Bool {
         switch kind {
         case .rev64, .cls, .clz:
