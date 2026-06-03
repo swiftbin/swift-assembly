@@ -40,6 +40,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorPermute(word) { return instruction }
         if let instruction = decodeVectorExtract(word) { return instruction }
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
+        if let instruction = decodeVectorIndexed(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -938,6 +939,74 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: destination),
             first: VectorRegister(number: rnNum, arrangement: first),
             second: VectorRegister(number: rmNum, arrangement: second))
+    }
+
+    private static func decodeVectorIndexed(_ word: UInt32) -> Instruction? {
+        // bit31=0, bits[28:24]=01111, bit10=0.
+        guard word & 0x9f00_0400 == 0x0f00_0000 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 0x3
+        let l = (word >> 21) & 1
+        let m = (word >> 20) & 1
+        let rmField = (word >> 16) & 0xf
+        let opcode = (word >> 12) & 0xf
+        let h = (word >> 11) & 1
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.VectorIndexedKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        // Element width, index, and `Vm` reconstruction depend on `size`.
+        let width: A64.VectorElementWidth
+        let index: Int
+        let vm: UInt32
+        switch size {
+        case 0b01:
+            width = .h
+            index = Int((h << 2) | (l << 1) | m)
+            vm = rmField
+        case 0b10:
+            width = .s
+            index = Int((h << 1) | l)
+            vm = (m << 4) | rmField
+        case 0b11:
+            width = .d
+            index = Int(h)
+            vm = (m << 4) | rmField
+        default:
+            return nil
+        }
+
+        let destination: A64.VectorArrangement
+        let first: A64.VectorArrangement
+        switch kind.spec.form {
+        case .same:
+            guard width != .d, let arrangement = differentNarrowArrangement(size: size, q: q) else { return nil }
+            destination = arrangement
+            first = arrangement
+        case .fp:
+            switch size {
+            case 0b10: destination = q == 1 ? .s4 : .s2
+            case 0b11: guard q == 1 else { return nil }; destination = .d2
+            default: return nil
+            }
+            first = destination
+        case .long:
+            guard width != .d,
+                  let narrow = differentNarrowArrangement(size: size, q: q),
+                  let wide = doubledArrangement(narrow) else { return nil }
+            destination = wide
+            first = narrow
+        }
+
+        return .vectorIndexed(kind,
+            destination: VectorRegister(number: rdNum, arrangement: destination),
+            first: VectorRegister(number: rnNum, arrangement: first),
+            element: VectorElement(number: vm, width: width, index: index))
     }
 
     /// Maps the narrow operand's `size`/`Q` to an arrangement; `size=11` is reserved.

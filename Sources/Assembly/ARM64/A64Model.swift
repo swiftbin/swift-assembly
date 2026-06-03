@@ -525,6 +525,42 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD "vector x indexed element" instructions.
+    ///
+    /// `same` forms keep the element size (`Vd.T, Vn.T, Vm.Ts[i]`); `fp`
+    /// forms are the floating-point equivalents; `long` forms widen the
+    /// result (`Vd.Ta, Vn.Tb, Vm.Ts[i]`, with a `2` upper-half variant).
+    enum VectorIndexedKind: String, Equatable, CaseIterable {
+        case mul, mla, mls, sqdmulh, sqrdmulh
+        case fmul, fmla, fmls, fmulx
+        case smull, umull, smlal, umlal, smlsl, umlsl, sqdmull, sqdmlal, sqdmlsl
+
+        enum Form { case same, fp, long }
+
+        var spec: (form: Form, u: UInt32, opcode: UInt32) {
+            switch self {
+            case .mla: return (.same, 1, 0b0000)
+            case .mls: return (.same, 1, 0b0100)
+            case .mul: return (.same, 0, 0b1000)
+            case .sqdmulh: return (.same, 0, 0b1100)
+            case .sqrdmulh: return (.same, 0, 0b1101)
+            case .fmla: return (.fp, 0, 0b0001)
+            case .fmls: return (.fp, 0, 0b0101)
+            case .fmul: return (.fp, 0, 0b1001)
+            case .fmulx: return (.fp, 1, 0b1001)
+            case .smlal: return (.long, 0, 0b0010)
+            case .umlal: return (.long, 1, 0b0010)
+            case .smlsl: return (.long, 0, 0b0110)
+            case .umlsl: return (.long, 1, 0b0110)
+            case .smull: return (.long, 0, 0b1010)
+            case .umull: return (.long, 1, 0b1010)
+            case .sqdmlal: return (.long, 0, 0b0011)
+            case .sqdmlsl: return (.long, 0, 0b0111)
+            case .sqdmull: return (.long, 0, 0b1011)
+            }
+        }
+    }
+
     /// The optional shift applied to a vector modified-immediate byte.
     enum VectorImmediateShift: Equatable {
         case none
@@ -600,6 +636,7 @@ internal enum A64 {
         case vectorPermute(VectorPermuteKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorExtract(destination: VectorRegister, first: VectorRegister, second: VectorRegister, index: Int)
         case vectorThreeDifferent(VectorThreeDifferentKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
     }
 }
 
@@ -620,3 +657,4 @@ internal typealias VectorElement = A64.VectorElement
 internal typealias VectorElementWidth = A64.VectorElementWidth
 internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
+internal typealias VectorIndexedKind = A64.VectorIndexedKind

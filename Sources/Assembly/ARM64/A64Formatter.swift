@@ -127,6 +127,10 @@ internal enum A64InstructionFormatter {
             }
             let suffix = narrowQ == 1 ? "2" : ""
             return "\(kind.rawValue)\(suffix) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorIndexed(let kind, let destination, let first, let element):
+            // Long forms print the `2` upper-half variant when the source operand is `Q=1`.
+            let suffix = (kind.spec.form == .long && first.arrangement.q == 1) ? "2" : ""
+            return "\(kind.rawValue)\(suffix) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorElement(element))"
         }
     }
 

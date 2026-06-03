@@ -391,6 +391,64 @@ internal enum A64VectorEncoder {
         return head | (rm.encodedNumber << 16) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // Validate the operand shapes per form, and fix the element width.
+        switch spec.form {
+        case .same:
+            guard rd.arrangement == rn.arrangement,
+                  [.h4, .h8, .s2, .s4].contains(rn.arrangement),
+                  elementWidth(of: rn.arrangement) == element.width else { throw fail() }
+        case .fp:
+            guard rd.arrangement == rn.arrangement,
+                  [.s2, .s4, .d2].contains(rn.arrangement),
+                  elementWidth(of: rn.arrangement) == element.width else { throw fail() }
+        case .long:
+            guard [.h4, .h8, .s2, .s4].contains(rn.arrangement),
+                  doubledArrangement(rn.arrangement) == rd.arrangement,
+                  elementWidth(of: rn.arrangement) == element.width else { throw fail() }
+        }
+
+        let q = rn.arrangement.q
+
+        // Element-width-specific encoding of `size`, the index bits, and `Vm`.
+        let size: UInt32
+        let l: UInt32, m: UInt32, h: UInt32, rm: UInt32
+        switch element.width {
+        case .h:
+            guard element.number <= 15, element.index >= 0, element.index <= 7 else { throw fail() }
+            size = 0b01
+            let idx = UInt32(element.index)
+            h = (idx >> 2) & 1
+            l = (idx >> 1) & 1
+            m = idx & 1
+            rm = element.number & 0xf
+        case .s:
+            guard element.number <= 31, element.index >= 0, element.index <= 3 else { throw fail() }
+            size = 0b10
+            let idx = UInt32(element.index)
+            h = (idx >> 1) & 1
+            l = idx & 1
+            m = (element.number >> 4) & 1
+            rm = element.number & 0xf
+        case .d:
+            guard element.number <= 31, element.index >= 0, element.index <= 1 else { throw fail() }
+            size = 0b11
+            h = UInt32(element.index) & 1
+            l = 0
+            m = (element.number >> 4) & 1
+            rm = element.number & 0xf
+        case .b:
+            throw fail()
+        }
+
+        let base: UInt32 = 0x0f00_0000
+        let head = (q << 30) | (spec.u << 29) | base | (size << 22)
+        return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
         let amount: Int
         switch shift {

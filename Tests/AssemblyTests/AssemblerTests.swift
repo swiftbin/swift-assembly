@@ -1037,6 +1037,75 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addhn v0.8h, v1.8h, v2.8h"))   // narrow dest must be half
     }
 
+    func testVectorIndexedInstructions() throws {
+        // Same forms (Vd.T, Vn.T, Vm.Ts[index]).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.h[3]"), 0x0f728020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.8h, v1.8h, v2.h[7]"), 0x4f728820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.2s, v1.2s, v2.s[1]"), 0x0fa28020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4s, v1.4s, v2.s[3]"), 0x4fa28820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mla v0.4s, v1.4s, v2.s[2]"), 0x6f820820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mls v0.8h, v1.8h, v2.h[5]"), 0x6f524820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmulh v0.4s, v1.4s, v2.s[1]"), 0x4fa2c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmulh v0.8h, v1.8h, v2.h[6]"), 0x4f62d820)
+        // FP forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul v0.4s, v1.4s, v2.s[3]"), 0x4fa29820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul v0.2d, v1.2d, v2.d[1]"), 0x4fc29820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla v0.4s, v1.4s, v2.s[0]"), 0x4f821020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmls v0.2d, v1.2d, v2.d[0]"), 0x4fc25020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx v0.4s, v1.4s, v2.s[2]"), 0x6f829820)
+        // Long forms (Vd.Ta, Vn.Tb, Vm.Ts[index]), including the `2` upper-half forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smull v0.4s, v1.4h, v2.h[3]"), 0x0f72a020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smull2 v0.4s, v1.8h, v2.h[7]"), 0x4f72a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umull v0.2d, v1.2s, v2.s[1]"), 0x2fa2a020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smlal v0.2d, v1.2s, v2.s[3]"), 0x0fa22820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umlsl v0.4s, v1.4h, v2.h[2]"), 0x2f626020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull v0.4s, v1.4h, v2.h[1]"), 0x0f52b020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlal2 v0.2d, v1.4s, v2.s[2]"), 0x4f823820)
+        // Element register beyond 0-15 for the S/D forms uses the M bit.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v15.h[3]"), 0x0f7f8020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4s, v1.4s, v31.s[3]"), 0x4fbf8820)
+    }
+
+    func testDisassembleVectorIndexed() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f728020), "mul v0.4h, v1.4h, v2.h[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4fa29820), "fmul v0.4s, v1.4s, v2.s[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4fc29820), "fmul v0.2d, v1.2d, v2.d[1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f72a820), "smull2 v0.4s, v1.8h, v2.h[7]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f823820), "sqdmlal2 v0.2d, v1.4s, v2.s[2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4fbf8820), "mul v0.4s, v1.4s, v31.s[3]")
+    }
+
+    func testVectorIndexedRoundTrip() throws {
+        let sources = [
+            "mul v0.4h, v1.4h, v2.h[3]", "mul v0.4s, v1.4s, v31.s[3]",
+            "mla v3.8h, v4.8h, v5.h[7]", "mls v6.2s, v7.2s, v8.s[1]",
+            "sqdmulh v9.4s, v10.4s, v11.s[2]", "sqrdmulh v12.8h, v13.8h, v9.h[0]",
+            "fmul v15.4s, v16.4s, v17.s[3]", "fmul v18.2d, v19.2d, v20.d[1]",
+            "fmla v21.2s, v22.2s, v23.s[0]", "fmls v24.4s, v25.4s, v26.s[2]",
+            "fmulx v27.2d, v28.2d, v29.d[0]",
+            "smull v0.4s, v1.4h, v2.h[3]", "smull2 v3.2d, v4.4s, v5.s[1]",
+            "umull v6.2d, v7.2s, v8.s[3]", "smlal v9.4s, v10.4h, v11.h[5]",
+            "umlsl2 v12.4s, v13.8h, v10.h[2]", "sqdmull v15.4s, v16.4h, v7.h[1]",
+            "sqdmlal2 v18.2d, v19.4s, v20.s[2]", "sqdmlsl v21.4s, v22.4h, v3.h[6]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorIndexedInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.s[1]"))    // element width mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.4s, v1.4s, v2.s[4]"))    // index out of range (S: 0-3)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v16.h[3]"))   // H form limits register to 0-15
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.8b, v1.8b, v2.b[3]"))    // byte element unsupported
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smull v0.2d, v1.4h, v2.h[3]"))  // long dest must be one size up
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v2.h[3]"))   // FP16 indexed form unsupported
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmul v0.2d, v1.4s, v2.s[1]"))   // fp dest/source mismatch
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

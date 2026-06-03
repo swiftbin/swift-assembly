@@ -232,6 +232,23 @@ internal enum A64InstructionParser {
         let parts = instruction.mnemonic.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         let mnemonic = parts[0]
 
+        // Advanced SIMD vector x indexed element: any of these mnemonics whose third
+        // operand is a vector element (`v2.s[1]`) routes here regardless of the per-mnemonic
+        // handling below (which assumes a vector-register or scalar third operand).
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           A64Parser.isVectorElementOperand(instruction.operands[2]) {
+            let base = mnemonic.hasSuffix("2") ? String(mnemonic.dropLast()) : mnemonic
+            if let kind = A64.VectorIndexedKind(rawValue: base) {
+                return .vectorIndexed(
+                    kind,
+                    destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                    first: try A64Parser.vectorRegister(instruction.operands[1]),
+                    element: try A64Parser.vectorElement(instruction.operands[2])
+                )
+            }
+        }
+
         switch mnemonic {
         case "b" where parts.count == 2:
             try expectOperandCount(instruction, exactly: 1)
