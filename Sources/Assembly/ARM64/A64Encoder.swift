@@ -178,6 +178,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.scalarCopyDuplicate(destination: destination, element: element)
         case .scalarFPTwoRegisterMisc(let kind, let destination, let source):
             return try A64VectorEncoder.scalarFPTwoRegisterMisc(kind, destination: destination, source: source)
+        case .scalarThreeSameFP(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.scalarThreeSameFP(kind, destination: destination, first: first, second: second)
         }
     }
 }

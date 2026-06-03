@@ -504,6 +504,23 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarThreeSameFP(_ kind: A64.ScalarThreeSameFPKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        guard rd.width == rn.width, rn.width == rm.width else { throw fail() }
+        let sz: UInt32
+        switch rd.width {
+        case 32: sz = 0
+        case 64: sz = 1
+        default: throw fail()
+        }
+
+        // Base: bit30=1, bits[28:24]=11110, bit21=1, bit10=1.
+        let base: UInt32 = 0x5e20_0400
+        return base | (spec.u << 29) | (spec.hi << 23) | (sz << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarFPTwoRegisterMisc(_ kind: A64.ScalarFPTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }

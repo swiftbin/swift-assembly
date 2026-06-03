@@ -149,6 +149,8 @@ internal enum A64InstructionFormatter {
         case .scalarFPTwoRegisterMisc(let kind, let destination, let source):
             let zero = kind.spec.category == .compareZero ? ", #0.0" : ""
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(source))\(zero)"
+        case .scalarThreeSameFP(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         }
     }
 

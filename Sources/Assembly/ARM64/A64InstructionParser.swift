@@ -287,6 +287,19 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar floating-point three-same: three scalar FP registers.
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           instruction.operands.allSatisfy(A64Parser.isScalarFloatRegisterOperand),
+           let kind = A64.ScalarThreeSameFPKind(rawValue: mnemonic) {
+            return .scalarThreeSameFP(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                second: try A64Parser.floatRegister(instruction.operands[2])
+            )
+        }
+
         // Advanced SIMD scalar pairwise: scalar FP destination, single vector source.
         if parts.count == 1,
            instruction.operands.count == 2,

@@ -49,6 +49,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarIndexed(word) { return instruction }
         if let instruction = decodeScalarCopy(word) { return instruction }
         if let instruction = decodeScalarFPTwoRegisterMisc(word) { return instruction }
+        if let instruction = decodeScalarThreeSameFP(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1077,6 +1078,30 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: 64),
             source: floatRegister(number: rnNum, width: 64),
             shift: shift)
+    }
+
+    private static func decodeScalarThreeSameFP(_ word: UInt32) -> Instruction? {
+        // Shares the scalar three-same base (bit21=1, bit10=1), distinguished by
+        // (U, bit23, opcode[15:11]); bit22 is the `sz` (single/double) bit.
+        guard word & 0xdf20_0400 == 0x5e20_0400 else { return nil }
+        let u = (word >> 29) & 1
+        let hi = (word >> 23) & 1
+        let sz = (word >> 22) & 1
+        let opcode = (word >> 11) & 0x1f
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarThreeSameFPKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.hi == hi && spec.opcode == opcode
+        }) else { return nil }
+
+        let width = sz == 0 ? 32 : 64
+        return .scalarThreeSameFP(kind,
+            destination: floatRegister(number: rdNum, width: width),
+            first: floatRegister(number: rnNum, width: width),
+            second: floatRegister(number: rmNum, width: width))
     }
 
     private static func decodeScalarFPTwoRegisterMisc(_ word: UInt32) -> Instruction? {

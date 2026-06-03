@@ -637,6 +637,25 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar floating-point three-same (`Vd, Vn, Vm` on scalar FP registers).
+    enum ScalarThreeSameFPKind: String, Equatable, CaseIterable {
+        case fmulx, fcmeq, fcmge, fcmgt, facge, facgt, frecps, frsqrts, fabd
+
+        var spec: (u: UInt32, hi: UInt32, opcode: UInt32) {
+            switch self {
+            case .fmulx:   return (0, 0, 0b11011)
+            case .fcmeq:   return (0, 0, 0b11100)
+            case .fcmge:   return (1, 0, 0b11100)
+            case .fcmgt:   return (1, 1, 0b11100)
+            case .facge:   return (1, 0, 0b11101)
+            case .facgt:   return (1, 1, 0b11101)
+            case .frecps:  return (0, 0, 0b11111)
+            case .frsqrts: return (0, 1, 0b11111)
+            case .fabd:    return (1, 1, 0b11010)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar floating-point two-register misc (FP converts, reciprocal
     /// estimates, the `fcvtxn` narrow, and the compare-against-`#0.0` forms).
     enum ScalarFPTwoRegisterMiscKind: String, Equatable, CaseIterable {
@@ -798,6 +817,7 @@ internal enum A64 {
         case scalarIndexed(VectorIndexedKind, destination: FPRegister, first: FPRegister, element: VectorElement)
         case scalarCopyDuplicate(destination: FPRegister, element: VectorElement)
         case scalarFPTwoRegisterMisc(ScalarFPTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
+        case scalarThreeSameFP(ScalarThreeSameFPKind, destination: FPRegister, first: FPRegister, second: FPRegister)
     }
 }
 
@@ -825,3 +845,4 @@ internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind
 internal typealias ScalarShiftImmediateKind = A64.ScalarShiftImmediateKind
 internal typealias ScalarThreeDifferentKind = A64.ScalarThreeDifferentKind
 internal typealias ScalarFPTwoRegisterMiscKind = A64.ScalarFPTwoRegisterMiscKind
+internal typealias ScalarThreeSameFPKind = A64.ScalarThreeSameFPKind
