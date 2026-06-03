@@ -579,6 +579,24 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD dot-product instructions (`Vd.2s/4s, Vn.8b/16b, Vm...`),
+    /// in both the vector and indexed-element forms.
+    enum VectorDotProductKind: String, Equatable, CaseIterable {
+        case sdot, udot
+
+        /// The `U` bit at [29].
+        var u: UInt32 {
+            switch self {
+            case .sdot: return 0
+            case .udot: return 1
+            }
+        }
+
+        static func decode(u: UInt32) -> VectorDotProductKind? {
+            allCases.first { $0.u == u }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -1221,6 +1239,8 @@ internal enum A64 {
         case vectorExtract(destination: VectorRegister, first: VectorRegister, second: VectorRegister, index: Int)
         case vectorThreeDifferent(VectorThreeDifferentKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
+        case vectorDotProduct(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorDotProductByElement(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
         case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
@@ -1269,6 +1289,7 @@ internal typealias VectorElementWidth = A64.VectorElementWidth
 internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
+internal typealias VectorDotProductKind = A64.VectorDotProductKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
 internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
 internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind

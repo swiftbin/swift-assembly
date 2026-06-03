@@ -1051,6 +1051,49 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addhn v0.8h, v1.8h, v2.8h"))   // narrow dest must be half
     }
 
+    func testVectorDotProductInstructions() throws {
+        // Vector form (Vd.2s/4s, Vn.8b/16b, Vm.8b/16b).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.8b"), 0x0e829420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sdot v0.4s, v1.16b, v2.16b"), 0x4e829420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udot v0.2s, v1.8b, v2.8b"), 0x2e829420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udot v0.4s, v1.16b, v2.16b"), 0x6e829420)
+        // By-element form (Vd.2s/4s, Vn.8b/16b, Vm.4b[index]).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.4b[0]"), 0x0f82e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sdot v0.4s, v1.16b, v2.4b[3]"), 0x4fa2e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udot v0.2s, v1.8b, v2.4b[1]"), 0x2fa2e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udot v0.4s, v1.16b, v2.4b[2]"), 0x6f82e820)
+    }
+
+    func testDisassembleVectorDotProduct() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e829420), "sdot v0.2s, v1.8b, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e829420), "udot v0.4s, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4fa2e820), "sdot v0.4s, v1.16b, v2.4b[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2fa2e020), "udot v0.2s, v1.8b, v2.4b[1]")
+    }
+
+    func testVectorDotProductRoundTrip() throws {
+        let sources = [
+            "sdot v0.2s, v1.8b, v2.8b", "sdot v3.4s, v4.16b, v5.16b",
+            "udot v6.2s, v7.8b, v8.8b", "udot v9.4s, v10.16b, v11.16b",
+            "sdot v12.2s, v13.8b, v14.4b[0]", "sdot v15.4s, v16.16b, v17.4b[3]",
+            "udot v18.2s, v19.8b, v20.4b[1]", "udot v21.4s, v22.16b, v23.4b[2]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorDotProductInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.4h, v1.8b, v2.8b"))    // dest must be 2s/4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.2s, v1.16b, v2.16b"))  // 2s pairs with 8b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.16b"))   // sources must match
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.4b[4]")) // index out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.8b[0]")) // element must be 4b
+    }
+
     func testVectorIndexedInstructions() throws {
         // Same forms (Vd.T, Vn.T, Vm.Ts[index]).
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.h[3]"), 0x0f728020)

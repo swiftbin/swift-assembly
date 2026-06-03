@@ -54,6 +54,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorPermute(word) { return instruction }
         if let instruction = decodeVectorExtract(word) { return instruction }
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
+        if let instruction = decodeVectorDotProduct(word) { return instruction }
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSame(word) { return instruction }
         if let instruction = decodeScalarPairwise(word) { return instruction }
@@ -1425,6 +1426,41 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: destination),
             first: VectorRegister(number: rnNum, arrangement: first),
             second: VectorRegister(number: rmNum, arrangement: second))
+    }
+
+    private static func decodeVectorDotProduct(_ word: UInt32) -> Instruction? {
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        guard let kind = A64.VectorDotProductKind.decode(u: u) else { return nil }
+        let destination: A64.VectorArrangement = q == 0 ? .s2 : .s4
+        let source: A64.VectorArrangement = q == 0 ? .b8 : .b16
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // Vector form: bits[28:24]=01110, size=10, bit21=0, bits[15:10]=100101.
+        if word & 0x9fe0_fc00 == 0x0e80_9400 {
+            let rmNum = (word >> 16) & 0x1f
+            return .vectorDotProduct(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                second: VectorRegister(number: rmNum, arrangement: source))
+        }
+
+        // By-element form: bits[28:24]=01111, size=10, bits[15:12]=1110, bit10=0.
+        if word & 0x9fc0_f400 == 0x0f80_e000 {
+            let l = (word >> 21) & 1
+            let m = (word >> 20) & 1
+            let rmLow = (word >> 16) & 0xf
+            let h = (word >> 11) & 1
+            let index = (h << 1) | l
+            let elementRegister = (m << 4) | rmLow
+            return .vectorDotProductByElement(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                elementRegister: elementRegister, index: index)
+        }
+
+        return nil
     }
 
     private static func decodeVectorIndexed(_ word: UInt32) -> Instruction? {

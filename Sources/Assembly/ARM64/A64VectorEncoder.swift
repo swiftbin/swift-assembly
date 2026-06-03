@@ -407,6 +407,39 @@ internal enum A64VectorEncoder {
         return head | (rm.encodedNumber << 16) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - Dot product
+
+    /// Validates that a dot-product destination (`2s`/`4s`) is paired with the
+    /// matching source byte arrangement (`8b`/`16b`) and returns the `Q` bit.
+    private static func dotProductQ(destination rd: VectorRegister, first rn: VectorRegister) -> UInt32? {
+        switch (rd.arrangement, rn.arrangement) {
+        case (.s2, .b8):  return 0
+        case (.s4, .b16): return 1
+        default:          return nil
+        }
+    }
+
+    static func dotProduct(_ kind: A64.VectorDotProductKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard let q = dotProductQ(destination: rd, first: rn), rn.arrangement == rm.arrangement else { throw fail() }
+        let base: UInt32 = 0x0e80_9400
+        let head = (q << 30) | (kind.u << 29) | base
+        return head | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func dotProductByElement(_ kind: A64.VectorDotProductKind, destination rd: VectorRegister, first rn: VectorRegister, elementRegister: UInt32, index: UInt32) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard let q = dotProductQ(destination: rd, first: rn) else { throw fail() }
+        guard elementRegister <= 31, index <= 3 else { throw fail() }
+        let l = index & 1
+        let h = (index >> 1) & 1
+        let m = (elementRegister >> 4) & 1
+        let rmLow = elementRegister & 0xf
+        let base: UInt32 = 0x0f80_e000
+        let head = (q << 30) | (kind.u << 29) | base
+        return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }

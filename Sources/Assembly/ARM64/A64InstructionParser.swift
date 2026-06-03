@@ -220,6 +220,25 @@ internal enum A64Parser {
         return A64.VectorElement(number: number, width: width, index: index)
     }
 
+    /// Parses a dot-product 4-byte group element such as `v2.4b[3]`, returning
+    /// the register number and the group index (0–3).
+    static func dotProductElement(_ text: String) throws -> (number: UInt32, index: UInt32) {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard lower.hasSuffix("]"), let bracket = lower.firstIndex(of: "[") else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        let head = String(lower[lower.startIndex..<bracket])               // v2.4b
+        let indexText = String(lower[lower.index(after: bracket)..<lower.index(before: lower.endIndex)])
+        let parts = head.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, let prefix = parts[0].first, prefix == "v",
+              let number = UInt32(parts[0].dropFirst()), number <= 31,
+              parts[1] == "4b",
+              let index = UInt32(indexText), index <= 3 else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        return (number, index)
+    }
+
     static func isVectorElementOperand(_ text: String) -> Bool {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return lower.hasPrefix("v") && lower.contains(".") && lower.hasSuffix("]")
@@ -1078,6 +1097,19 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "sdot", "udot":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.VectorDotProductKind(rawValue: mnemonic)!
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            let first = try A64Parser.vectorRegister(instruction.operands[1])
+            // The third operand is either a plain vector (`Vm.8b/16b`) or an
+            // indexed 4-byte group element (`Vm.4b[index]`).
+            if instruction.operands[2].contains("[") {
+                let element = try A64Parser.dotProductElement(instruction.operands[2])
+                return .vectorDotProductByElement(kind, destination: destination, first: first, elementRegister: element.number, index: element.index)
+            }
+            return .vectorDotProduct(kind, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
         case "rev64", "rev32", "rev16", "abs", "neg", "not", "rbit", "cnt", "cls", "clz", "sqabs", "sqneg", "suqadd", "usqadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
