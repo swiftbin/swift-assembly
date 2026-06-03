@@ -427,6 +427,21 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD two-register-misc FP ↔ integer convert (`Vd.T, Vn.T`).
+        // The two-vector-register shape distinguishes it from the fixed-point shift
+        // forms (which take a `#fbits` operand) and the scalar/general-register forms.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           isVectorRegisterOperand(instruction.operands[0]),
+           isVectorRegisterOperand(instruction.operands[1]),
+           let kind = A64.VectorConvertKind(rawValue: mnemonic) {
+            return .vectorConvert(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD two-register-misc extract-narrow (`Vd.Tb, Vn.Ta`); the `2`
         // suffix selects the upper-half (128-bit destination) variant.
         if parts.count == 1,

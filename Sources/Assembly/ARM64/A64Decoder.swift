@@ -40,6 +40,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
+        if let instruction = decodeVectorConvert(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -890,6 +891,37 @@ internal enum A64InstructionDecoder {
             guard arrangement != .d1 else { return nil }  // 1d is the scalar form.
         }
         return .vectorCompareZero(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            source: VectorRegister(number: rnNum, arrangement: arrangement)
+        )
+    }
+
+    private static func decodeVectorConvert(_ word: UInt32) -> Instruction? {
+        // Shares the two-register-misc encoding; selected by opcodes 11010/11011/11100/11101.
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let sizeHi = (word >> 23) & 1
+        let sz = (word >> 22) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        switch opcode {
+        case 0b11010, 0b11011, 0b11100, 0b11101: break
+        default: return nil
+        }
+        guard let kind = A64.VectorConvertKind.decode(u: u, opcode: opcode, sizeHi: sizeHi) else { return nil }
+        // `sz` selects single (2s/4s) vs. double (2d) precision.
+        let arrangement: A64.VectorArrangement
+        switch (sz, q) {
+        case (0, 0): arrangement = .s2
+        case (0, 1): arrangement = .s4
+        case (1, 1): arrangement = .d2
+        default: return nil
+        }
+        return .vectorConvert(
             kind,
             destination: VectorRegister(number: rdNum, arrangement: arrangement),
             source: VectorRegister(number: rnNum, arrangement: arrangement)

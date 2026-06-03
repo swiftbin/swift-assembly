@@ -2035,6 +2035,59 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("xtn v0.1d, v1.2d"))    // no D destination
     }
 
+    func testVectorConvertInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf v0.2s, v1.2s"), 0x0e21d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf v0.4s, v1.4s"), 0x4e21d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf v0.2d, v1.2d"), 0x4e61d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf v0.2s, v1.2s"), 0x2e21d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf v0.4s, v1.4s"), 0x6e21d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf v0.2d, v1.2d"), 0x6e61d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs v0.2s, v1.2s"), 0x0ea1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs v0.4s, v1.4s"), 0x4ea1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs v0.2d, v1.2d"), 0x4ee1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu v0.4s, v1.4s"), 0x6ea1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns v0.4s, v1.4s"), 0x4e21a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtnu v0.2d, v1.2d"), 0x6e61a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtms v0.4s, v1.4s"), 0x4e21b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtmu v0.2s, v1.2s"), 0x2e21b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtps v0.4s, v1.4s"), 0x4ea1a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtpu v0.2d, v1.2d"), 0x6ee1a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtas v0.4s, v1.4s"), 0x4e21c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtau v0.2s, v1.2s"), 0x2e21c820)
+    }
+
+    func testDisassembleVectorConvert() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e21d820), "scvtf v0.2s, v1.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e61d820), "scvtf v0.2d, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ee1b820), "fcvtzs v0.2d, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea1a820), "fcvtps v0.4s, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e21c820), "fcvtau v0.2s, v1.2s")
+    }
+
+    func testVectorConvertRoundTrip() throws {
+        let sources = [
+            "scvtf v0.2s, v1.2s", "scvtf v2.4s, v3.4s", "scvtf v4.2d, v5.2d",
+            "ucvtf v6.2s, v7.2s", "ucvtf v8.2d, v9.2d",
+            "fcvtzs v10.4s, v11.4s", "fcvtzu v12.2d, v13.2d",
+            "fcvtns v0.4s, v1.4s", "fcvtnu v2.2d, v3.2d", "fcvtms v4.2s, v5.2s",
+            "fcvtmu v6.4s, v7.4s", "fcvtps v8.2d, v9.2d", "fcvtpu v10.4s, v11.4s",
+            "fcvtas v12.2s, v13.2s", "fcvtau v14.2d, v15.2d",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorConvertInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.8b, v1.8b"))   // integer arrangements not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.4h, v1.4h"))   // FP16 not supported here
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtzs v0.2s, v1.4s"))  // arrangement mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.1d, v1.1d"))   // 1d is the scalar form
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

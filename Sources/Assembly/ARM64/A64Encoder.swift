@@ -202,6 +202,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.compareZero(kind, destination: destination, source: source)
         case .vectorExtractNarrow(let kind, let destination, let source):
             return try A64VectorEncoder.extractNarrow(kind, destination: destination, source: source)
+        case .vectorConvert(let kind, let destination, let source):
+            return try A64VectorEncoder.convert(kind, destination: destination, source: source)
         }
     }
 }
