@@ -42,6 +42,10 @@ internal enum A64 {
         case s4 = "4s"
         case d1 = "1d"
         case d2 = "2d"
+        /// A single 128-bit (quadword) element, used only by the `PMULL`/`PMULL2`
+        /// 64→128 polynomial multiply. `Q` is supplied by the `1d`/`2d` source, so
+        /// this destination arrangement reports `q = 0`.
+        case q1 = "1q"
 
         /// The `size` field (element size code: B=0, H=1, S=2, D=3).
         var elementSize: UInt32 {
@@ -49,7 +53,7 @@ internal enum A64 {
             case .b8, .b16: return 0b00
             case .h4, .h8: return 0b01
             case .s2, .s4: return 0b10
-            case .d1, .d2: return 0b11
+            case .d1, .d2, .q1: return 0b11
             }
         }
 
@@ -60,6 +64,7 @@ internal enum A64 {
             case .h4, .h8: return 16
             case .s2, .s4: return 32
             case .d1, .d2: return 64
+            case .q1: return 128
             }
         }
 
@@ -67,7 +72,7 @@ internal enum A64 {
         var q: UInt32 {
             switch self {
             case .b16, .h8, .s4, .d2: return 1
-            case .b8, .h4, .s2, .d1: return 0
+            case .b8, .h4, .s2, .d1, .q1: return 0
             }
         }
     }

@@ -1393,6 +1393,15 @@ internal enum A64InstructionDecoder {
             return spec.u == u && spec.opcode == opcode
         }) else { return nil }
 
+        // PMULL/PMULL2 64→128 polynomial form: source `1d`/`2d`, destination `1q`.
+        if kind == .pmull, size == 0b11 {
+            let source: A64.VectorArrangement = q == 0 ? .d1 : .d2
+            return .vectorThreeDifferent(kind,
+                destination: VectorRegister(number: rdNum, arrangement: .q1),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                second: VectorRegister(number: rmNum, arrangement: source))
+        }
+
         // Per-instruction size restrictions mirror the encoder.
         switch kind {
         case .pmull: guard size == 0b00 else { return nil }
@@ -1924,7 +1933,7 @@ internal enum A64InstructionDecoder {
         case .b8, .b16: return .h8
         case .h4, .h8: return .s4
         case .s2, .s4: return .d2
-        case .d1, .d2: return nil
+        case .d1, .d2, .q1: return nil
         }
     }
 

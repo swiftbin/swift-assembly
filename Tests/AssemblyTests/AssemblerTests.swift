@@ -991,6 +991,9 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("smull2 v0.4s, v1.8h, v2.8h"), 0x4e62c020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("pmull v0.8h, v1.8b, v2.8b"), 0x0e22e020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("pmull2 v0.8h, v1.16b, v2.16b"), 0x4e22e020)
+        // PMULL 64→128 polynomial form (Vd.1Q, Vn.1D/2D, Vm.1D/2D).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pmull v0.1q, v1.1d, v2.1d"), 0x0ee2e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pmull2 v0.1q, v1.2d, v2.2d"), 0x4ee2e020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull v0.4s, v1.4h, v2.4h"), 0x0e62d020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlal v0.2d, v1.2s, v2.2s"), 0x0ea29020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlsl v0.4s, v1.4h, v2.4h"), 0x0e62b020)
@@ -1013,6 +1016,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ea2c020), "smull v0.2d, v1.2s, v2.2s")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e22e020), "pmull v0.8h, v1.8b, v2.8b")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e22e020), "pmull2 v0.8h, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ee2e020), "pmull v0.1q, v1.1d, v2.1d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ee2e020), "pmull2 v0.1q, v1.2d, v2.2d")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e221020), "saddw v0.8h, v1.8h, v2.8b")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e224020), "addhn2 v0.16b, v1.8h, v2.8h")
     }
@@ -1023,6 +1028,7 @@ final class AssemblerTests: XCTestCase {
             "uaddl v6.2d, v7.2s, v8.2s", "ssubl2 v9.8h, v10.16b, v11.16b",
             "smull v12.4s, v13.4h, v14.4h", "umull2 v15.2d, v16.4s, v17.4s",
             "pmull v18.8h, v19.8b, v20.8b", "pmull2 v21.8h, v22.16b, v23.16b",
+            "pmull v30.1q, v31.1d, v0.1d", "pmull2 v1.1q, v2.2d, v3.2d",
             "sqdmull v24.4s, v25.4h, v26.4h", "sqdmlal v27.2d, v28.2s, v29.2s",
             "saddw v0.8h, v1.8h, v2.8b", "uaddw2 v3.4s, v4.4s, v5.8h",
             "addhn v6.8b, v7.8h, v8.8h", "subhn2 v9.8h, v10.4s, v11.4s",
@@ -1039,7 +1045,8 @@ final class AssemblerTests: XCTestCase {
     func testVectorThreeDifferentInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddl v0.8h, v1.4h, v2.4h"))   // source must be half-width
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddl v0.8h, v1.8b, v2.16b"))  // sources must match
-        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pmull v0.4s, v1.4h, v2.4h"))   // pmull is byte-only here
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pmull v0.4s, v1.4h, v2.4h"))   // pmull only has byte / 1q forms
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pmull v0.1q, v1.2s, v2.2s"))   // 1q form requires 1d/2d source
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull v0.8h, v1.8b, v2.8b")) // sqdmull excludes byte
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addhn v0.8h, v1.8h, v2.8h"))   // narrow dest must be half
     }

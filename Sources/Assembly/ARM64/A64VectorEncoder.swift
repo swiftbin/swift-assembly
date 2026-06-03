@@ -129,7 +129,7 @@ internal enum A64VectorEncoder {
         case .b8, .b16: return .h8
         case .h4, .h8: return .s4
         case .s2, .s4: return .d2
-        case .d1, .d2: return nil
+        case .d1, .d2, .q1: return nil
         }
     }
 
@@ -239,6 +239,8 @@ internal enum A64VectorEncoder {
                 // 64-bit `movi` (vector `.2d` or the scalar `d` form).
                 guard kind == .movi, case .none = shift else { throw fail() }
                 op = 1; cmode = 0b1110
+            case .q1:
+                throw fail()
             }
         }
 
@@ -359,6 +361,18 @@ internal enum A64VectorEncoder {
     static func threeDifferent(_ kind: A64.VectorThreeDifferentKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // PMULL/PMULL2 also have a 64→128 polynomial form whose source is the
+        // doubleword arrangement (`1d`/`2d`) and whose destination is `1q`. This
+        // does not fit the regular "doubled element" long form, so handle it here.
+        if kind == .pmull, rd.arrangement == .q1 {
+            guard rn.arrangement == rm.arrangement,
+                  rn.arrangement == .d1 || rn.arrangement == .d2 else { throw fail() }
+            let q = rn.arrangement.q
+            let base: UInt32 = 0x0e20_0000
+            let head = (q << 30) | (spec.u << 29) | base | (0b11 << 22)
+            return head | (rm.encodedNumber << 16) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
 
         // The narrow operand fixes both `size` and `Q`.
         let narrow: A64.VectorArrangement
@@ -912,7 +926,7 @@ internal enum A64VectorEncoder {
         case .h8: return .s4
         case .s2: return .d1
         case .s4: return .d2
-        case .d1, .d2: return nil
+        case .d1, .d2, .q1: return nil
         }
     }
 
