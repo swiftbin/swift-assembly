@@ -38,6 +38,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
+        if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -856,6 +857,38 @@ internal enum A64InstructionDecoder {
 
         guard let arrangement = vectorTwoRegisterMiscArrangement(kind, size: size, q: q) else { return nil }
         return .vectorTwoRegisterMisc(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            source: VectorRegister(number: rnNum, arrangement: arrangement)
+        )
+    }
+
+    private static func decodeVectorCompareZero(_ word: UInt32) -> Instruction? {
+        // Shares the two-register-misc encoding (mask 0x9f200c00 == 0x0e200800);
+        // selected by the compare-against-zero opcodes.
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // Integer opcodes 01000/01001/01010; floating-point 01100/01101/01110.
+        let isFloat: Bool
+        switch opcode {
+        case 0b01000, 0b01001, 0b01010: isFloat = false
+        case 0b01100, 0b01101, 0b01110: isFloat = true
+        default: return nil
+        }
+        guard let kind = A64.VectorCompareZeroKind.decode(u: u, opcode: opcode, isFloat: isFloat),
+              let arrangement = fullVectorArrangement(size: size, q: q) else { return nil }
+        if isFloat {
+            guard [A64.VectorArrangement.s2, .s4, .d2].contains(arrangement) else { return nil }
+        } else {
+            guard arrangement != .d1 else { return nil }  // 1d is the scalar form.
+        }
+        return .vectorCompareZero(
             kind,
             destination: VectorRegister(number: rdNum, arrangement: arrangement),
             source: VectorRegister(number: rnNum, arrangement: arrangement)

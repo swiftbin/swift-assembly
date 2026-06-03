@@ -427,6 +427,24 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD vector compare against zero (`Vd.T, Vn.T, #0` or `#0.0`).
+        // Only the immediate forms route here; the three-register shapes fall through
+        // to the three-same group below.
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#"),
+           isVectorRegisterOperand(instruction.operands[0]),
+           let kind = A64.VectorCompareZeroKind(rawValue: mnemonic) {
+            let imm = instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines)
+            let expected = kind.isFloat ? "#0.0" : "#0"
+            guard imm == expected else { throw AssemblerError.invalidImmediate(instruction.operands[2]) }
+            return .vectorCompareZero(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD scalar shift by immediate, narrowing (`Vd, Vn, #shift`).
         if parts.count == 1,
            instruction.operands.count == 3,

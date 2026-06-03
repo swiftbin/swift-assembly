@@ -1933,6 +1933,58 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.16b, v3.16b}, v2.8b")) // non-consecutive table
     }
 
+    func testVectorCompareZeroInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmgt v0.8b, v1.8b, #0"), 0x0e208820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmeq v0.8b, v1.8b, #0"), 0x0e209820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmlt v0.8b, v1.8b, #0"), 0x0e20a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmge v0.8b, v1.8b, #0"), 0x2e208820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmle v0.8b, v1.8b, #0"), 0x2e209820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmgt v0.4s, v1.4s, #0"), 0x4ea08820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmeq v0.2d, v1.2d, #0"), 0x4ee09820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmge v0.8h, v1.8h, #0"), 0x6e608820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmle v0.16b, v1.16b, #0"), 0x6e209820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmlt v0.2s, v1.2s, #0"), 0x0ea0a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt v0.4s, v1.4s, #0.0"), 0x4ea0c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq v0.4s, v1.4s, #0.0"), 0x4ea0d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmlt v0.4s, v1.4s, #0.0"), 0x4ea0e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmge v0.4s, v1.4s, #0.0"), 0x6ea0c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmle v0.4s, v1.4s, #0.0"), 0x6ea0d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt v0.2d, v1.2d, #0.0"), 0x4ee0c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq v0.2s, v1.2s, #0.0"), 0x0ea0d820)
+    }
+
+    func testDisassembleVectorCompareZero() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e208820), "cmgt v0.8b, v1.8b, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e208820), "cmge v0.8b, v1.8b, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ee09820), "cmeq v0.2d, v1.2d, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea0c820), "fcmgt v0.4s, v1.4s, #0.0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea0d820), "fcmle v0.4s, v1.4s, #0.0")
+    }
+
+    func testVectorCompareZeroRoundTrip() throws {
+        let sources = [
+            "cmgt v0.8b, v1.8b, #0", "cmeq v2.16b, v3.16b, #0", "cmlt v4.4h, v5.4h, #0",
+            "cmge v6.8h, v7.8h, #0", "cmle v8.2s, v9.2s, #0", "cmgt v10.4s, v11.4s, #0",
+            "cmeq v12.2d, v13.2d, #0",
+            "fcmgt v0.2s, v1.2s, #0.0", "fcmeq v2.4s, v3.4s, #0.0", "fcmlt v4.2d, v5.2d, #0.0",
+            "fcmge v6.4s, v7.4s, #0.0", "fcmle v8.2d, v9.2d, #0.0",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorCompareZeroInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmgt v0.8b, v1.16b, #0"))   // arrangement mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmgt v0.1d, v1.1d, #0"))    // 1d is the scalar form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmgt v0.8b, v1.8b, #0.0")) // FP needs 2s/4s/2d
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmgt v0.8b, v1.8b, #1"))    // must compare against zero
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmgt v0.4s, v1.4s, #0"))   // FP needs #0.0
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

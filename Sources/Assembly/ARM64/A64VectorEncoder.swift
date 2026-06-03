@@ -794,6 +794,22 @@ internal enum A64VectorEncoder {
         }
     }
 
+    /// Arrangements permitted by the integer compare-against-zero forms.
+    private static let allowedCompareZeroInteger: Set<A64.VectorArrangement> = [.b8, .b16, .h4, .h8, .s2, .s4, .d2]
+    /// Arrangements permitted by the floating-point compare-against-zero forms.
+    private static let allowedCompareZeroFloat: Set<A64.VectorArrangement> = [.s2, .s4, .d2]
+
+    static func compareZero(_ kind: A64.VectorCompareZeroKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        guard rd.arrangement == rn.arrangement else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let allowed = kind.isFloat ? allowedCompareZeroFloat : allowedCompareZeroInteger
+        guard allowed.contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
+
+        let spec = kind.spec
+        let size = rd.arrangement.elementSize
+        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
+        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func tableLookup(_ kind: A64.VectorTableLookupKind, destination rd: VectorRegister, table: A64.VectorRegisterList, index rm: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
         // The destination and index share an 8b/16b arrangement; the table registers must be 16b.

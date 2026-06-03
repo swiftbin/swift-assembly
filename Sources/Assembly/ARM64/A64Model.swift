@@ -331,6 +331,35 @@ internal enum A64 {
         case fmaxv, fminv, fmaxnmv, fminnmv
     }
 
+    /// Advanced SIMD two-register-misc compare against zero (`Vd.T, Vn.T, #0` or `#0.0`).
+    enum VectorCompareZeroKind: String, Equatable, CaseIterable {
+        case cmgt, cmeq, cmlt, cmge, cmle
+        case fcmgt, fcmeq, fcmlt, fcmge, fcmle
+
+        /// `true` for the floating-point forms (which compare against `#0.0`).
+        var isFloat: Bool { rawValue.hasPrefix("f") }
+
+        /// The `U` bit at [29] and the 5-bit `opcode` at [16:12].
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .cmgt: return (0, 0b01000)
+            case .cmeq: return (0, 0b01001)
+            case .cmlt: return (0, 0b01010)
+            case .cmge: return (1, 0b01000)
+            case .cmle: return (1, 0b01001)
+            case .fcmgt: return (0, 0b01100)
+            case .fcmeq: return (0, 0b01101)
+            case .fcmlt: return (0, 0b01110)
+            case .fcmge: return (1, 0b01100)
+            case .fcmle: return (1, 0b01101)
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32, isFloat: Bool) -> VectorCompareZeroKind? {
+            allCases.first { $0.isFloat == isFloat && $0.spec == (u, opcode) }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -985,6 +1014,7 @@ internal enum A64 {
         case scalarTwoRegisterMiscNarrow(ScalarTwoRegisterMiscNarrowKind, destination: FPRegister, source: FPRegister)
         case scalarShiftFixedPoint(ScalarShiftFixedPointKind, destination: FPRegister, source: FPRegister, fbits: Int)
         case vectorTableLookup(VectorTableLookupKind, destination: VectorRegister, table: VectorRegisterList, index: VectorRegister)
+        case vectorCompareZero(VectorCompareZeroKind, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -1022,3 +1052,4 @@ internal typealias ScalarShiftNarrowKind = A64.ScalarShiftNarrowKind
 internal typealias ScalarTwoRegisterMiscNarrowKind = A64.ScalarTwoRegisterMiscNarrowKind
 internal typealias ScalarShiftFixedPointKind = A64.ScalarShiftFixedPointKind
 internal typealias VectorTableLookupKind = A64.VectorTableLookupKind
+internal typealias VectorCompareZeroKind = A64.VectorCompareZeroKind

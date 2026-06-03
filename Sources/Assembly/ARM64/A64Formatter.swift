@@ -75,6 +75,9 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorLaneList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
         case .vectorTableLookup(let kind, let destination, let table, let index):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegisterList(table)), \(formatVectorRegister(index))"
+        case .vectorCompareZero(let kind, let destination, let source):
+            let zero = kind.isFloat ? "#0.0" : "#0"
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source)), \(zero)"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
