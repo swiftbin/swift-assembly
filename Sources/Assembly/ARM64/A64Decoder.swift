@@ -50,6 +50,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarCopy(word) { return instruction }
         if let instruction = decodeScalarFPTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeScalarThreeSameFP(word) { return instruction }
+        if let instruction = decodeScalarShiftNarrow(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1052,6 +1053,39 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: width),
             first: floatRegister(number: rnNum, width: width),
             second: floatRegister(number: rmNum, width: width))
+    }
+
+    private static func decodeScalarShiftNarrow(_ word: UInt32) -> Instruction? {
+        // Shares the scalar shift-by-immediate base; narrowing forms have immh = 0xxx
+        // (the highest set bit selects the destination element size).
+        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        let u = (word >> 29) & 1
+        let immh = (word >> 19) & 0xf
+        let immb = (word >> 16) & 0x7
+        guard immh != 0, immh & 0b1000 == 0 else { return nil }
+        let opcode = (word >> 11) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarShiftNarrowKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        // Highest set bit of immh selects the destination element size.
+        let destEsize: Int
+        if immh & 0b0100 != 0 { destEsize = 32 }
+        else if immh & 0b0010 != 0 { destEsize = 16 }
+        else { destEsize = 8 }   // immh == 0b0001
+
+        let immhb = Int((immh << 3) | immb)
+        let shift = 2 * destEsize - immhb
+        guard shift >= 1, shift <= destEsize else { return nil }
+
+        return .scalarShiftNarrow(kind,
+            destination: floatRegister(number: rdNum, width: destEsize),
+            source: floatRegister(number: rnNum, width: destEsize * 2),
+            shift: shift)
     }
 
     private static func decodeScalarShiftImmediate(_ word: UInt32) -> Instruction? {

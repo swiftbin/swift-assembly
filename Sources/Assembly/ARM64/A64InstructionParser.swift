@@ -341,6 +341,21 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar shift by immediate, narrowing (`Vd, Vn, #shift`).
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[1]),
+           instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#"),
+           let kind = A64.ScalarShiftNarrowKind(rawValue: mnemonic) {
+            return .scalarShiftNarrow(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1]),
+                shift: Int(try A64Parser.immediate(instruction.operands[2]))
+            )
+        }
+
         // Advanced SIMD scalar shift by immediate (`Vd, Vn, #shift`).
         if parts.count == 1,
            instruction.operands.count == 3,

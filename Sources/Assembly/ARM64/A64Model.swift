@@ -624,6 +624,23 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar shift by immediate, narrowing (`Vd, Vn, #shift` — the
+    /// destination is one element size narrower than the source).
+    enum ScalarShiftNarrowKind: String, Equatable, CaseIterable {
+        case sqshrun, sqrshrun, sqshrn, sqrshrn, uqshrn, uqrshrn
+
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .sqshrun:  return (1, 0b10000)
+            case .sqrshrun: return (1, 0b10001)
+            case .sqshrn:   return (0, 0b10010)
+            case .sqrshrn:  return (0, 0b10011)
+            case .uqshrn:   return (1, 0b10010)
+            case .uqrshrn:  return (1, 0b10011)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar three different (`Vd, Vn, Vm` — long, saturating doubling).
     enum ScalarThreeDifferentKind: String, Equatable, CaseIterable {
         case sqdmlal, sqdmlsl, sqdmull
@@ -818,6 +835,7 @@ internal enum A64 {
         case scalarCopyDuplicate(destination: FPRegister, element: VectorElement)
         case scalarFPTwoRegisterMisc(ScalarFPTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
         case scalarThreeSameFP(ScalarThreeSameFPKind, destination: FPRegister, first: FPRegister, second: FPRegister)
+        case scalarShiftNarrow(ScalarShiftNarrowKind, destination: FPRegister, source: FPRegister, shift: Int)
     }
 }
 
@@ -846,3 +864,4 @@ internal typealias ScalarShiftImmediateKind = A64.ScalarShiftImmediateKind
 internal typealias ScalarThreeDifferentKind = A64.ScalarThreeDifferentKind
 internal typealias ScalarFPTwoRegisterMiscKind = A64.ScalarFPTwoRegisterMiscKind
 internal typealias ScalarThreeSameFPKind = A64.ScalarThreeSameFPKind
+internal typealias ScalarShiftNarrowKind = A64.ScalarShiftNarrowKind

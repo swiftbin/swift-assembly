@@ -1558,6 +1558,45 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmulx s0, d1, d2"))   // widths must match
     }
 
+    func testScalarShiftNarrowInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshrn b0, h1, #3"), 0x5f0d9420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshrn h0, s1, #5"), 0x5f1b9420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshrn s0, d1, #9"), 0x5f379420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrshrn b0, h1, #3"), 0x5f0d9c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqshrn b0, h1, #3"), 0x7f0d9420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqrshrn h0, s1, #5"), 0x7f1b9c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshrun b0, h1, #3"), 0x7f0d8420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrshrun s0, d1, #9"), 0x7f378c20)
+    }
+
+    func testDisassembleScalarShiftNarrow() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f0d9420), "sqshrn b0, h1, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f379420), "sqshrn s0, d1, #9")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f0d8420), "sqshrun b0, h1, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f1b9c20), "uqrshrn h0, s1, #5")
+    }
+
+    func testScalarShiftNarrowRoundTrip() throws {
+        let sources = [
+            "sqshrn b0, h1, #1", "sqshrn b2, h3, #8", "sqshrn h4, s5, #16",
+            "sqshrn s6, d7, #32", "sqrshrn b8, h9, #4", "uqshrn h10, s11, #10",
+            "uqrshrn s12, d13, #20", "sqshrun b14, h15, #2", "sqrshrun h16, s17, #7",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarShiftNarrowInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqshrn b0, h1, #0"))   // shift min is 1
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqshrn b0, h1, #9"))   // shift max is destEsize (8)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqshrn b0, s1, #3"))   // dest must be one size below source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqshrn d0, d1, #3"))   // no d destination
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

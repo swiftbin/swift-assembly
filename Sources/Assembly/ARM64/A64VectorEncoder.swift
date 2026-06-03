@@ -634,6 +634,30 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarShiftNarrow(_ kind: A64.ScalarShiftNarrowKind, destination rd: FloatRegister, source rn: FloatRegister, shift: Int) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // The destination is one element size narrower than the source.
+        let destEsize: Int
+        switch (rd.width, rn.width) {
+        case (8, 16):  destEsize = 8
+        case (16, 32): destEsize = 16
+        case (32, 64): destEsize = 32
+        default: throw fail()
+        }
+        guard shift >= 1, shift <= destEsize else { throw fail() }
+
+        // immhb = 2*destEsize - shift; immh's highest set bit selects the size.
+        let immhb = UInt32(2 * destEsize - shift)
+        let immh = (immhb >> 3) & 0xf
+        let immb = immhb & 0x7
+
+        // Base: bit30=1, bits[28:23]=111110, bit10=1.
+        let base: UInt32 = 0x5f00_0400
+        return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarThreeDifferent(_ kind: A64.ScalarThreeDifferentKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
 
