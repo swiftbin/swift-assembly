@@ -2275,6 +2275,51 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("aese v0.16b, v1.8b"))   // both must be 16b
     }
 
+    func testCryptoSHAInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha1c q0, s1, v2.4s"), 0x5e020020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha1p q0, s1, v2.4s"), 0x5e021020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha1m q0, s1, v2.4s"), 0x5e022020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha1su0 v0.4s, v1.4s, v2.4s"), 0x5e023020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha256h q0, q1, v2.4s"), 0x5e024020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha256h2 q0, q1, v2.4s"), 0x5e025020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha256su1 v0.4s, v1.4s, v2.4s"), 0x5e026020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha1h s0, s1"), 0x5e280820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha1su1 v0.4s, v1.4s"), 0x5e281820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha256su0 v0.4s, v1.4s"), 0x5e282820)
+    }
+
+    func testDisassembleCryptoSHA() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e020020), "sha1c q0, s1, v2.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e023020), "sha1su0 v0.4s, v1.4s, v2.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e024020), "sha256h q0, q1, v2.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e026020), "sha256su1 v0.4s, v1.4s, v2.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e280820), "sha1h s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e282820), "sha256su0 v0.4s, v1.4s")
+    }
+
+    func testCryptoSHARoundTrip() throws {
+        let sources = [
+            "sha1c q0, s1, v2.4s", "sha1p q3, s4, v5.4s", "sha1m q6, s7, v8.4s",
+            "sha1su0 v9.4s, v10.4s, v11.4s", "sha256h q12, q13, v14.4s",
+            "sha256h2 q15, q16, v17.4s", "sha256su1 v18.4s, v19.4s, v20.4s",
+            "sha1h s21, s22", "sha1su1 v23.4s, v24.4s", "sha256su0 v25.4s, v26.4s",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testCryptoSHAInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha1c v0.4s, s1, v2.4s"))  // dest must be Q
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha1c q0, q1, v2.4s"))     // first must be S
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha256h q0, q1, v2.2d"))   // third must be .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha1h q0, s1"))            // sha1h dest must be S
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha1su1 v0.2s, v1.2s"))    // must be .4s
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

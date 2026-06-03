@@ -823,6 +823,14 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func cryptoSHA3(_ kind: A64.CryptoSHA3Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
+        0x5e00_0000 | (m << 16) | (kind.opcode << 12) | (n << 5) | d
+    }
+
+    static func cryptoSHA2(_ kind: A64.CryptoSHA2Kind, d: UInt32, n: UInt32) -> UInt32 {
+        0x5e28_0800 | (kind.opcode << 12) | (n << 5) | d
+    }
+
     static func cryptoAES(_ kind: A64.CryptoAESKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         // Both operands are fixed `16b`.
         guard rd.arrangement == .b16, rn.arrangement == .b16 else { throw AssemblerError.invalidRegister(kind.rawValue) }

@@ -92,6 +92,12 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue)\(suffix) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         case .cryptoAES(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
+        case .cryptoSHA3(let kind, let d, let n, let m):
+            let shape = kind.shape
+            return "\(kind.rawValue) \(formatCryptoSHAOperand(d, shape: shape.d)), \(formatCryptoSHAOperand(n, shape: shape.n)), \(formatCryptoSHAOperand(m, shape: shape.m))"
+        case .cryptoSHA2(let kind, let d, let n):
+            let shape = kind.shape
+            return "\(kind.rawValue) \(formatCryptoSHAOperand(d, shape: shape.d)), \(formatCryptoSHAOperand(n, shape: shape.n))"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
@@ -252,6 +258,14 @@ internal enum A64InstructionFormatter {
 
     private static func formatVectorRegister(_ register: VectorRegister) -> String {
         "v\(register.number).\(register.arrangement.rawValue)"
+    }
+
+    private static func formatCryptoSHAOperand(_ number: UInt32, shape: A64.CryptoSHAOperand) -> String {
+        switch shape {
+        case .scalarS:  return "s\(number)"
+        case .scalarQ:  return "q\(number)"
+        case .vector4s: return "v\(number).4s"
+        }
     }
 
     private static func formatVectorRegisterList(_ list: VectorRegisterList) -> String {

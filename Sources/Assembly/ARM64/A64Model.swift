@@ -509,6 +509,71 @@ internal enum A64 {
         }
     }
 
+    /// The register shape of a single cryptographic SHA operand.
+    enum CryptoSHAOperand: Equatable {
+        case scalarS   // 32-bit `Sn`
+        case scalarQ   // 128-bit `Qn`
+        case vector4s  // `Vn.4s`
+    }
+
+    /// Cryptographic three-register SHA1/SHA256 instructions. Operand register
+    /// shapes are fixed by the mnemonic, so only register numbers are stored.
+    enum CryptoSHA3Kind: String, Equatable, CaseIterable {
+        case sha1c, sha1p, sha1m, sha1su0, sha256h, sha256h2, sha256su1
+
+        /// The 3-bit `opcode` at [14:12].
+        var opcode: UInt32 {
+            switch self {
+            case .sha1c:     return 0b000
+            case .sha1p:     return 0b001
+            case .sha1m:     return 0b010
+            case .sha1su0:   return 0b011
+            case .sha256h:   return 0b100
+            case .sha256h2:  return 0b101
+            case .sha256su1: return 0b110
+            }
+        }
+
+        /// Register shapes for the destination, first, and second source operands.
+        var shape: (d: CryptoSHAOperand, n: CryptoSHAOperand, m: CryptoSHAOperand) {
+            switch self {
+            case .sha1c, .sha1p, .sha1m:  return (.scalarQ, .scalarS, .vector4s)
+            case .sha256h, .sha256h2:     return (.scalarQ, .scalarQ, .vector4s)
+            case .sha1su0, .sha256su1:    return (.vector4s, .vector4s, .vector4s)
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoSHA3Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Cryptographic two-register SHA1/SHA256 instructions.
+    enum CryptoSHA2Kind: String, Equatable, CaseIterable {
+        case sha1h, sha1su1, sha256su0
+
+        /// The 5-bit `opcode` at [16:12].
+        var opcode: UInt32 {
+            switch self {
+            case .sha1h:     return 0b00000
+            case .sha1su1:   return 0b00001
+            case .sha256su0: return 0b00010
+            }
+        }
+
+        /// Register shapes for the destination and source operands.
+        var shape: (d: CryptoSHAOperand, n: CryptoSHAOperand) {
+            switch self {
+            case .sha1h:                return (.scalarS, .scalarS)
+            case .sha1su1, .sha256su0:  return (.vector4s, .vector4s)
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoSHA2Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -1171,6 +1236,8 @@ internal enum A64 {
         case vectorRoundReciprocal(VectorRoundReciprocalKind, destination: VectorRegister, source: VectorRegister)
         case vectorFPConvertPrecision(VectorFPConvertPrecisionKind, upper: Bool, destination: VectorRegister, source: VectorRegister)
         case cryptoAES(CryptoAESKind, destination: VectorRegister, source: VectorRegister)
+        case cryptoSHA3(CryptoSHA3Kind, d: UInt32, n: UInt32, m: UInt32)
+        case cryptoSHA2(CryptoSHA2Kind, d: UInt32, n: UInt32)
     }
 }
 
@@ -1215,3 +1282,5 @@ internal typealias VectorPairwiseLongAddKind = A64.VectorPairwiseLongAddKind
 internal typealias VectorRoundReciprocalKind = A64.VectorRoundReciprocalKind
 internal typealias VectorFPConvertPrecisionKind = A64.VectorFPConvertPrecisionKind
 internal typealias CryptoAESKind = A64.CryptoAESKind
+internal typealias CryptoSHA3Kind = A64.CryptoSHA3Kind
+internal typealias CryptoSHA2Kind = A64.CryptoSHA2Kind

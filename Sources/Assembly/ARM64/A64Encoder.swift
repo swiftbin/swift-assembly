@@ -212,6 +212,10 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.fpConvertPrecision(kind, upper: upper, destination: destination, source: source)
         case .cryptoAES(let kind, let destination, let source):
             return try A64VectorEncoder.cryptoAES(kind, destination: destination, source: source)
+        case .cryptoSHA3(let kind, let d, let n, let m):
+            return A64VectorEncoder.cryptoSHA3(kind, d: d, n: n, m: m)
+        case .cryptoSHA2(let kind, let d, let n):
+            return A64VectorEncoder.cryptoSHA2(kind, d: d, n: n)
         }
     }
 }

@@ -109,6 +109,25 @@ internal enum A64Parser {
         return A64.VectorRegister(number: number, arrangement: arrangement)
     }
 
+    /// Parses one cryptographic SHA operand according to the shape required by the
+    /// mnemonic, returning its register number. Rejects operands of the wrong type.
+    static func cryptoSHAOperandNumber(_ text: String, shape: A64.CryptoSHAOperand) throws -> UInt32 {
+        switch shape {
+        case .scalarS:
+            let register = try floatRegister(text)
+            guard register.width == 32 else { throw AssemblerError.invalidRegister(text) }
+            return register.number
+        case .scalarQ:
+            let register = try floatRegister(text)
+            guard register.width == 128 else { throw AssemblerError.invalidRegister(text) }
+            return register.number
+        case .vector4s:
+            let register = try vectorRegister(text)
+            guard register.arrangement == .s4 else { throw AssemblerError.invalidRegister(text) }
+            return register.number
+        }
+    }
+
     /// Parses a brace-delimited register list such as `{v0.16b, v1.16b}`. The registers must
     /// share an arrangement and be numbered consecutively (wrapping at v31).
     static func vectorRegisterList(_ text: String) throws -> A64.VectorRegisterList {
@@ -1075,6 +1094,27 @@ internal enum A64InstructionParser {
                 A64.CryptoAESKind(rawValue: mnemonic)!,
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        case "sha1c", "sha1p", "sha1m", "sha1su0", "sha256h", "sha256h2", "sha256su1":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.CryptoSHA3Kind(rawValue: mnemonic)!
+            let shape = kind.shape
+            return .cryptoSHA3(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: shape.d),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: shape.n),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: shape.m)
+            )
+        case "sha1h", "sha1su1", "sha256su0":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = A64.CryptoSHA2Kind(rawValue: mnemonic)!
+            let shape = kind.shape
+            return .cryptoSHA2(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: shape.d),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: shape.n)
             )
         case "zip1", "zip2", "uzp1", "uzp2", "trn1", "trn2":
             guard parts.count == 1 else { return nil }

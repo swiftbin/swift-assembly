@@ -38,6 +38,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeCryptoAES(word) { return instruction }
+        if let instruction = decodeCryptoSHA3(word) { return instruction }
+        if let instruction = decodeCryptoSHA2(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -847,6 +849,27 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: .b16),
             source: VectorRegister(number: rnNum, arrangement: .b16)
         )
+    }
+
+    private static func decodeCryptoSHA3(_ word: UInt32) -> Instruction? {
+        // Crypto three-register SHA: 01011110 000 Rm 0 opcode 00 Rn Rd.
+        guard word & 0xffe0_8c00 == 0x5e00_0000 else { return nil }
+        let mNum = (word >> 16) & 0x1f
+        let opcode = (word >> 12) & 0x7
+        let nNum = (word >> 5) & 0x1f
+        let dNum = word & 0x1f
+        guard let kind = A64.CryptoSHA3Kind.decode(opcode: opcode) else { return nil }
+        return .cryptoSHA3(kind, d: dNum, n: nNum, m: mNum)
+    }
+
+    private static func decodeCryptoSHA2(_ word: UInt32) -> Instruction? {
+        // Crypto two-register SHA: 01011110 00 10100 0 000xx 10 Rn Rd.
+        guard word & 0xffff_cc00 == 0x5e28_0800 else { return nil }
+        let opcode = (word >> 12) & 0x1f
+        let nNum = (word >> 5) & 0x1f
+        let dNum = word & 0x1f
+        guard let kind = A64.CryptoSHA2Kind.decode(opcode: opcode) else { return nil }
+        return .cryptoSHA2(kind, d: dNum, n: nNum)
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {
