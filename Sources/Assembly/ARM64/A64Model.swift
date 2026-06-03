@@ -759,6 +759,7 @@ internal enum A64 {
         case scalarShiftImmediate(ScalarShiftImmediateKind, destination: FPRegister, source: FPRegister, shift: Int)
         case scalarThreeDifferent(ScalarThreeDifferentKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarIndexed(VectorIndexedKind, destination: FPRegister, first: FPRegister, element: VectorElement)
+        case scalarCopyDuplicate(destination: FPRegister, element: VectorElement)
     }
 }
 

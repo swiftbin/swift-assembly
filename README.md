@@ -39,6 +39,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD scalar shift by immediate (sshr / ushr / ssra / usra / srshr / urshr / srsra / ursra / sri / shl / sli / sqshl / uqshl / sqshlu — double-width forms)
 - Advanced SIMD scalar three different (sqdmlal / sqdmlsl / sqdmull — long saturating-doubling forms)
 - Advanced SIMD scalar x indexed element (sqdmlal / sqdmlsl / sqdmull / sqdmulh / sqrdmulh / fmul / fmla / fmls / fmulx)
+- Advanced SIMD scalar copy (dup / mov from a vector element to a scalar FP register)
 - ...
 
 ## Usage

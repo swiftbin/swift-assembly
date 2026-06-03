@@ -47,6 +47,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarShiftImmediate(word) { return instruction }
         if let instruction = decodeScalarThreeDifferent(word) { return instruction }
         if let instruction = decodeScalarIndexed(word) { return instruction }
+        if let instruction = decodeScalarCopy(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1075,6 +1076,30 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: 64),
             source: floatRegister(number: rnNum, width: 64),
             shift: shift)
+    }
+
+    private static func decodeScalarCopy(_ word: UInt32) -> Instruction? {
+        // bit30=1, bits[28:21]=11110000, bit15=0, imm4[14:11]=0000, bit10=1 (DUP element scalar).
+        guard word & 0xffe0_fc00 == 0x5e00_0400 else { return nil }
+        let imm5 = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // The lowest set bit of imm5 selects the element size.
+        let width: A64.VectorElementWidth
+        let size: UInt32
+        if imm5 & 0b1 != 0 { width = .b; size = 0 }
+        else if imm5 & 0b10 != 0 { width = .h; size = 1 }
+        else if imm5 & 0b100 != 0 { width = .s; size = 2 }
+        else if imm5 & 0b1000 != 0 { width = .d; size = 3 }
+        else { return nil }
+
+        let index = Int(imm5 >> (size + 1))
+        let destWidth = 8 << Int(size)
+
+        return .scalarCopyDuplicate(
+            destination: floatRegister(number: rdNum, width: destWidth),
+            element: VectorElement(number: rnNum, width: width, index: index))
     }
 
     private static func decodeScalarIndexed(_ word: UInt32) -> Instruction? {

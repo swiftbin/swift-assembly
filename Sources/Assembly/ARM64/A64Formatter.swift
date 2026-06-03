@@ -144,6 +144,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarIndexed(let kind, let destination, let first, let element):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatVectorElement(element))"
+        case .scalarCopyDuplicate(let destination, let element):
+            return "mov \(formatFloatRegister(destination)), \(formatVectorElement(element))"
         }
     }
 

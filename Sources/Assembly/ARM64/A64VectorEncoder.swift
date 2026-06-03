@@ -504,6 +504,28 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarCopyDuplicate(destination rd: FloatRegister, element: A64.VectorElement) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("dup") }
+
+        // Scalar destination width must match the indexed element width.
+        let size: UInt32
+        let maxIndex: Int
+        switch element.width {
+        case .b: size = 0; maxIndex = 15; guard rd.width == 8  else { throw fail() }
+        case .h: size = 1; maxIndex = 7;  guard rd.width == 16 else { throw fail() }
+        case .s: size = 2; maxIndex = 3;  guard rd.width == 32 else { throw fail() }
+        case .d: size = 3; maxIndex = 1;  guard rd.width == 64 else { throw fail() }
+        }
+        guard element.index >= 0, element.index <= maxIndex, element.number <= 31 else { throw fail() }
+
+        // imm5 = index << (size + 1) | (1 << size).
+        let imm5 = (UInt32(element.index) << (size + 1)) | (UInt32(1) << size)
+
+        // Base: bit30=1, bits[28:21]=11110000, bit10=1 (DUP element: op=0, imm4=0000).
+        let base: UInt32 = 0x5e00_0400
+        return base | (imm5 << 16) | (element.number << 5) | rd.encodedNumber
+    }
+
     static func scalarIndexed(_ kind: A64.VectorIndexedKind, destination rd: FloatRegister, first rn: FloatRegister, element: A64.VectorElement) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }

@@ -1408,6 +1408,45 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull s0, h1, v16.h[3]"))   // H element reg limited to 0-15
     }
 
+    func testScalarCopyInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup b0, v1.b[15]"), 0x5e1f0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup h0, v1.h[7]"), 0x5e1e0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup s0, v1.s[3]"), 0x5e1c0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup d0, v1.d[1]"), 0x5e180420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup d0, v1.d[0]"), 0x5e080420)
+        // `mov` is the preferred alias for the scalar element copy.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mov d0, v1.d[1]"), 0x5e180420)
+    }
+
+    func testDisassembleScalarCopy() throws {
+        // The scalar element copy disassembles to its preferred `mov` form.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e1f0420), "mov b0, v1.b[15]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e1e0420), "mov h0, v1.h[7]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e1c0420), "mov s0, v1.s[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e180420), "mov d0, v1.d[1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e080420), "mov d0, v1.d[0]")
+    }
+
+    func testScalarCopyRoundTrip() throws {
+        let sources = [
+            "dup b3, v4.b[10]", "dup h5, v6.h[2]", "dup s7, v8.s[1]",
+            "dup d9, v10.d[0]", "mov d11, v12.d[1]", "mov s13, v14.s[3]",
+            "mov b15, v16.b[7]", "mov h17, v18.h[4]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarCopyInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup s0, v1.d[1]"))   // dest width must match element
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup b0, v1.b[16]"))  // index out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup d0, v1.d[2]"))   // index out of range
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

@@ -343,6 +343,19 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar copy: `dup`/`mov` with a scalar FP destination and a
+        // single vector element source (`mov d0, v1.d[1]`).
+        if parts.count == 1,
+           (mnemonic == "dup" || mnemonic == "mov"),
+           instruction.operands.count == 2,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isVectorElementOperand(instruction.operands[1]) {
+            return .scalarCopyDuplicate(
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                element: try A64Parser.vectorElement(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD scalar three different (`Vd, Vn, Vm` — long saturating doubling).
         if parts.count == 1,
            instruction.operands.count == 3,
