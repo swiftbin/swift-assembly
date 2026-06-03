@@ -41,6 +41,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
         if let instruction = decodeVectorConvert(word) { return instruction }
+        if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -951,6 +952,37 @@ internal enum A64InstructionDecoder {
         default: return nil
         }
         return .vectorExtractNarrow(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: destination),
+            source: VectorRegister(number: rnNum, arrangement: source)
+        )
+    }
+
+    private static func decodeVectorPairwiseLongAdd(_ word: UInt32) -> Instruction? {
+        // Shares the two-register-misc encoding; selected by opcodes 00010 (add) / 00110 (accumulate).
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard opcode == 0b00010 || opcode == 0b00110 else { return nil }
+        guard let kind = A64.VectorPairwiseLongAddKind.decode(u: u, opcode: opcode),
+              let source = fullVectorArrangement(size: size, q: q) else { return nil }
+        // The destination has the element width doubled (same `Q`); source must be b/h/s.
+        let destination: A64.VectorArrangement
+        switch source {
+        case .b8: destination = .h4
+        case .b16: destination = .h8
+        case .h4: destination = .s2
+        case .h8: destination = .s4
+        case .s2: destination = .d1
+        case .s4: destination = .d2
+        default: return nil
+        }
+        return .vectorPairwiseLongAdd(
             kind,
             destination: VectorRegister(number: rdNum, arrangement: destination),
             source: VectorRegister(number: rnNum, arrangement: source)

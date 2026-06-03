@@ -442,6 +442,19 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD two-register-misc pairwise long add/accumulate (`Vd.Ta, Vn.Tb`).
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           isVectorRegisterOperand(instruction.operands[0]),
+           isVectorRegisterOperand(instruction.operands[1]),
+           let kind = A64.VectorPairwiseLongAddKind(rawValue: mnemonic) {
+            return .vectorPairwiseLongAdd(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD two-register-misc extract-narrow (`Vd.Tb, Vn.Ta`); the `2`
         // suffix selects the upper-half (128-bit destination) variant.
         if parts.count == 1,

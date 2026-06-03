@@ -2088,6 +2088,54 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.1d, v1.1d"))   // 1d is the scalar form
     }
 
+    func testVectorPairwiseLongAddInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlp v0.4h, v1.8b"), 0x0e202820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlp v0.8h, v1.16b"), 0x4e202820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlp v0.2s, v1.4h"), 0x0e602820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlp v0.4s, v1.8h"), 0x4e602820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlp v0.1d, v1.2s"), 0x0ea02820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddlp v0.2d, v1.4s"), 0x4ea02820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddlp v0.4h, v1.8b"), 0x2e202820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddlp v0.8h, v1.16b"), 0x6e202820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddlp v0.2d, v1.4s"), 0x6ea02820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sadalp v0.4h, v1.8b"), 0x0e206820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sadalp v0.2d, v1.4s"), 0x4ea06820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uadalp v0.4h, v1.8b"), 0x2e206820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uadalp v0.8h, v1.16b"), 0x6e206820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uadalp v0.2d, v1.4s"), 0x6ea06820)
+    }
+
+    func testDisassembleVectorPairwiseLongAdd() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e202820), "saddlp v0.4h, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea02820), "saddlp v0.2d, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e202820), "uaddlp v0.8h, v1.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e206820), "sadalp v0.4h, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea06820), "uadalp v0.2d, v1.4s")
+    }
+
+    func testVectorPairwiseLongAddRoundTrip() throws {
+        let sources = [
+            "saddlp v0.4h, v1.8b", "saddlp v2.8h, v3.16b", "saddlp v4.2s, v5.4h",
+            "saddlp v6.4s, v7.8h", "saddlp v8.1d, v9.2s", "saddlp v10.2d, v11.4s",
+            "uaddlp v12.4h, v13.8b", "uaddlp v14.8h, v15.16b", "uaddlp v16.2d, v17.4s",
+            "sadalp v18.4h, v19.8b", "sadalp v20.2d, v21.4s",
+            "uadalp v22.4h, v23.8b", "uadalp v24.8h, v25.16b", "uadalp v26.2d, v27.4s",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorPairwiseLongAddInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlp v0.8b, v1.8b"))   // dest must be widened
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlp v0.4h, v1.16b"))  // Q mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlp v0.4h, v1.4s"))   // source element-size mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlp v0.1d, v1.1d"))   // source cannot be a D arrangement
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

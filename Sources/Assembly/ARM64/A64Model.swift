@@ -410,6 +410,27 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD two-register-misc pairwise long add (`SADDLP`/`UADDLP`)
+    /// and accumulate (`SADALP`/`UADALP`). Each adjacent pair of source elements
+    /// is summed into a destination element of twice the width.
+    enum VectorPairwiseLongAddKind: String, Equatable, CaseIterable {
+        case saddlp, uaddlp, sadalp, uadalp
+
+        /// The `U` bit at [29] and the 5-bit `opcode` at [16:12].
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .saddlp: return (0, 0b00010)
+            case .uaddlp: return (1, 0b00010)
+            case .sadalp: return (0, 0b00110)
+            case .uadalp: return (1, 0b00110)
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32) -> VectorPairwiseLongAddKind? {
+            allCases.first { $0.spec == (u, opcode) }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -1067,6 +1088,7 @@ internal enum A64 {
         case vectorCompareZero(VectorCompareZeroKind, destination: VectorRegister, source: VectorRegister)
         case vectorExtractNarrow(VectorExtractNarrowKind, destination: VectorRegister, source: VectorRegister)
         case vectorConvert(VectorConvertKind, destination: VectorRegister, source: VectorRegister)
+        case vectorPairwiseLongAdd(VectorPairwiseLongAddKind, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -1107,3 +1129,4 @@ internal typealias VectorTableLookupKind = A64.VectorTableLookupKind
 internal typealias VectorCompareZeroKind = A64.VectorCompareZeroKind
 internal typealias VectorExtractNarrowKind = A64.VectorExtractNarrowKind
 internal typealias VectorConvertKind = A64.VectorConvertKind
+internal typealias VectorPairwiseLongAddKind = A64.VectorPairwiseLongAddKind

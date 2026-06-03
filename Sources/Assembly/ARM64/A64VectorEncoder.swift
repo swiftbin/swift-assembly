@@ -834,6 +834,33 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    /// Maps a source arrangement to the pairwise-long-add destination, which has
+    /// the element width doubled but the same total width (`Q` preserved):
+    /// `8b→4h`, `16b→8h`, `4h→2s`, `8h→4s`, `2s→1d`, `4s→2d`.
+    private static func widenedArrangement(_ arrangement: A64.VectorArrangement) -> A64.VectorArrangement? {
+        switch arrangement {
+        case .b8: return .h4
+        case .b16: return .h8
+        case .h4: return .s2
+        case .h8: return .s4
+        case .s2: return .d1
+        case .s4: return .d2
+        case .d1, .d2: return nil
+        }
+    }
+
+    static func pairwiseLongAdd(_ kind: A64.VectorPairwiseLongAddKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        // The source is `8b/16b/4h/8h/2s/4s`; the destination has the element width
+        // doubled (same lane count halved, `Q` preserved).
+        guard let expectedDestination = widenedArrangement(rn.arrangement), rd.arrangement == expectedDestination else { throw fail() }
+
+        let spec = kind.spec
+        let size = rn.arrangement.elementSize
+        let head = (rn.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
+        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func tableLookup(_ kind: A64.VectorTableLookupKind, destination rd: VectorRegister, table: A64.VectorRegisterList, index rm: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
         // The destination and index share an 8b/16b arrangement; the table registers must be 16b.

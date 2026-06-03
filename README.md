@@ -52,6 +52,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD two-register-misc compare against zero (cmgt / cmeq / cmlt / cmge / cmle vs #0, and fcmgt / fcmeq / fcmlt / fcmge / fcmle vs #0.0)
 - Advanced SIMD two-register-misc extract-narrow (xtn(2) / sqxtn(2) / uqxtn(2) / sqxtun(2))
 - Advanced SIMD two-register-misc floating-point ↔ integer convert (fcvtns / fcvtnu / fcvtps / fcvtpu / fcvtms / fcvtmu / fcvtzs / fcvtzu / fcvtas / fcvtau / scvtf / ucvtf)
+- Advanced SIMD two-register-misc pairwise long add and accumulate (saddlp / uaddlp / sadalp / uadalp)
 - ...
 
 ## Usage
