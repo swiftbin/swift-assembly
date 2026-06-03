@@ -1151,6 +1151,66 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqrdmlah b0, b1, b2"))            // scalar byte not allowed
     }
 
+    func testVectorComplexInstructions() throws {
+        // FCADD (rotation #90 / #270).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcadd v0.4h, v1.4h, v2.4h, #90"), 0x2e42e420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcadd v0.4h, v1.4h, v2.4h, #270"), 0x2e42f420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcadd v0.2s, v1.2s, v2.2s, #90"), 0x2e82e420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcadd v0.4s, v1.4s, v2.4s, #270"), 0x6e82f420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcadd v0.2d, v1.2d, v2.2d, #90"), 0x6ec2e420)
+        // FCMLA vector (rotation #0 / #90 / #180 / #270).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.4h, #0"), 0x2e42c420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.4h, #90"), 0x2e42cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.4h, #180"), 0x2e42d420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.4h, #270"), 0x2e42dc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4s, v1.4s, v2.4s, #90"), 0x6e82cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.2d, v1.2d, v2.2d, #180"), 0x6ec2d420)
+        // FCMLA by element.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.h[0], #0"), 0x2f421020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.h[1], #90"), 0x2f623020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.8h, v1.8h, v2.h[3], #0"), 0x6f621820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4s, v1.4s, v2.s[0], #180"), 0x6f825020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4s, v1.4s, v2.s[1], #270"), 0x6f827820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmla v0.4s, v1.4s, v31.s[1], #0"), 0x6f9f1820)
+    }
+
+    func testDisassembleVectorComplex() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e42e420), "fcadd v0.4h, v1.4h, v2.4h, #90")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e82f420), "fcadd v0.4s, v1.4s, v2.4s, #270")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e42dc20), "fcmla v0.4h, v1.4h, v2.4h, #270")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ec2d420), "fcmla v0.2d, v1.2d, v2.2d, #180")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2f623020), "fcmla v0.4h, v1.4h, v2.h[1], #90")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6f827820), "fcmla v0.4s, v1.4s, v2.s[1], #270")
+    }
+
+    func testVectorComplexRoundTrip() throws {
+        let sources = [
+            "fcadd v0.4h, v1.4h, v2.4h, #90", "fcadd v3.8h, v4.8h, v5.8h, #270",
+            "fcadd v6.2s, v7.2s, v8.2s, #90", "fcadd v9.4s, v10.4s, v11.4s, #270",
+            "fcadd v12.2d, v13.2d, v14.2d, #90",
+            "fcmla v0.4h, v1.4h, v2.4h, #0", "fcmla v3.8h, v4.8h, v5.8h, #90",
+            "fcmla v6.2s, v7.2s, v8.2s, #180", "fcmla v9.4s, v10.4s, v11.4s, #270",
+            "fcmla v12.2d, v13.2d, v14.2d, #90",
+            "fcmla v0.4h, v1.4h, v15.h[3], #0", "fcmla v3.8h, v4.8h, v2.h[1], #90",
+            "fcmla v6.4s, v7.4s, v31.s[0], #180", "fcmla v9.4s, v10.4s, v17.s[1], #270",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorComplexInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcadd v0.4h, v1.4h, v2.4h, #0"))   // fcadd allows only 90/270
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcadd v0.8b, v1.8b, v2.8b, #90"))  // byte not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcadd v0.1d, v1.1d, v2.1d, #90"))  // 1d not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v2.4h, #45"))  // rotation must be multiple of 90
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmla v0.4h, v1.4h, v16.h[0], #0")) // half element Vm <= 15
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmla v0.4s, v1.4s, v2.s[2], #0"))  // single index <= 1
+    }
+
     func testVectorIndexedInstructions() throws {
         // Same forms (Vd.T, Vn.T, Vm.Ts[index]).
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.h[3]"), 0x0f728020)

@@ -1110,6 +1110,32 @@ internal enum A64InstructionParser {
                 return .vectorDotProductByElement(kind, destination: destination, first: first, elementRegister: element.number, index: element.index)
             }
             return .vectorDotProduct(kind, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "fcadd":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            return .vectorComplexAdd(
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                first: try A64Parser.vectorRegister(instruction.operands[1]),
+                second: try A64Parser.vectorRegister(instruction.operands[2]),
+                rotation: Int(try A64Parser.immediate(instruction.operands[3]))
+            )
+        case "fcmla":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            let first = try A64Parser.vectorRegister(instruction.operands[1])
+            let rotation = Int(try A64Parser.immediate(instruction.operands[3]))
+            if A64Parser.isVectorElementOperand(instruction.operands[2]) {
+                let element = try A64Parser.vectorElement(instruction.operands[2])
+                return .vectorComplexMultiplyAddByElement(
+                    destination: destination, first: first,
+                    elementRegister: element.number, index: UInt32(element.index), rotation: rotation
+                )
+            }
+            return .vectorComplexMultiplyAdd(
+                destination: destination, first: first,
+                second: try A64Parser.vectorRegister(instruction.operands[2]), rotation: rotation
+            )
         case "sqrdmlah", "sqrdmlsh":
             // The indexed forms (`..., Vm.Ts[i]`) are routed earlier via
             // VectorIndexedKind; here only the non-indexed three-same-extra

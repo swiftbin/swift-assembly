@@ -176,6 +176,13 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .scalarThreeSameExtra(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
+        case .vectorComplexAdd(let destination, let first, let second, let rotation):
+            return "fcadd \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second)), #\(rotation)"
+        case .vectorComplexMultiplyAdd(let destination, let first, let second, let rotation):
+            return "fcmla \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second)), #\(rotation)"
+        case .vectorComplexMultiplyAddByElement(let destination, let first, let elementRegister, let index, let rotation):
+            let elementWidth = destination.arrangement.elementSize == 0b01 ? "h" : "s"
+            return "fcmla \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).\(elementWidth)[\(index)], #\(rotation)"
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarPairwise(let kind, let destination, let source):

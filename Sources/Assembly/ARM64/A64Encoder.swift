@@ -180,6 +180,12 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.threeSameExtra(kind, destination: destination, first: first, second: second)
         case .scalarThreeSameExtra(let kind, let destination, let first, let second):
             return try A64VectorEncoder.scalarThreeSameExtra(kind, destination: destination, first: first, second: second)
+        case .vectorComplexAdd(let destination, let first, let second, let rotation):
+            return try A64VectorEncoder.complexAdd(destination: destination, first: first, second: second, rotation: rotation)
+        case .vectorComplexMultiplyAdd(let destination, let first, let second, let rotation):
+            return try A64VectorEncoder.complexMultiplyAdd(destination: destination, first: first, second: second, rotation: rotation)
+        case .vectorComplexMultiplyAddByElement(let destination, let first, let elementRegister, let index, let rotation):
+            return try A64VectorEncoder.complexMultiplyAddByElement(destination: destination, first: first, elementRegister: elementRegister, index: index, rotation: rotation)
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return try A64VectorEncoder.scalarThreeSame(kind, destination: destination, first: first, second: second)
         case .scalarPairwise(let kind, let destination, let source):

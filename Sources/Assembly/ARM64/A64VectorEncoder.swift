@@ -470,6 +470,79 @@ internal enum A64VectorEncoder {
         return head | (rm.encodedNumber << 16) | (kind.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - Complex number (FCADD / FCMLA)
+
+    /// Maps a complex-arithmetic arrangement (`4h`/`8h`/`2s`/`4s`/`2d`) to its
+    /// `size` field; `1d` and the byte forms are invalid.
+    private static func complexSize(_ arrangement: A64.VectorArrangement) -> UInt32? {
+        switch arrangement {
+        case .h4, .h8: return 0b01
+        case .s2, .s4: return 0b10
+        case .d2:      return 0b11
+        default:       return nil
+        }
+    }
+
+    static func complexAdd(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister, rotation: Int) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("fcadd") }
+        guard rd.arrangement == rn.arrangement, rn.arrangement == rm.arrangement,
+              let size = complexSize(rd.arrangement) else { throw fail() }
+        let rot: UInt32
+        switch rotation {
+        case 90:  rot = 0
+        case 270: rot = 1
+        default:  throw fail()
+        }
+        let base: UInt32 = 0x2e00_e400   // U=1, bits[28:24]=01110, bits[15:13]=111, bit10=1.
+        let head = (rd.arrangement.q << 30) | base | (size << 22)
+        return head | (rm.encodedNumber << 16) | (rot << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func complexMultiplyAdd(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister, rotation: Int) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("fcmla") }
+        guard rd.arrangement == rn.arrangement, rn.arrangement == rm.arrangement,
+              let size = complexSize(rd.arrangement) else { throw fail() }
+        guard rotation % 90 == 0, (0...270).contains(rotation) else { throw fail() }
+        let rot = UInt32(rotation / 90)
+        let base: UInt32 = 0x2e00_c400   // U=1, bits[28:24]=01110, bits[15:13]=110, bit10=1.
+        let head = (rd.arrangement.q << 30) | base | (size << 22)
+        return head | (rm.encodedNumber << 16) | (rot << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func complexMultiplyAddByElement(destination rd: VectorRegister, first rn: VectorRegister, elementRegister: UInt32, index: UInt32, rotation: Int) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("fcmla") }
+        guard rd.arrangement == rn.arrangement else { throw fail() }
+        guard rotation % 90 == 0, (0...270).contains(rotation) else { throw fail() }
+        let rot = UInt32(rotation / 90)
+
+        let size: UInt32
+        let l: UInt32, m: UInt32, h: UInt32, rm: UInt32
+        switch rd.arrangement {
+        case .h4, .h8:
+            // Half precision: index 0–3 as H:L, Vm restricted to V0–V15.
+            guard elementRegister <= 15, index <= 3 else { throw fail() }
+            size = 0b01
+            l = index & 1
+            h = (index >> 1) & 1
+            m = 0
+            rm = elementRegister & 0xf
+        case .s2, .s4:
+            // Single precision: index 0–1 as H, Vm is the full M:Rm register.
+            guard elementRegister <= 31, index <= 1 else { throw fail() }
+            size = 0b10
+            l = 0
+            h = index & 1
+            m = (elementRegister >> 4) & 1
+            rm = elementRegister & 0xf
+        default:
+            throw fail()
+        }
+
+        let base: UInt32 = 0x2f00_1000   // U=1, bits[28:24]=01111, bit12=1, bit10=0.
+        let head = (rd.arrangement.q << 30) | base | (size << 22)
+        return head | (l << 21) | (m << 20) | (rm << 16) | (rot << 13) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }

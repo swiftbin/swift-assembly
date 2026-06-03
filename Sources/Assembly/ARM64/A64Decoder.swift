@@ -48,6 +48,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorRoundReciprocal(word) { return instruction }
         if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
         if let instruction = decodeVectorThreeSameExtra(word) { return instruction }
+        if let instruction = decodeVectorComplex(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -56,6 +57,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorExtract(word) { return instruction }
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
         if let instruction = decodeVectorDotProduct(word) { return instruction }
+        if let instruction = decodeVectorComplexByElement(word) { return instruction }
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSameExtra(word) { return instruction }
         if let instruction = decodeScalarThreeSame(word) { return instruction }
@@ -1105,6 +1107,77 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: destination),
             source: VectorRegister(number: rnNum, arrangement: source)
         )
+    }
+
+    /// Maps a complex-arithmetic `size`/`Q` to its arrangement (`4h`/`8h`/`2s`/`4s`/`2d`).
+    private static func complexArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
+        switch (size, q) {
+        case (0b01, 0): return .h4
+        case (0b01, 1): return .h8
+        case (0b10, 0): return .s2
+        case (0b10, 1): return .s4
+        case (0b11, 1): return .d2
+        default:        return nil
+        }
+    }
+
+    private static func decodeVectorComplex(_ word: UInt32) -> Instruction? {
+        // bits[28:24]=01110, U=1, bit21=0, bits[15:14]=11, bit10=1.
+        guard word & 0xbf20_c400 == 0x2e00_c400 else { return nil }
+        let q = (word >> 30) & 1
+        let size = (word >> 22) & 3
+        guard let arrangement = complexArrangement(size: size, q: q) else { return nil }
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        let rd = VectorRegister(number: rdNum, arrangement: arrangement)
+        let rn = VectorRegister(number: rnNum, arrangement: arrangement)
+        let rm = VectorRegister(number: rmNum, arrangement: arrangement)
+
+        if (word >> 13) & 1 == 1 {
+            // FCADD: bit13=1, rotation in bit12 (0→#90, 1→#270), bit11=0.
+            guard (word >> 11) & 1 == 0 else { return nil }
+            let rotation = ((word >> 12) & 1) == 0 ? 90 : 270
+            return .vectorComplexAdd(destination: rd, first: rn, second: rm, rotation: rotation)
+        }
+        // FCMLA: bit13=0, rotation in bits[12:11].
+        let rotation = Int((word >> 11) & 3) * 90
+        return .vectorComplexMultiplyAdd(destination: rd, first: rn, second: rm, rotation: rotation)
+    }
+
+    private static func decodeVectorComplexByElement(_ word: UInt32) -> Instruction? {
+        // bits[28:24]=01111, U=1, bit12=1, bit10=0, bit15=0.
+        guard word & 0xbf00_9400 == 0x2f00_1000 else { return nil }
+        let q = (word >> 30) & 1
+        let size = (word >> 22) & 3
+        let l = (word >> 21) & 1
+        let m = (word >> 20) & 1
+        let rmField = (word >> 16) & 0xf
+        let rotation = Int((word >> 13) & 3) * 90
+        let h = (word >> 11) & 1
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        let arrangement: A64.VectorArrangement
+        let index: UInt32
+        let elementRegister: UInt32
+        switch (size, q) {
+        case (0b01, 0), (0b01, 1):
+            arrangement = q == 0 ? .h4 : .h8
+            index = (h << 1) | l
+            elementRegister = rmField
+        case (0b10, 0), (0b10, 1):
+            arrangement = q == 0 ? .s2 : .s4
+            guard l == 0 else { return nil }
+            index = h
+            elementRegister = (m << 4) | rmField
+        default:
+            return nil
+        }
+        return .vectorComplexMultiplyAddByElement(
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            first: VectorRegister(number: rnNum, arrangement: arrangement),
+            elementRegister: elementRegister, index: index, rotation: rotation)
     }
 
     private static func decodeVectorThreeSameExtra(_ word: UInt32) -> Instruction? {
