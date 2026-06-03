@@ -48,6 +48,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarThreeDifferent(word) { return instruction }
         if let instruction = decodeScalarIndexed(word) { return instruction }
         if let instruction = decodeScalarCopy(word) { return instruction }
+        if let instruction = decodeScalarFPTwoRegisterMisc(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1076,6 +1077,37 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: 64),
             source: floatRegister(number: rnNum, width: 64),
             shift: shift)
+    }
+
+    private static func decodeScalarFPTwoRegisterMisc(_ word: UInt32) -> Instruction? {
+        // Shares the scalar two-register misc base (bits[21:17]=10000, bits[11:10]=10),
+        // distinguished by (U, bit23, opcode). bit22 is the `sz` (single/double) bit.
+        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        let u = (word >> 29) & 1
+        let hi = (word >> 23) & 1
+        let sz = (word >> 22) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarFPTwoRegisterMiscKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.hi == hi && spec.opcode == opcode
+        }) else { return nil }
+
+        let destWidth: Int
+        let sourceWidth: Int
+        switch kind.spec.category {
+        case .convert, .compareZero:
+            let width = sz == 0 ? 32 : 64
+            destWidth = width; sourceWidth = width
+        case .narrow:
+            destWidth = 32; sourceWidth = 64
+        }
+
+        return .scalarFPTwoRegisterMisc(kind,
+            destination: floatRegister(number: rdNum, width: destWidth),
+            source: floatRegister(number: rnNum, width: sourceWidth))
     }
 
     private static func decodeScalarCopy(_ word: UInt32) -> Instruction? {

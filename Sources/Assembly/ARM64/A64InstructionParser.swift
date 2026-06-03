@@ -356,6 +356,37 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar FP two-register misc compare-against-zero (`Vd, Vn, #0.0`).
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[1]),
+           instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#"),
+           let kind = A64.ScalarFPTwoRegisterMiscKind(rawValue: mnemonic),
+           kind.spec.category == .compareZero,
+           (try? A64Parser.floatImmediate(instruction.operands[2])) == 0 {
+            return .scalarFPTwoRegisterMisc(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        }
+
+        // Advanced SIMD scalar FP two-register misc (FP converts / estimates / fcvtxn):
+        // two scalar FP register operands.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[1]),
+           let kind = A64.ScalarFPTwoRegisterMiscKind(rawValue: mnemonic),
+           kind.spec.category != .compareZero {
+            return .scalarFPTwoRegisterMisc(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD scalar three different (`Vd, Vn, Vm` — long saturating doubling).
         if parts.count == 1,
            instruction.operands.count == 3,

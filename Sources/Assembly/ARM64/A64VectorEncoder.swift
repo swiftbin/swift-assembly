@@ -504,6 +504,31 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarFPTwoRegisterMisc(_ kind: A64.ScalarFPTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        let sz: UInt32
+        switch spec.category {
+        case .convert, .compareZero:
+            // Single (`s`, sz=0) or double (`d`, sz=1); both operands share the width.
+            guard rd.width == rn.width else { throw fail() }
+            switch rd.width {
+            case 32: sz = 0
+            case 64: sz = 1
+            default: throw fail()
+            }
+        case .narrow:
+            // fcvtxn: narrows a double source to a single destination.
+            guard rd.width == 32, rn.width == 64 else { throw fail() }
+            sz = 1
+        }
+
+        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
+        let base: UInt32 = 0x5e20_0800
+        return base | (spec.u << 29) | (spec.hi << 23) | (sz << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarCopyDuplicate(destination rd: FloatRegister, element: A64.VectorElement) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister("dup") }
 

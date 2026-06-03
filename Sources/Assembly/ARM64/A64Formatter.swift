@@ -146,6 +146,9 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatVectorElement(element))"
         case .scalarCopyDuplicate(let destination, let element):
             return "mov \(formatFloatRegister(destination)), \(formatVectorElement(element))"
+        case .scalarFPTwoRegisterMisc(let kind, let destination, let source):
+            let zero = kind.spec.category == .compareZero ? ", #0.0" : ""
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(source))\(zero)"
         }
     }
 

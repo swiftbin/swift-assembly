@@ -637,6 +637,43 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar floating-point two-register misc (FP converts, reciprocal
+    /// estimates, the `fcvtxn` narrow, and the compare-against-`#0.0` forms).
+    enum ScalarFPTwoRegisterMiscKind: String, Equatable, CaseIterable {
+        case fcvtns, fcvtnu, fcvtms, fcvtmu, fcvtas, fcvtau, scvtf, ucvtf
+        case fcvtps, fcvtpu, fcvtzs, fcvtzu, frecpe, frsqrte, frecpx
+        case fcvtxn
+        case fcmgt, fcmge, fcmeq, fcmle, fcmlt   // compared against #0.0
+
+        enum Category { case convert, narrow, compareZero }
+
+        var spec: (u: UInt32, hi: UInt32, opcode: UInt32, category: Category) {
+            switch self {
+            case .fcvtns:  return (0, 0, 0b11010, .convert)
+            case .fcvtnu:  return (1, 0, 0b11010, .convert)
+            case .fcvtms:  return (0, 0, 0b11011, .convert)
+            case .fcvtmu:  return (1, 0, 0b11011, .convert)
+            case .fcvtas:  return (0, 0, 0b11100, .convert)
+            case .fcvtau:  return (1, 0, 0b11100, .convert)
+            case .scvtf:   return (0, 0, 0b11101, .convert)
+            case .ucvtf:   return (1, 0, 0b11101, .convert)
+            case .fcvtps:  return (0, 1, 0b11010, .convert)
+            case .fcvtpu:  return (1, 1, 0b11010, .convert)
+            case .fcvtzs:  return (0, 1, 0b11011, .convert)
+            case .fcvtzu:  return (1, 1, 0b11011, .convert)
+            case .frecpe:  return (0, 1, 0b11101, .convert)
+            case .frsqrte: return (1, 1, 0b11101, .convert)
+            case .frecpx:  return (0, 1, 0b11111, .convert)
+            case .fcvtxn:  return (1, 0, 0b10110, .narrow)
+            case .fcmgt:   return (0, 1, 0b01100, .compareZero)
+            case .fcmge:   return (1, 1, 0b01100, .compareZero)
+            case .fcmeq:   return (0, 1, 0b01101, .compareZero)
+            case .fcmle:   return (1, 1, 0b01101, .compareZero)
+            case .fcmlt:   return (0, 1, 0b01110, .compareZero)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar two-register misc (`Vd, Vn`, plus the compare-against-`#0` forms).
     enum ScalarTwoRegisterMiscKind: String, Equatable, CaseIterable {
         case abs, neg, sqabs, sqneg, suqadd, usqadd
@@ -760,6 +797,7 @@ internal enum A64 {
         case scalarThreeDifferent(ScalarThreeDifferentKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarIndexed(VectorIndexedKind, destination: FPRegister, first: FPRegister, element: VectorElement)
         case scalarCopyDuplicate(destination: FPRegister, element: VectorElement)
+        case scalarFPTwoRegisterMisc(ScalarFPTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
     }
 }
 
@@ -786,3 +824,4 @@ internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
 internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind
 internal typealias ScalarShiftImmediateKind = A64.ScalarShiftImmediateKind
 internal typealias ScalarThreeDifferentKind = A64.ScalarThreeDifferentKind
+internal typealias ScalarFPTwoRegisterMiscKind = A64.ScalarFPTwoRegisterMiscKind

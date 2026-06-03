@@ -1447,6 +1447,75 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup d0, v1.d[2]"))   // index out of range
     }
 
+    func testScalarFPTwoRegisterMiscInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns s0, s1"), 0x5e21a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns d0, d1"), 0x5e61a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtnu s0, s1"), 0x7e21a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtms s0, s1"), 0x5e21b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtmu s0, s1"), 0x7e21b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtps s0, s1"), 0x5ea1a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtpu s0, s1"), 0x7ea1a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs s0, s1"), 0x5ea1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu s0, s1"), 0x7ea1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtas s0, s1"), 0x5e21c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtau s0, s1"), 0x7e21c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, s1"), 0x5e21d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf s0, s1"), 0x7e21d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf d0, d1"), 0x5e61d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpe s0, s1"), 0x5ea1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrte s0, s1"), 0x7ea1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpx s0, s1"), 0x5ea1f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtxn s0, d1"), 0x7e616820)
+        // Compare against #0.0.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq s0, s1, #0.0"), 0x5ea0d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmge s0, s1, #0.0"), 0x7ea0c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt s0, s1, #0.0"), 0x5ea0c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmle s0, s1, #0.0"), 0x7ea0d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmlt s0, s1, #0.0"), 0x5ea0e820)
+    }
+
+    func testDisassembleScalarFPTwoRegisterMisc() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e21a820), "fcvtns s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e61d820), "scvtf d0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea1b820), "fcvtzs s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e616820), "fcvtxn s0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea0d820), "fcmeq s0, s1, #0.0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea0e820), "fcmlt s0, s1, #0.0")
+    }
+
+    func testScalarFPTwoRegisterMiscRoundTrip() throws {
+        let sources = [
+            "fcvtns s0, s1", "fcvtns d2, d3", "fcvtnu s4, s5", "fcvtms d6, d7",
+            "fcvtmu s8, s9", "fcvtps d10, d11", "fcvtpu s12, s13", "fcvtzs d14, d15",
+            "fcvtzu s16, s17", "fcvtas d18, d19", "fcvtau s20, s21", "scvtf d22, d23",
+            "ucvtf s24, s25", "frecpe d26, d27", "frsqrte s28, s29", "frecpx d30, d31",
+            "fcvtxn s0, d1",
+            "fcmgt s2, s3, #0.0", "fcmge d4, d5, #0.0", "fcmeq s6, s7, #0.0",
+            "fcmle d8, d9, #0.0", "fcmlt s10, s11, #0.0",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarFPTwoRegisterMiscInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtns b0, b1"))    // byte width unsupported
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtns s0, d1"))    // operand widths must match
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtxn d0, d1"))    // fcvtxn dest is single
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmeq s0, s1, #1.0")) // only #0.0 allowed
+    }
+
+    func testScalarFPConvertToGeneralStillResolves() throws {
+        // The general-register convert forms must keep their existing meaning.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs w0, s1"),
+                       try ARM64Assembler.assembleWord("fcvtzs w0, s1"))
+        XCTAssertNoThrow(try ARM64Assembler.assembleWord("fcvtzs w0, s1"))
+        XCTAssertNoThrow(try ARM64Assembler.assembleWord("scvtf s0, w1"))
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
