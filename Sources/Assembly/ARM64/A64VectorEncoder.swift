@@ -793,4 +793,14 @@ internal enum A64VectorEncoder {
             return [.s2, .s4, .d2].contains(arrangement)
         }
     }
+
+    static func tableLookup(_ kind: A64.VectorTableLookupKind, destination rd: VectorRegister, table: A64.VectorRegisterList, index rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        // The destination and index share an 8b/16b arrangement; the table registers must be 16b.
+        guard [A64.VectorArrangement.b8, .b16].contains(rd.arrangement), rd.arrangement == rm.arrangement else { throw fail() }
+        guard table.arrangement == .b16, (1...4).contains(table.count) else { throw fail() }
+        let q = rd.arrangement.q
+        let len = UInt32(table.count - 1)
+        return 0x0e00_0000 | (q << 30) | (rm.encodedNumber << 16) | (len << 13) | (kind.op << 12) | (table.encodedNumber << 5) | rd.encodedNumber
+    }
 }

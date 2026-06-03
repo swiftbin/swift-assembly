@@ -319,6 +319,14 @@ internal enum A64 {
         case saddlv, uaddlv, smaxv, umaxv, sminv, uminv, addv
     }
 
+    /// Advanced SIMD table lookup (`TBL` / `TBX`).
+    enum VectorTableLookupKind: String, Equatable {
+        case tbl, tbx
+
+        /// The `op` bit at [12] (0 for TBL, 1 for TBX).
+        var op: UInt32 { self == .tbx ? 1 : 0 }
+    }
+
     enum AcrossLanesFPKind: String, Equatable {
         case fmaxv, fminv, fmaxnmv, fminnmv
     }
@@ -976,6 +984,7 @@ internal enum A64 {
         case scalarShiftNarrow(ScalarShiftNarrowKind, destination: FPRegister, source: FPRegister, shift: Int)
         case scalarTwoRegisterMiscNarrow(ScalarTwoRegisterMiscNarrowKind, destination: FPRegister, source: FPRegister)
         case scalarShiftFixedPoint(ScalarShiftFixedPointKind, destination: FPRegister, source: FPRegister, fbits: Int)
+        case vectorTableLookup(VectorTableLookupKind, destination: VectorRegister, table: VectorRegisterList, index: VectorRegister)
     }
 }
 
@@ -1012,3 +1021,4 @@ internal typealias ScalarThreeSameFPKind = A64.ScalarThreeSameFPKind
 internal typealias ScalarShiftNarrowKind = A64.ScalarShiftNarrowKind
 internal typealias ScalarTwoRegisterMiscNarrowKind = A64.ScalarTwoRegisterMiscNarrowKind
 internal typealias ScalarShiftFixedPointKind = A64.ScalarShiftFixedPointKind
+internal typealias VectorTableLookupKind = A64.VectorTableLookupKind

@@ -804,6 +804,16 @@ internal enum A64InstructionParser {
                 registers: list,
                 address: try A64Parser.vectorMemoryOperand(instruction.operands, baseIndex: 1, expectedPostImmediate: expected)
             )
+        case "tbl", "tbx":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.VectorTableLookupKind(rawValue: mnemonic)!
+            return .vectorTableLookup(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                table: try A64Parser.vectorRegisterList(instruction.operands[1]),
+                index: try A64Parser.vectorRegister(instruction.operands[2])
+            )
         case "ld1r", "ld2r", "ld3r", "ld4r":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)

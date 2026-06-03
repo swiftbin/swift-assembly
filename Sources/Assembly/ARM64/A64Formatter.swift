@@ -73,6 +73,8 @@ internal enum A64InstructionFormatter {
         case .loadStoreSingleLane(let kind, let registers, let address):
             let bytes = registers.count << registers.width.sizeShift
             return "\(kind.rawValue) \(formatVectorLaneList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
+        case .vectorTableLookup(let kind, let destination, let table, let index):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegisterList(table)), \(formatVectorRegister(index))"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"

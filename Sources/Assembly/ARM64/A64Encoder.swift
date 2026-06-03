@@ -196,6 +196,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.scalarTwoRegisterMiscNarrow(kind, destination: destination, source: source)
         case .scalarShiftFixedPoint(let kind, let destination, let source, let fbits):
             return try A64VectorEncoder.scalarShiftFixedPoint(kind, destination: destination, source: source, fbits: fbits)
+        case .vectorTableLookup(let kind, let destination, let table, let index):
+            return try A64VectorEncoder.tableLookup(kind, destination: destination, table: table, index: index)
         }
     }
 }

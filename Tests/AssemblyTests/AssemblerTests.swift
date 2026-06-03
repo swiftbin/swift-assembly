@@ -1892,6 +1892,47 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld2r {v0.16b}, [x1]"))          // LD2R needs 2 registers
     }
 
+    func testVectorTableLookupInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.16b}, v2.8b"), 0x0e020020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbl v0.16b, {v1.16b}, v2.16b"), 0x4e020020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.16b, v2.16b}, v3.8b"), 0x0e032020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbl v0.16b, {v1.16b, v2.16b, v3.16b}, v4.16b"), 0x4e044020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.16b, v2.16b, v3.16b, v4.16b}, v5.8b"), 0x0e056020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbx v0.8b, {v1.16b}, v2.8b"), 0x0e021020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbx v0.16b, {v1.16b, v2.16b}, v3.16b"), 0x4e033020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbx v0.8b, {v30.16b, v31.16b, v0.16b}, v5.8b"), 0x0e0553c0)  // register wrap-around
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tbl v7.16b, {v31.16b, v0.16b, v1.16b, v2.16b}, v8.16b"), 0x4e0863e7)
+    }
+
+    func testDisassembleVectorTableLookup() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e020020), "tbl v0.8b, {v1.16b}, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e044020), "tbl v0.16b, {v1.16b, v2.16b, v3.16b}, v4.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e021020), "tbx v0.8b, {v1.16b}, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e0863e7), "tbl v7.16b, {v31.16b, v0.16b, v1.16b, v2.16b}, v8.16b")
+    }
+
+    func testVectorTableLookupRoundTrip() throws {
+        let sources = [
+            "tbl v0.8b, {v1.16b}, v2.8b", "tbl v0.16b, {v1.16b}, v2.16b",
+            "tbl v0.8b, {v1.16b, v2.16b}, v3.8b", "tbx v5.16b, {v10.16b, v11.16b, v12.16b}, v13.16b",
+            "tbx v0.8b, {v30.16b, v31.16b, v0.16b}, v5.8b",
+            "tbl v7.16b, {v31.16b, v0.16b, v1.16b, v2.16b}, v8.16b",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorTableLookupInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.8b}, v2.8b"))         // table must be 16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.16b}, v2.16b"))       // dst/index arrangement mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("tbl v0.4s, {v1.16b}, v2.4s"))        // dst must be 8b/16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("tbl v0.8b, {v1.16b, v3.16b}, v2.8b")) // non-consecutive table
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

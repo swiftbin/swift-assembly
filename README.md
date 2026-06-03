@@ -48,6 +48,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - SIMD&FP load/store register (ldr / str / ldur / stur of b/h/s/d/q) and pair (ldp / stp of s/d/q), with all addressing modes
 - Advanced SIMD load/store multiple structures (ld1–ld4 / st1–st4) with brace-delimited register lists and the `[Xn]`, `[Xn], #imm`, `[Xn], Xm` addressing forms
 - Advanced SIMD load/store single structure and replicate (ld1r–ld4r, and the single-lane ld1–ld4 / st1–st4 `{v0.s}[1]` forms) with all addressing modes
+- Advanced SIMD table lookup (tbl / tbx) with 1–4 register table lists
 - ...
 
 ## Usage

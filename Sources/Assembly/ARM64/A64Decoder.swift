@@ -29,6 +29,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeLoadStorePairFP(word) { return instruction }
         if let instruction = decodeLoadStoreMultiple(word) { return instruction }
         if let instruction = decodeLoadStoreSingleStructure(word) { return instruction }
+        if let instruction = decodeVectorTableLookup(word) { return instruction }
         if let instruction = decodeFPDataProcessing3(word) { return instruction }
         if let instruction = decodeFPDataProcessing2(word) { return instruction }
         if let instruction = decodeFPDataProcessing1(word) { return instruction }
@@ -608,6 +609,27 @@ internal enum A64InstructionDecoder {
         guard let kind = A64.LoadStoreMultipleKind.forStructure(selem, isLoad: l == 1) else { return nil }
         let list = A64.VectorLaneList(firstNumber: rt, count: selem, width: width, index: index)
         return .loadStoreSingleLane(kind, registers: list, address: address())
+    }
+
+    private static func decodeVectorTableLookup(_ word: UInt32) -> Instruction? {
+        // Advanced SIMD table lookup: bit31=0, bits[29:24]=001110, bits[23:21]=000,
+        // bit15=0, bits[11:10]=00.
+        guard word & 0xbfe0_8c00 == 0x0e00_0000 else { return nil }
+        let q = (word >> 30) & 1
+        let rm = (word >> 16) & 0x1f
+        let len = (word >> 13) & 3
+        let op = (word >> 12) & 1
+        let rn = (word >> 5) & 0x1f
+        let rd = word & 0x1f
+        let arrangement: A64.VectorArrangement = q == 1 ? .b16 : .b8
+        let kind: A64.VectorTableLookupKind = op == 1 ? .tbx : .tbl
+        let table = A64.VectorRegisterList(firstNumber: rn, count: Int(len) + 1, arrangement: .b16)
+        return .vectorTableLookup(
+            kind,
+            destination: A64.VectorRegister(number: rd, arrangement: arrangement),
+            table: table,
+            index: A64.VectorRegister(number: rm, arrangement: arrangement)
+        )
     }
 
     private static func fullVectorArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
