@@ -47,6 +47,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorConvert(word) { return instruction }
         if let instruction = decodeVectorRoundReciprocal(word) { return instruction }
         if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
+        if let instruction = decodeVectorThreeSameExtra(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -56,6 +57,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
         if let instruction = decodeVectorDotProduct(word) { return instruction }
         if let instruction = decodeVectorIndexed(word) { return instruction }
+        if let instruction = decodeScalarThreeSameExtra(word) { return instruction }
         if let instruction = decodeScalarThreeSame(word) { return instruction }
         if let instruction = decodeScalarPairwise(word) { return instruction }
         if let instruction = decodeScalarTwoRegisterMisc(word) { return instruction }
@@ -1103,6 +1105,51 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: destination),
             source: VectorRegister(number: rnNum, arrangement: source)
         )
+    }
+
+    private static func decodeVectorThreeSameExtra(_ word: UInt32) -> Instruction? {
+        // bits[28:24]=01110, U=1, bit21=0, bit15=1, bit10=1.
+        guard word & 0xbf20_8400 == 0x2e00_8400 else { return nil }
+        let q = (word >> 30) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 11) & 0xf
+        guard let kind = A64.VectorThreeSameExtraKind.decode(opcode: opcode) else { return nil }
+        let arrangement: A64.VectorArrangement
+        switch (size, q) {
+        case (0b01, 0): arrangement = .h4
+        case (0b01, 1): arrangement = .h8
+        case (0b10, 0): arrangement = .s2
+        case (0b10, 1): arrangement = .s4
+        default: return nil
+        }
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        return .vectorThreeSameExtra(kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            first: VectorRegister(number: rnNum, arrangement: arrangement),
+            second: VectorRegister(number: rmNum, arrangement: arrangement))
+    }
+
+    private static func decodeScalarThreeSameExtra(_ word: UInt32) -> Instruction? {
+        // bit30=1, bits[28:24]=11110, U=1, bit21=0, bit15=1, bit10=1.
+        guard word & 0xff20_8400 == 0x7e00_8400 else { return nil }
+        let size = (word >> 22) & 3
+        let opcode = (word >> 11) & 0xf
+        guard let kind = A64.VectorThreeSameExtraKind.decode(opcode: opcode) else { return nil }
+        let width: Int
+        switch size {
+        case 0b01: width = 16
+        case 0b10: width = 32
+        default: return nil
+        }
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        return .scalarThreeSameExtra(kind,
+            destination: floatRegister(number: rdNum, width: width),
+            first: floatRegister(number: rnNum, width: width),
+            second: floatRegister(number: rmNum, width: width))
     }
 
     private static func decodeVectorThreeSame(_ word: UInt32) -> Instruction? {

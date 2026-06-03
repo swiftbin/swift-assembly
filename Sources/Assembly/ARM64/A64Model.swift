@@ -597,6 +597,25 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD three-same-extra saturating rounding multiply-accumulate
+    /// instructions (ARMv8.1): the non-indexed `Vd, Vn, Vm` forms. The indexed
+    /// forms reuse `VectorIndexedKind`.
+    enum VectorThreeSameExtraKind: String, Equatable, CaseIterable {
+        case sqrdmlah, sqrdmlsh
+
+        /// The 4-bit `opcode` at [14:11] (`U` is always 1, bits 15 and 10 are 1).
+        var opcode: UInt32 {
+            switch self {
+            case .sqrdmlah: return 0b0000
+            case .sqrdmlsh: return 0b0001
+            }
+        }
+
+        static func decode(opcode: UInt32) -> VectorThreeSameExtraKind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -910,7 +929,7 @@ internal enum A64 {
     /// forms are the floating-point equivalents; `long` forms widen the
     /// result (`Vd.Ta, Vn.Tb, Vm.Ts[i]`, with a `2` upper-half variant).
     enum VectorIndexedKind: String, Equatable, CaseIterable {
-        case mul, mla, mls, sqdmulh, sqrdmulh
+        case mul, mla, mls, sqdmulh, sqrdmulh, sqrdmlah, sqrdmlsh
         case fmul, fmla, fmls, fmulx
         case smull, umull, smlal, umlal, smlsl, umlsl, sqdmull, sqdmlal, sqdmlsl
 
@@ -923,6 +942,8 @@ internal enum A64 {
             case .mul: return (.same, 0, 0b1000)
             case .sqdmulh: return (.same, 0, 0b1100)
             case .sqrdmulh: return (.same, 0, 0b1101)
+            case .sqrdmlah: return (.same, 1, 0b1101)
+            case .sqrdmlsh: return (.same, 1, 0b1111)
             case .fmla: return (.fp, 0, 0b0001)
             case .fmls: return (.fp, 0, 0b0101)
             case .fmul: return (.fp, 0, 0b1001)
@@ -1241,6 +1262,8 @@ internal enum A64 {
         case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
         case vectorDotProduct(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorDotProductByElement(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
+        case vectorThreeSameExtra(VectorThreeSameExtraKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case scalarThreeSameExtra(VectorThreeSameExtraKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
         case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
@@ -1290,6 +1313,7 @@ internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias VectorDotProductKind = A64.VectorDotProductKind
+internal typealias VectorThreeSameExtraKind = A64.VectorThreeSameExtraKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
 internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
 internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind

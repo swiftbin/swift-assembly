@@ -33,6 +33,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD permute (zip1 / zip2 / uzp1 / uzp2 / trn1 / trn2) and extract (ext)
 - Advanced SIMD three-different (saddl(2) / ssubl / saddw / addhn(2) / subhn / sabal / sabdl / smlal / smlsl / smull(2) / pmull(2) including the 64→128 polynomial `.1q` form / sqdmull / sqdmlal / sqdmlsl and the unsigned / rounding variants)
 - Advanced SIMD dot product (sdot / udot) in both the vector (`.2s/.4s, .8b/.16b`) and by-element (`.4b[index]`) forms
+- Advanced SIMD saturating rounding multiply-accumulate (sqrdmlah / sqrdmlsh) in the vector, scalar, and by-element forms
 - Advanced SIMD vector x indexed element (mul / mla / mls / sqdmulh / sqrdmulh / fmul / fmla / fmls / fmulx and the long smull(2) / umull / smlal / umlsl / sqdmull / sqdmlal(2) / sqdmlsl forms)
 - Advanced SIMD scalar three-same (add / sub / cmeq / cmge / cmgt / cmhi / cmhs / cmtst / sqadd / uqadd / sqsub / uqsub / sshl / ushl / srshl / urshl / sqshl / uqshl / sqrshl / uqrshl / sqdmulh / sqrdmulh)
 - Advanced SIMD scalar pairwise reductions (addp / faddp / fmaxp / fminp / fmaxnmp / fminnmp)

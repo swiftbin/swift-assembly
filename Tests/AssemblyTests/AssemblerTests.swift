@@ -1094,6 +1094,63 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.8b[0]")) // element must be 4b
     }
 
+    func testVectorThreeSameExtraInstructions() throws {
+        // Vector non-indexed forms (Vd.T, Vn.T, Vm.T) with T in {4h,8h,2s,4s}.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.4h, v1.4h, v2.4h"), 0x2e428420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.8h, v1.8h, v2.8h"), 0x6e428420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.2s, v1.2s, v2.2s"), 0x2e828420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.4s, v1.4s, v2.4s"), 0x6e828420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlsh v0.4h, v1.4h, v2.4h"), 0x2e428c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlsh v0.4s, v1.4s, v2.4s"), 0x6e828c20)
+        // Scalar non-indexed forms (Hd/Sd, ...).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah h0, h1, h2"), 0x7e428420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah s0, s1, s2"), 0x7e828420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlsh h0, h1, h2"), 0x7e428c20)
+        // Vector by-element forms (Vm.Ts[index]), reusing the indexed encoding.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.4h, v1.4h, v2.h[3]"), 0x2f72d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.4s, v1.4s, v2.s[1]"), 0x6fa2d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlsh v0.8h, v1.8h, v2.h[7]"), 0x6f72f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlsh v0.4s, v1.4s, v2.s[3]"), 0x6fa2f820)
+        // Scalar by-element forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah h0, h1, v2.h[3]"), 0x7f72d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah s0, s1, v2.s[2]"), 0x7f82d820)
+    }
+
+    func testDisassembleVectorThreeSameExtra() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e428420), "sqrdmlah v0.4h, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e828c20), "sqrdmlsh v0.4s, v1.4s, v2.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e428420), "sqrdmlah h0, h1, h2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2f72d020), "sqrdmlah v0.4h, v1.4h, v2.h[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f82d820), "sqrdmlah s0, s1, v2.s[2]")
+    }
+
+    func testVectorThreeSameExtraRoundTrip() throws {
+        let sources = [
+            "sqrdmlah v0.4h, v1.4h, v2.4h", "sqrdmlah v3.8h, v4.8h, v5.8h",
+            "sqrdmlah v6.2s, v7.2s, v8.2s", "sqrdmlah v9.4s, v10.4s, v11.4s",
+            "sqrdmlsh v12.4h, v13.4h, v14.4h", "sqrdmlsh v15.4s, v16.4s, v17.4s",
+            "sqrdmlah h0, h1, h2", "sqrdmlah s3, s4, s5",
+            "sqrdmlsh h6, h7, h8", "sqrdmlsh s9, s10, s11",
+            "sqrdmlah v18.4h, v19.4h, v15.h[5]", "sqrdmlah v21.4s, v22.4s, v23.s[3]",
+            "sqrdmlsh v24.8h, v25.8h, v14.h[2]", "sqrdmlsh v27.4s, v28.4s, v29.s[0]",
+            "sqrdmlah h12, h13, v14.h[7]", "sqrdmlah s15, s16, v17.s[1]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorThreeSameExtraInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqrdmlah v0.8b, v1.8b, v2.8b"))   // byte not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqrdmlah v0.2d, v1.2d, v2.2d"))   // double not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqrdmlah v0.4h, v1.4h, v2.8h"))   // arrangements must match
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqrdmlah d0, d1, d2"))            // scalar double not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqrdmlah b0, b1, b2"))            // scalar byte not allowed
+    }
+
     func testVectorIndexedInstructions() throws {
         // Same forms (Vd.T, Vn.T, Vm.Ts[index]).
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.h[3]"), 0x0f728020)

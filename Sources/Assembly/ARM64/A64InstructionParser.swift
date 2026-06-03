@@ -1110,6 +1110,27 @@ internal enum A64InstructionParser {
                 return .vectorDotProductByElement(kind, destination: destination, first: first, elementRegister: element.number, index: element.index)
             }
             return .vectorDotProduct(kind, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "sqrdmlah", "sqrdmlsh":
+            // The indexed forms (`..., Vm.Ts[i]`) are routed earlier via
+            // VectorIndexedKind; here only the non-indexed three-same-extra
+            // forms remain: scalar (`Hd, Hn, Hm`) or vector (`Vd.T, Vn.T, Vm.T`).
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.VectorThreeSameExtraKind(rawValue: mnemonic)!
+            if instruction.operands.allSatisfy(A64Parser.isScalarFloatRegisterOperand) {
+                return .scalarThreeSameExtra(
+                    kind,
+                    destination: try A64Parser.floatRegister(instruction.operands[0]),
+                    first: try A64Parser.floatRegister(instruction.operands[1]),
+                    second: try A64Parser.floatRegister(instruction.operands[2])
+                )
+            }
+            return .vectorThreeSameExtra(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                first: try A64Parser.vectorRegister(instruction.operands[1]),
+                second: try A64Parser.vectorRegister(instruction.operands[2])
+            )
         case "rev64", "rev32", "rev16", "abs", "neg", "not", "rbit", "cnt", "cls", "clz", "sqabs", "sqneg", "suqadd", "usqadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

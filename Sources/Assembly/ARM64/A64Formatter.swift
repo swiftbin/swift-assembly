@@ -172,6 +172,10 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .vectorDotProductByElement(let kind, let destination, let first, let elementRegister, let index):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).4b[\(index)]"
+        case .vectorThreeSameExtra(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .scalarThreeSameExtra(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarPairwise(let kind, let destination, let source):

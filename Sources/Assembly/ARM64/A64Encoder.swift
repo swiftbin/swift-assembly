@@ -176,6 +176,10 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.dotProduct(kind, destination: destination, first: first, second: second)
         case .vectorDotProductByElement(let kind, let destination, let first, let elementRegister, let index):
             return try A64VectorEncoder.dotProductByElement(kind, destination: destination, first: first, elementRegister: elementRegister, index: index)
+        case .vectorThreeSameExtra(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.threeSameExtra(kind, destination: destination, first: first, second: second)
+        case .scalarThreeSameExtra(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.scalarThreeSameExtra(kind, destination: destination, first: first, second: second)
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return try A64VectorEncoder.scalarThreeSame(kind, destination: destination, first: first, second: second)
         case .scalarPairwise(let kind, let destination, let source):

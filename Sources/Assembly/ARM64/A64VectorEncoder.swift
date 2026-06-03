@@ -440,6 +440,36 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - Three-same extra (saturating rounding multiply-accumulate)
+
+    static func threeSameExtra(_ kind: A64.VectorThreeSameExtraKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard rd.arrangement == rn.arrangement, rn.arrangement == rm.arrangement else { throw fail() }
+        let size: UInt32
+        switch rd.arrangement {
+        case .h4, .h8: size = 0b01
+        case .s2, .s4: size = 0b10
+        default: throw fail()
+        }
+        let base: UInt32 = 0x0e00_8400   // bits[28:24]=01110, bit15=1, bit10=1.
+        let head = (rd.arrangement.q << 30) | (1 << 29) | base | (size << 22)
+        return head | (rm.encodedNumber << 16) | (kind.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func scalarThreeSameExtra(_ kind: A64.VectorThreeSameExtraKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard rd.width == rn.width, rn.width == rm.width else { throw fail() }
+        let size: UInt32
+        switch rd.width {
+        case 16: size = 0b01
+        case 32: size = 0b10
+        default: throw fail()
+        }
+        let base: UInt32 = 0x5e00_8400   // bit30=1, bits[28:24]=11110, bit15=1, bit10=1.
+        let head = (1 << 29) | base | (size << 22)
+        return head | (rm.encodedNumber << 16) | (kind.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
