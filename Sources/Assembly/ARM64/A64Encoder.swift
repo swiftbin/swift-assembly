@@ -138,6 +138,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.acrossLanesFP(kind, destination: destination, source: source)
         case .vectorTwoRegisterMisc(let kind, let destination, let source):
             return try A64VectorEncoder.twoRegisterMisc(kind, destination: destination, source: source)
+        case .vectorThreeSame(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.threeSame(kind, destination: destination, first: first, second: second)
         }
     }
 }

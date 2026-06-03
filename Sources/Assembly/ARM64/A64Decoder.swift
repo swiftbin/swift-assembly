@@ -33,6 +33,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
+        if let instruction = decodeVectorThreeSame(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -617,6 +618,74 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: arrangement),
             source: VectorRegister(number: rnNum, arrangement: arrangement)
         )
+    }
+
+    private static func decodeVectorThreeSame(_ word: UInt32) -> Instruction? {
+        // bits[28:24]=01110, bit21=1, bit10=1 — unique to the three-same group.
+        guard word & 0x9f20_0400 == 0x0e20_0400 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 11) & 0x1f
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        let family: A64.VectorThreeSameKind.Family
+        let variant: UInt32
+        let arrangement: A64.VectorArrangement
+        if opcode >= 0b11000 {
+            // Floating-point group: `a` at bit23, `sz` at bit22.
+            family = .floatingPoint
+            variant = (word >> 23) & 1
+            let sz = (word >> 22) & 1
+            switch (sz, q) {
+            case (0, 0): arrangement = .s2
+            case (0, 1): arrangement = .s4
+            case (1, 1): arrangement = .d2
+            default: return nil
+            }
+        } else if opcode == 0b00011 {
+            // Size-selected logical group.
+            family = .logical
+            variant = size
+            switch q {
+            case 0: arrangement = .b8
+            default: arrangement = .b16
+            }
+        } else {
+            family = .integer
+            variant = 0
+            guard let arr = threeSameIntegerArrangement(size: size, q: q) else { return nil }
+            arrangement = arr
+        }
+
+        guard let kind = A64.VectorThreeSameKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.family == family && spec.u == u && spec.opcode == opcode && spec.variant == variant
+        }) else { return nil }
+        guard kind.allowedArrangements.contains(arrangement) else { return nil }
+
+        return .vectorThreeSame(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            first: VectorRegister(number: rnNum, arrangement: arrangement),
+            second: VectorRegister(number: rmNum, arrangement: arrangement)
+        )
+    }
+
+    /// Maps `size`/`Q` to an integer three-same arrangement; `1d` (size=11,Q=0) is reserved.
+    private static func threeSameIntegerArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
+        switch (size, q) {
+        case (0b00, 0): return .b8
+        case (0b00, 1): return .b16
+        case (0b01, 0): return .h4
+        case (0b01, 1): return .h8
+        case (0b10, 0): return .s2
+        case (0b10, 1): return .s4
+        case (0b11, 1): return .d2
+        default: return nil
+        }
     }
 
     /// Reconstructs an integer across-lanes source arrangement; `2s`/`1d`/`2d` are reserved.

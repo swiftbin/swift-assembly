@@ -291,6 +291,9 @@ internal enum A64InstructionParser {
             )
         case "add", "adds", "sub", "subs":
             guard parts.count == 1 else { return nil }
+            if (mnemonic == "add" || mnemonic == "sub"), allOperandsAreVectorRegisters(instruction) {
+                return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
+            }
             try expectOperandCount(instruction, 3...4)
             return .addSub(
                 A64.AddSubKind(rawValue: mnemonic)!,
@@ -308,6 +311,9 @@ internal enum A64InstructionParser {
             )
         case "and", "ands", "orr", "eor", "bic", "bics", "orn", "eon":
             guard parts.count == 1 else { return nil }
+            if ["and", "orr", "eor", "bic", "orn"].contains(mnemonic), allOperandsAreVectorRegisters(instruction) {
+                return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
+            }
             try expectOperandCount(instruction, 3...4)
             return .logical(
                 A64.LogicalKind(rawValue: mnemonic)!,
@@ -354,6 +360,9 @@ internal enum A64InstructionParser {
             return .extractOrRotateAlias(kind, destination: destination, first: first, operand: operand)
         case "mul", "mneg", "madd", "msub":
             guard parts.count == 1 else { return nil }
+            if mnemonic == "mul", allOperandsAreVectorRegisters(instruction) {
+                return try vectorThreeSame(instruction, kind: .mul)
+            }
             let kind = A64.MultiplyKind(rawValue: mnemonic)!
             try expectOperandCount(instruction, exactly: (kind == .madd || kind == .msub) ? 4 : 3)
             return .multiply(
@@ -400,6 +409,9 @@ internal enum A64InstructionParser {
             )
         case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
             guard parts.count == 1 else { return nil }
+            if mnemonic != "fnmul", allOperandsAreVectorRegisters(instruction) {
+                return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
+            }
             try expectOperandCount(instruction, exactly: 3)
             return .fpDataProcessing2(
                 A64.FPDataProcessing2Kind(rawValue: mnemonic)!,
@@ -514,6 +526,23 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "shadd", "uhadd", "sqadd", "uqadd", "srhadd", "urhadd",
+             "shsub", "uhsub", "sqsub", "uqsub",
+             "cmgt", "cmhi", "cmge", "cmhs",
+             "sshl", "ushl", "sqshl", "uqshl", "srshl", "urshl", "sqrshl", "uqrshl",
+             "smax", "umax", "smin", "umin",
+             "sabd", "uabd", "saba", "uaba",
+             "cmtst", "cmeq",
+             "mla", "mls", "pmul",
+             "smaxp", "umaxp", "sminp", "uminp",
+             "sqdmulh", "sqrdmulh", "addp",
+             "bsl", "bit", "bif",
+             "fmla", "fmulx", "fcmeq", "frecps",
+             "fmls", "frsqrts",
+             "fmaxnmp", "faddp", "fcmge", "facge", "fmaxp",
+             "fminnmp", "fabd", "fcmgt", "facgt", "fminp":
+            guard parts.count == 1 else { return nil }
+            return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
         default:
             return nil
         }
@@ -562,10 +591,27 @@ internal enum A64InstructionParser {
 
     private static func operandsAreVectorRegisters(_ instruction: ParsedInstruction) -> Bool {
         guard instruction.operands.count == 2 else { return false }
-        return instruction.operands.allSatisfy {
-            let trimmed = $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-            return trimmed.hasPrefix("v") && trimmed.contains(".")
-        }
+        return instruction.operands.allSatisfy(isVectorRegisterOperand)
+    }
+
+    /// True when every operand looks like an arrangement-qualified vector register (`v0.4s`).
+    private static func allOperandsAreVectorRegisters(_ instruction: ParsedInstruction) -> Bool {
+        !instruction.operands.isEmpty && instruction.operands.allSatisfy(isVectorRegisterOperand)
+    }
+
+    private static func isVectorRegisterOperand(_ operand: String) -> Bool {
+        let trimmed = operand.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return trimmed.hasPrefix("v") && trimmed.contains(".")
+    }
+
+    static func vectorThreeSame(_ instruction: ParsedInstruction, kind: A64.VectorThreeSameKind) throws -> Instruction {
+        try expectOperandCount(instruction, exactly: 3)
+        return .vectorThreeSame(
+            kind,
+            destination: try A64Parser.vectorRegister(instruction.operands[0]),
+            first: try A64Parser.vectorRegister(instruction.operands[1]),
+            second: try A64Parser.vectorRegister(instruction.operands[2])
+        )
     }
 }
 

@@ -226,6 +226,142 @@ internal enum A64 {
         case fabs, fneg, fsqrt
     }
 
+    /// Advanced SIMD "three same" instructions (`Vd.T, Vn.T, Vm.T`).
+    ///
+    /// Covers the integer opcode-table group, the size-selected logical group
+    /// (`and`/`bic`/`orr`/`orn`/`eor`/`bsl`/`bit`/`bif`), and the
+    /// single/double-precision floating-point group.
+    enum VectorThreeSameKind: String, Equatable, CaseIterable {
+        // Integer opcode-table group.
+        case shadd, uhadd, sqadd, uqadd, srhadd, urhadd
+        case shsub, uhsub, sqsub, uqsub
+        case cmgt, cmhi, cmge, cmhs
+        case sshl, ushl, sqshl, uqshl, srshl, urshl, sqrshl, uqrshl
+        case smax, umax, smin, umin
+        case sabd, uabd, saba, uaba
+        case add, sub, cmtst, cmeq
+        case mla, mls, mul, pmul
+        case smaxp, umaxp, sminp, uminp
+        case sqdmulh, sqrdmulh, addp
+        // Size-selected logical group (`.8b`/`.16b` only).
+        case and, bic, orr, orn, eor, bsl, bit, bif
+        // Floating-point group (`.2s`/`.4s`/`.2d`).
+        case fmaxnm, fmla, fadd, fmulx, fcmeq, fmax, frecps
+        case fminnm, fmls, fsub, fmin, frsqrts
+        case fmaxnmp, faddp, fmul, fcmge, facge, fmaxp, fdiv
+        case fminnmp, fabd, fcmgt, facgt, fminp
+
+        enum Family: Equatable { case integer, logical, floatingPoint }
+
+        /// Encoding metadata: which sub-encoding, the `U` bit, the 5-bit
+        /// `opcode`, and a `variant` (FP `a` bit at [23], or the logical group's
+        /// `size` selector at [23:22]; unused for the integer group).
+        var spec: (family: Family, u: UInt32, opcode: UInt32, variant: UInt32) {
+            switch self {
+            case .shadd: return (.integer, 0, 0b00000, 0)
+            case .uhadd: return (.integer, 1, 0b00000, 0)
+            case .sqadd: return (.integer, 0, 0b00001, 0)
+            case .uqadd: return (.integer, 1, 0b00001, 0)
+            case .srhadd: return (.integer, 0, 0b00010, 0)
+            case .urhadd: return (.integer, 1, 0b00010, 0)
+            case .shsub: return (.integer, 0, 0b00100, 0)
+            case .uhsub: return (.integer, 1, 0b00100, 0)
+            case .sqsub: return (.integer, 0, 0b00101, 0)
+            case .uqsub: return (.integer, 1, 0b00101, 0)
+            case .cmgt: return (.integer, 0, 0b00110, 0)
+            case .cmhi: return (.integer, 1, 0b00110, 0)
+            case .cmge: return (.integer, 0, 0b00111, 0)
+            case .cmhs: return (.integer, 1, 0b00111, 0)
+            case .sshl: return (.integer, 0, 0b01000, 0)
+            case .ushl: return (.integer, 1, 0b01000, 0)
+            case .sqshl: return (.integer, 0, 0b01001, 0)
+            case .uqshl: return (.integer, 1, 0b01001, 0)
+            case .srshl: return (.integer, 0, 0b01010, 0)
+            case .urshl: return (.integer, 1, 0b01010, 0)
+            case .sqrshl: return (.integer, 0, 0b01011, 0)
+            case .uqrshl: return (.integer, 1, 0b01011, 0)
+            case .smax: return (.integer, 0, 0b01100, 0)
+            case .umax: return (.integer, 1, 0b01100, 0)
+            case .smin: return (.integer, 0, 0b01101, 0)
+            case .umin: return (.integer, 1, 0b01101, 0)
+            case .sabd: return (.integer, 0, 0b01110, 0)
+            case .uabd: return (.integer, 1, 0b01110, 0)
+            case .saba: return (.integer, 0, 0b01111, 0)
+            case .uaba: return (.integer, 1, 0b01111, 0)
+            case .add: return (.integer, 0, 0b10000, 0)
+            case .sub: return (.integer, 1, 0b10000, 0)
+            case .cmtst: return (.integer, 0, 0b10001, 0)
+            case .cmeq: return (.integer, 1, 0b10001, 0)
+            case .mla: return (.integer, 0, 0b10010, 0)
+            case .mls: return (.integer, 1, 0b10010, 0)
+            case .mul: return (.integer, 0, 0b10011, 0)
+            case .pmul: return (.integer, 1, 0b10011, 0)
+            case .smaxp: return (.integer, 0, 0b10100, 0)
+            case .umaxp: return (.integer, 1, 0b10100, 0)
+            case .sminp: return (.integer, 0, 0b10101, 0)
+            case .uminp: return (.integer, 1, 0b10101, 0)
+            case .sqdmulh: return (.integer, 0, 0b10110, 0)
+            case .sqrdmulh: return (.integer, 1, 0b10110, 0)
+            case .addp: return (.integer, 0, 0b10111, 0)
+            case .and: return (.logical, 0, 0b00011, 0b00)
+            case .bic: return (.logical, 0, 0b00011, 0b01)
+            case .orr: return (.logical, 0, 0b00011, 0b10)
+            case .orn: return (.logical, 0, 0b00011, 0b11)
+            case .eor: return (.logical, 1, 0b00011, 0b00)
+            case .bsl: return (.logical, 1, 0b00011, 0b01)
+            case .bit: return (.logical, 1, 0b00011, 0b10)
+            case .bif: return (.logical, 1, 0b00011, 0b11)
+            case .fmaxnm: return (.floatingPoint, 0, 0b11000, 0)
+            case .fmla: return (.floatingPoint, 0, 0b11001, 0)
+            case .fadd: return (.floatingPoint, 0, 0b11010, 0)
+            case .fmulx: return (.floatingPoint, 0, 0b11011, 0)
+            case .fcmeq: return (.floatingPoint, 0, 0b11100, 0)
+            case .fmax: return (.floatingPoint, 0, 0b11110, 0)
+            case .frecps: return (.floatingPoint, 0, 0b11111, 0)
+            case .fminnm: return (.floatingPoint, 0, 0b11000, 1)
+            case .fmls: return (.floatingPoint, 0, 0b11001, 1)
+            case .fsub: return (.floatingPoint, 0, 0b11010, 1)
+            case .fmin: return (.floatingPoint, 0, 0b11110, 1)
+            case .frsqrts: return (.floatingPoint, 0, 0b11111, 1)
+            case .fmaxnmp: return (.floatingPoint, 1, 0b11000, 0)
+            case .faddp: return (.floatingPoint, 1, 0b11010, 0)
+            case .fmul: return (.floatingPoint, 1, 0b11011, 0)
+            case .fcmge: return (.floatingPoint, 1, 0b11100, 0)
+            case .facge: return (.floatingPoint, 1, 0b11101, 0)
+            case .fmaxp: return (.floatingPoint, 1, 0b11110, 0)
+            case .fdiv: return (.floatingPoint, 1, 0b11111, 0)
+            case .fminnmp: return (.floatingPoint, 1, 0b11000, 1)
+            case .fabd: return (.floatingPoint, 1, 0b11010, 1)
+            case .fcmgt: return (.floatingPoint, 1, 0b11100, 1)
+            case .facgt: return (.floatingPoint, 1, 0b11101, 1)
+            case .fminp: return (.floatingPoint, 1, 0b11110, 1)
+            }
+        }
+
+        /// The arrangements accepted by this instruction (empirically matched to clang).
+        var allowedArrangements: Set<VectorArrangement> {
+            switch self {
+            case .and, .bic, .orr, .orn, .eor, .bsl, .bit, .bif, .pmul:
+                return [.b8, .b16]
+            case .sqdmulh, .sqrdmulh:
+                return [.h4, .h8, .s2, .s4]
+            case .shadd, .uhadd, .srhadd, .urhadd, .shsub, .uhsub,
+                 .smax, .umax, .smin, .umin, .sabd, .uabd, .saba, .uaba,
+                 .mla, .mls, .mul, .smaxp, .umaxp, .sminp, .uminp:
+                return [.b8, .b16, .h4, .h8, .s2, .s4]
+            case .sqadd, .uqadd, .sqsub, .uqsub, .cmgt, .cmhi, .cmge, .cmhs,
+                 .sshl, .ushl, .sqshl, .uqshl, .srshl, .urshl, .sqrshl, .uqrshl,
+                 .add, .sub, .cmtst, .cmeq, .addp:
+                return [.b8, .b16, .h4, .h8, .s2, .s4, .d2]
+            case .fmaxnm, .fmla, .fadd, .fmulx, .fcmeq, .fmax, .frecps,
+                 .fminnm, .fmls, .fsub, .fmin, .frsqrts,
+                 .fmaxnmp, .faddp, .fmul, .fcmge, .facge, .fmaxp, .fdiv,
+                 .fminnmp, .fabd, .fcmgt, .facgt, .fminp:
+                return [.s2, .s4, .d2]
+            }
+        }
+    }
+
     enum MoveAliasSource: Equatable {
         case immediate(Int64)
         case register(Register)
@@ -283,6 +419,7 @@ internal enum A64 {
         case acrossLanesInteger(AcrossLanesIntegerKind, destination: FPRegister, source: VectorRegister)
         case acrossLanesFP(AcrossLanesFPKind, destination: FPRegister, source: VectorRegister)
         case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)
+        case vectorThreeSame(VectorThreeSameKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
     }
 }
 

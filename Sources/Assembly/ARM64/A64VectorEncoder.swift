@@ -84,6 +84,37 @@ internal enum A64VectorEncoder {
         return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func threeSame(_ kind: A64.VectorThreeSameKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        let arrangement = rd.arrangement
+        guard rn.arrangement == arrangement, rm.arrangement == arrangement else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        guard kind.allowedArrangements.contains(arrangement) else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+
+        let spec = kind.spec
+        // Base: bits[28:24]=01110, bit21=1, bit10=1.
+        let base: UInt32 = 0x0e20_0400
+        let registers = (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+
+        switch spec.family {
+        case .integer:
+            let head = (arrangement.q << 30) | (spec.u << 29) | base | (arrangement.elementSize << 22)
+            return head | (spec.opcode << 11) | registers
+        case .logical:
+            // The element-`size` field carries the operation selector.
+            let head = (arrangement.q << 30) | (spec.u << 29) | base | (spec.variant << 22)
+            return head | (spec.opcode << 11) | registers
+        case .floatingPoint:
+            // `a` selects the operation sub-group at bit23; `sz` (bit22) is 0 for
+            // single precision (`.2s`/`.4s`) and 1 for double precision (`.2d`).
+            let sz: UInt32 = arrangement.elementWidth == 64 ? 1 : 0
+            let head = (arrangement.q << 30) | (spec.u << 29) | base | (spec.variant << 23) | (sz << 22)
+            return head | (spec.opcode << 11) | registers
+        }
+    }
+
     private static func isValidTwoRegisterMiscArrangement(_ kind: A64.VectorTwoRegisterMiscKind, _ arrangement: A64.VectorArrangement) -> Bool {
         switch kind {
         case .rev64, .cls, .clz:
