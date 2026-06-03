@@ -673,6 +673,16 @@ internal enum A64InstructionParser {
         case "ldr", "ldrb", "ldrh", "ldrsb", "ldrsh", "ldrsw", "str", "strb", "strh", "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw", "stur", "sturb", "sturh":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)
+            // SIMD&FP form (`ldr q0, [x1]`, `str s0, [x1, #4]`, …): the target is a
+            // scalar floating-point / vector register (b/h/s/d/q).
+            if (mnemonic == "ldr" || mnemonic == "str" || mnemonic == "ldur" || mnemonic == "stur"),
+               let target = try? A64Parser.floatRegister(instruction.operands[0]) {
+                return .loadStoreSingleFP(
+                    A64.LoadStoreSingleKind(rawValue: mnemonic)!,
+                    target: target,
+                    memory: try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+                )
+            }
             return .loadStoreSingle(
                 A64.LoadStoreSingleKind(rawValue: mnemonic)!,
                 target: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
@@ -681,6 +691,16 @@ internal enum A64InstructionParser {
         case "ldp", "stp":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 3...4)
+            // SIMD&FP form (`ldp q0, q1, [x2]`, …): paired floating-point registers.
+            if let first = try? A64Parser.floatRegister(instruction.operands[0]),
+               let second = try? A64Parser.floatRegister(instruction.operands[1]) {
+                return .loadStorePairFP(
+                    A64.LoadStorePairKind(rawValue: mnemonic)!,
+                    first: first,
+                    second: second,
+                    memory: try A64MemoryOperandParser.parse(instruction.operands, startIndex: 2)
+                )
+            }
             return .loadStorePair(
                 A64.LoadStorePairKind(rawValue: mnemonic)!,
                 first: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),

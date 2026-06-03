@@ -25,6 +25,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeDivide(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
+        if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
+        if let instruction = decodeLoadStorePairFP(word) { return instruction }
         if let instruction = decodeFPDataProcessing3(word) { return instruction }
         if let instruction = decodeFPDataProcessing2(word) { return instruction }
         if let instruction = decodeFPDataProcessing1(word) { return instruction }
@@ -421,6 +423,92 @@ internal enum A64InstructionDecoder {
         default: return nil
         }
         return .loadStorePair(kind, first: rt, second: rt2, memory: memory)
+    }
+
+    private static func decodeLoadStoreSingleFP(_ word: UInt32) -> Instruction? {
+        // SIMD&FP load/store register: the integer forms with the V (bit 26) set.
+        let op = word & 0x3f00_0000
+        guard op == 0x3c00_0000 || op == 0x3d00_0000 else { return nil }
+        let size = (word >> 30) & 3
+        let opc = (word >> 22) & 3
+        // opc bit 1 selects the 128-bit (Q) form; opc bit 0 selects load.
+        let isLoad = (opc & 1) == 1
+        let isQuad = (opc & 2) == 2
+        let width: Int
+        let byteSize: Int64
+        if isQuad {
+            guard size == 0 else { return nil }
+            width = 128; byteSize = 16
+        } else {
+            switch size {
+            case 0: width = 8;  byteSize = 1
+            case 1: width = 16; byteSize = 2
+            case 2: width = 32; byteSize = 4
+            case 3: width = 64; byteSize = 8
+            default: return nil
+            }
+        }
+        let scaledKind: A64.LoadStoreSingleKind = isLoad ? .ldr : .str
+        let unscaledKind: A64.LoadStoreSingleKind = isLoad ? .ldur : .stur
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rt = floatRegister(number: word & 0x1f, width: width)
+
+        if op == 0x3d00_0000 {
+            let offset = Int64((word >> 10) & 0xfff) * byteSize
+            return .loadStoreSingleFP(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
+        }
+
+        if (word >> 21) & 1 == 1 {
+            guard (word >> 10) & 3 == 2 else { return nil }
+            let optionRaw = (word >> 13) & 7
+            let s = (word >> 12) & 1
+            let rmWidth = (optionRaw == 2 || optionRaw == 6) ? 32 : 64
+            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let shift = s == 1 ? Int(log2(Double(byteSize))) : 0
+            let extend: ExtendKind? = optionRaw == 3 ? nil : ExtendKind(rawValue: optionRaw)
+            return .loadStoreSingleFP(scaledKind, target: rt, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
+        }
+
+        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        switch (word >> 10) & 3 {
+        case 0:
+            let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
+            return .loadStoreSingleFP(unscaledKind, target: rt, memory: mem)
+        case 1:
+            return .loadStoreSingleFP(scaledKind, target: rt, memory: .postIndexed(base: base, offset: imm9))
+        case 3:
+            return .loadStoreSingleFP(scaledKind, target: rt, memory: .preIndexed(base: base, offset: imm9))
+        default:
+            return nil
+        }
+    }
+
+    private static func decodeLoadStorePairFP(_ word: UInt32) -> Instruction? {
+        // SIMD&FP load/store pair: the integer pair forms with the V (bit 26) set.
+        guard word & 0x3e00_0000 == 0x2c00_0000 else { return nil }
+        let opc2 = (word >> 30) & 3
+        let width: Int
+        let scale: Int64
+        switch opc2 {
+        case 0: width = 32;  scale = 4
+        case 1: width = 64;  scale = 8
+        case 2: width = 128; scale = 16
+        default: return nil
+        }
+        let l = (word >> 22) & 1
+        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
+        let rt2 = floatRegister(number: (word >> 10) & 0x1f, width: width)
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rt = floatRegister(number: word & 0x1f, width: width)
+        let kind: A64.LoadStorePairKind = l == 1 ? .ldp : .stp
+        let memory: MemoryOperand
+        switch (word >> 23) & 3 {
+        case 1: memory = .postIndexed(base: base, offset: offset)
+        case 2: memory = .unsignedOffset(base: base, offset: offset)
+        case 3: memory = .preIndexed(base: base, offset: offset)
+        default: return nil
+        }
+        return .loadStorePairFP(kind, first: rt, second: rt2, memory: memory)
     }
 
     private static func loadStoreSingleKind(size: UInt32, opc: UInt32) -> (scaled: A64.LoadStoreSingleKind, unscaled: A64.LoadStoreSingleKind, rtWidth: Int, byteSize: Int64)? {

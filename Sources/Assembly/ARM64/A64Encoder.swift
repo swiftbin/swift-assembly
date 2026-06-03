@@ -110,6 +110,10 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
             return try A64LoadStoreEncoder.pair(kind, first: first, second: second, memory: memory)
+        case .loadStoreSingleFP(let kind, let target, let memory):
+            return try A64LoadStoreEncoder.singleFP(kind, target: target, memory: memory)
+        case .loadStorePairFP(let kind, let first, let second, let memory):
+            return try A64LoadStoreEncoder.pairFP(kind, first: first, second: second, memory: memory)
         case .pointerAuthentication(let kind, let register, let architecture):
             return try A64PointerAuthenticationEncoder.encode(kind, register: register, architecture: architecture)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
@@ -373,6 +377,110 @@ internal enum A64LoadStoreEncoder {
         try checkRange(imm7, -64...63, instruction: mnemonic)
         let head = ((rt.is64Bit ? UInt32(2) : 0) << 30) | modeBase | ((kind == .ldp ? UInt32(1) : 0) << 22)
         return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    static func singleFP(_ kind: A64.LoadStoreSingleKind, target rt: A64.FPRegister, memory: MemoryOperand) throws -> UInt32 {
+        let mnemonic = kind.rawValue
+        let descriptor = try FPSingleDescriptor(kind: kind, rt: rt)
+
+        switch memory {
+        case .unsignedOffset(let base, let offset):
+            if descriptor.forceUnscaled {
+                try checkRange(offset, -256...255, instruction: mnemonic)
+                return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
+            }
+            guard offset >= 0, offset % descriptor.byteSize == 0 else {
+                throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: descriptor.byteSize)
+            }
+            let scaled = offset / descriptor.byteSize
+            try checkRange(scaled, 0...0xfff, instruction: mnemonic)
+            return descriptor.unsignedBase | (UInt32(scaled) << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+
+        case .signedUnscaled(let base, let offset), .preIndexed(let base, let offset), .postIndexed(let base, let offset):
+            try checkRange(offset, -256...255, instruction: mnemonic)
+            let mode: UInt32
+            switch memory {
+            case .signedUnscaled: mode = 0
+            case .postIndexed: mode = 1
+            case .preIndexed: mode = 3
+            default: mode = 0
+            }
+            return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (mode << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+
+        case .registerOffset(let base, let offset, let ext, let shift):
+            let option = ext ?? (offset.is64Bit ? ExtendKind.uxtx : ExtendKind.uxtw)
+            let naturalShift = Int(log2(Double(descriptor.byteSize)))
+            guard shift == 0 || shift == naturalShift else { throw AssemblerError.unsupportedShift("lsl #\(shift)") }
+            return descriptor.registerOffsetBase | (offset.encodedNumber << 16) | (option.rawValue << 13) | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
+        }
+    }
+
+    static func pairFP(_ kind: A64.LoadStorePairKind, first rt: A64.FPRegister, second rt2: A64.FPRegister, memory: MemoryOperand) throws -> UInt32 {
+        let mnemonic = kind.rawValue
+        guard rt.width == rt2.width else { throw AssemblerError.invalidRegister(mnemonic) }
+        // opc field (bits[31:30]): S=00, D=01, Q=10. Scale follows the access width.
+        let opc: UInt32
+        let scale: Int64
+        switch rt.width {
+        case 32:  opc = 0; scale = 4
+        case 64:  opc = 1; scale = 8
+        case 128: opc = 2; scale = 16
+        default: throw AssemblerError.invalidRegister(mnemonic)
+        }
+        let modeBase: UInt32
+        let base: IntegerRegister
+        let offset: Int64
+        switch memory {
+        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): modeBase = 0x2d000000; base = b; offset = o
+        case .postIndexed(let b, let o): modeBase = 0x2c800000; base = b; offset = o
+        case .preIndexed(let b, let o): modeBase = 0x2d800000; base = b; offset = o
+        case .registerOffset: throw AssemblerError.unsupportedOperand(mnemonic)
+        }
+        guard offset % scale == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: scale) }
+        let imm7 = offset / scale
+        try checkRange(imm7, -64...63, instruction: mnemonic)
+        let head = (opc << 30) | modeBase | ((kind == .ldp ? UInt32(1) : 0) << 22)
+        return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    private struct FPSingleDescriptor {
+        let forceUnscaled: Bool
+        let byteSize: Int64
+        let size: UInt32
+        let opc: UInt32
+
+        init(kind: A64.LoadStoreSingleKind, rt: A64.FPRegister) throws {
+            let isLoad: Bool
+            switch kind {
+            case .ldr:  isLoad = true;  forceUnscaled = false
+            case .str:  isLoad = false; forceUnscaled = false
+            case .ldur: isLoad = true;  forceUnscaled = true
+            case .stur: isLoad = false; forceUnscaled = true
+            default: throw AssemblerError.unsupportedOperand(kind.rawValue)
+            }
+            // size/opc: B/H/S/D use size=log2(bytes) and opc=01(load)/00(store);
+            // Q (128-bit) uses size=00 and opc=11(load)/10(store).
+            switch rt.width {
+            case 8:   byteSize = 1;  size = 0; opc = isLoad ? 0b01 : 0b00
+            case 16:  byteSize = 2;  size = 1; opc = isLoad ? 0b01 : 0b00
+            case 32:  byteSize = 4;  size = 2; opc = isLoad ? 0b01 : 0b00
+            case 64:  byteSize = 8;  size = 3; opc = isLoad ? 0b01 : 0b00
+            case 128: byteSize = 16; size = 0; opc = isLoad ? 0b11 : 0b10
+            default: throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+        }
+
+        var unsignedBase: UInt32 {
+            (size << 30) | 0x3d000000 | (opc << 22)
+        }
+
+        var unscaledBase: UInt32 {
+            (size << 30) | 0x3c000000 | (opc << 22)
+        }
+
+        var registerOffsetBase: UInt32 {
+            (size << 30) | 0x3c200800 | (opc << 22)
+        }
     }
 
     private struct SingleDescriptor {

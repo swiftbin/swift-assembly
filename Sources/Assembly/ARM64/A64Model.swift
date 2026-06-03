@@ -829,6 +829,8 @@ internal enum A64 {
         case divide(DivideKind, destination: Register, first: Register, second: Register)
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
+        case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
+        case loadStorePairFP(LoadStorePairKind, first: FPRegister, second: FPRegister, memory: MemoryOperand)
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)

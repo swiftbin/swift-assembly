@@ -64,6 +64,10 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(([formatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .loadStoreSingleFP(let kind, let target, let memory):
+            return "\(kind.rawValue) \(([formatFloatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .loadStorePairFP(let kind, let first, let second, let memory):
+            return "\(kind.rawValue) \(([formatFloatRegister(first), formatFloatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .pointerAuthentication(let kind, let register, _):
             return ([kind.rawValue] + (register.map { [formatRegister($0)] } ?? [])).joined(separator: " ")
         case .fpDataProcessing2(let kind, let destination, let first, let second):

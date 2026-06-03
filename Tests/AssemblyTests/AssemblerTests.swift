@@ -1679,6 +1679,78 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, w1"), 0x1e220020)
     }
 
+    func testLoadStoreFPSingleInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str b0, [x1]"), 0x3d000020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str h0, [x1]"), 0x7d000020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str s0, [x1]"), 0xbd000020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str d0, [x1]"), 0xfd000020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str q0, [x1]"), 0x3d800020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr b0, [x1]"), 0x3d400020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr s0, [x1]"), 0xbd400020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr d0, [x1]"), 0xfd400020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr q0, [x1]"), 0x3dc00020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str q0, [x1, #16]"), 0x3d800420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr q0, [x1, #32]"), 0x3dc00820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str s0, [x1, #4]"), 0xbd000420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr d0, [x1, #8]"), 0xfd400420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str q0, [x1, #16]!"), 0x3c810c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr q0, [x1], #16"), 0x3cc10420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stur q0, [x1, #-8]"), 0x3c9f8020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldur s0, [x1, #3]"), 0xbc403020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr q0, [x1, x2]"), 0x3ce26820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str d0, [x1, x2, lsl #3]"), 0xfc227820)
+    }
+
+    func testLoadStoreFPPairInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stp s0, s1, [x2]"), 0x2d000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldp s0, s1, [x2]"), 0x2d400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stp d0, d1, [x2]"), 0x6d000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldp d0, d1, [x2]"), 0x6d400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stp q0, q1, [x2]"), 0xad000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldp q0, q1, [x2]"), 0xad400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stp q0, q1, [x2, #32]"), 0xad010440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldp d0, d1, [x2, #16]!"), 0x6dc10440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stp s0, s1, [x2], #8"), 0x2c810440)
+    }
+
+    func testDisassembleLoadStoreFP() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3dc00020), "ldr q0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xbd000420), "str s0, [x1, #4]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3c810c20), "str q0, [x1, #16]!")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3cc10420), "ldr q0, [x1], #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3ce26820), "ldr q0, [x1, x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xad400440), "ldp q0, q1, [x2]")
+    }
+
+    func testLoadStoreFPRoundTrip() throws {
+        let sources = [
+            "str b0, [x1]", "ldr h2, [x3, #6]", "str s4, [x5, #12]", "ldr d6, [x7, #16]!",
+            "str q8, [x9], #16", "ldur s10, [x11, #-4]", "stur q12, [x13, #5]",
+            "ldr q14, [x15, x16]", "str d18, [x19, x20, lsl #3]",
+            "stp s0, s1, [x2]", "ldp d2, d3, [x4, #16]", "stp q4, q5, [x6, #32]!",
+            "ldp q6, q7, [x8], #32",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testLoadStoreFPInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("str s0, [x1, #3]"))    // misaligned offset
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stp s0, d1, [x2]"))    // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldp q0, q1, [x2, x3]")) // register offset not allowed for pair
+    }
+
+    func testIntegerLoadStoreStillResolves() throws {
+        // The integer load/store forms must remain unaffected by the SIMD&FP routing.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr x0, [x1]"), 0xf9400020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("str w0, [x1, #4]"), 0xb9000420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldp x0, x1, [x2]"), 0xa9400440)
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
