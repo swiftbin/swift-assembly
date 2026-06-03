@@ -52,6 +52,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarThreeSameFP(word) { return instruction }
         if let instruction = decodeScalarShiftNarrow(word) { return instruction }
         if let instruction = decodeScalarTwoRegisterMiscNarrow(word) { return instruction }
+        if let instruction = decodeScalarShiftFixedPoint(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1141,6 +1142,41 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: 64),
             source: floatRegister(number: rnNum, width: 64),
             shift: shift)
+    }
+
+    private static func decodeScalarShiftFixedPoint(_ word: UInt32) -> Instruction? {
+        // Shares the scalar shift-by-immediate base (bit30=1, bits[28:23]=111110, bit10=1),
+        // distinguished by opcode (scvtf/ucvtf = 0b11100, fcvtzs/fcvtzu = 0b11111).
+        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        let u = (word >> 29) & 1
+        let immh = (word >> 19) & 0xf
+        let immb = (word >> 16) & 0x7
+        let opcode = (word >> 11) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarShiftFixedPointKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        let immhb = (immh << 3) | immb
+        let width: Int
+        let fbits: Int
+        if immh & 0b1000 != 0 {            // 1xxx -> D (64-bit), fbits = 128 - immhb
+            width = 64
+            fbits = Int(128 - immhb)
+        } else if immh & 0b0100 != 0 {     // 01xx -> S (32-bit), fbits = 64 - immhb
+            width = 32
+            fbits = Int(64 - immhb)
+        } else {                           // 001x / 0001 are FP16/reserved here
+            return nil
+        }
+
+        return .scalarShiftFixedPoint(kind,
+            destination: floatRegister(number: rdNum, width: width),
+            source: floatRegister(number: rnNum, width: width),
+            fbits: fbits)
     }
 
     private static func decodeScalarThreeSameFP(_ word: UInt32) -> Instruction? {

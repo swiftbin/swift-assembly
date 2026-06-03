@@ -641,6 +641,21 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar shift by immediate, fixed-point convert
+    /// (`Vd, Vn, #fbits` — convert between floating-point and fixed-point, scalar form).
+    enum ScalarShiftFixedPointKind: String, Equatable, CaseIterable {
+        case scvtf, ucvtf, fcvtzs, fcvtzu
+
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .scvtf:  return (0, 0b11100)
+            case .ucvtf:  return (1, 0b11100)
+            case .fcvtzs: return (0, 0b11111)
+            case .fcvtzu: return (1, 0b11111)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar three different (`Vd, Vn, Vm` — long, saturating doubling).
     enum ScalarThreeDifferentKind: String, Equatable, CaseIterable {
         case sqdmlal, sqdmlsl, sqdmull
@@ -851,6 +866,7 @@ internal enum A64 {
         case scalarThreeSameFP(ScalarThreeSameFPKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarShiftNarrow(ScalarShiftNarrowKind, destination: FPRegister, source: FPRegister, shift: Int)
         case scalarTwoRegisterMiscNarrow(ScalarTwoRegisterMiscNarrowKind, destination: FPRegister, source: FPRegister)
+        case scalarShiftFixedPoint(ScalarShiftFixedPointKind, destination: FPRegister, source: FPRegister, fbits: Int)
     }
 }
 
@@ -881,3 +897,4 @@ internal typealias ScalarFPTwoRegisterMiscKind = A64.ScalarFPTwoRegisterMiscKind
 internal typealias ScalarThreeSameFPKind = A64.ScalarThreeSameFPKind
 internal typealias ScalarShiftNarrowKind = A64.ScalarShiftNarrowKind
 internal typealias ScalarTwoRegisterMiscNarrowKind = A64.ScalarTwoRegisterMiscNarrowKind
+internal typealias ScalarShiftFixedPointKind = A64.ScalarShiftFixedPointKind

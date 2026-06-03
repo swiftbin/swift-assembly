@@ -676,6 +676,34 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarShiftFixedPoint(_ kind: A64.ScalarShiftFixedPointKind, destination rd: FloatRegister, source rn: FloatRegister, fbits: Int) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // Source and destination are the same scalar FP register width (S or D).
+        guard rd.width == rn.width else { throw fail() }
+        // immhb encodes the number of fractional bits; immh's highest set bit selects the size.
+        // S (32-bit): immh = 01xx, immhb = 64 - fbits, fbits in 1...32.
+        // D (64-bit): immh = 1xxx, immhb = 128 - fbits, fbits in 1...64.
+        let immhb: UInt32
+        switch rd.width {
+        case 32:
+            guard fbits >= 1, fbits <= 32 else { throw fail() }
+            immhb = UInt32(64 - fbits)
+        case 64:
+            guard fbits >= 1, fbits <= 64 else { throw fail() }
+            immhb = UInt32(128 - fbits)
+        default:
+            throw fail()
+        }
+        let immh = (immhb >> 3) & 0xf
+        let immb = immhb & 0x7
+
+        // Base: bit30=1, bits[28:23]=111110, bit10=1.
+        let base: UInt32 = 0x5f00_0400
+        return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarThreeDifferent(_ kind: A64.ScalarThreeDifferentKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
 

@@ -1634,6 +1634,51 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqxtn h0, h1"))   // source must be one size above dest
     }
 
+    func testScalarShiftFixedPointInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, s1, #1"), 0x5f3fe420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf d0, d1, #1"), 0x5f7fe420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, s1, #32"), 0x5f20e420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf s0, s1, #2"), 0x7f3ee420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs s0, s1, #3"), 0x5f3dfc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs d0, d1, #64"), 0x5f40fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu d0, d1, #4"), 0x7f7cfc20)
+    }
+
+    func testDisassembleScalarShiftFixedPoint() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f3fe420), "scvtf s0, s1, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f7fe420), "scvtf d0, d1, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f3dfc20), "fcvtzs s0, s1, #3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f7cfc20), "fcvtzu d0, d1, #4")
+    }
+
+    func testScalarShiftFixedPointRoundTrip() throws {
+        let sources = [
+            "scvtf s0, s1, #1", "scvtf s2, s3, #32", "scvtf d4, d5, #1", "scvtf d6, d7, #64",
+            "ucvtf s8, s9, #16", "ucvtf d10, d11, #40",
+            "fcvtzs s12, s13, #8", "fcvtzs d14, d15, #50",
+            "fcvtzu s16, s17, #31", "fcvtzu d18, d19, #63",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarShiftFixedPointInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf s0, s1, #0"))    // fbits min is 1
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf s0, s1, #33"))   // S max is 32
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf d0, d1, #65"))   // D max is 64
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf s0, d1, #4"))    // mismatched widths
+    }
+
+    func testScalarFixedPointConvertWithoutFbitsStillResolves() throws {
+        // Two-operand forms must stay the FP<->GP integer converts, not the scalar fixed-point form.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs w0, s1"), 0x1e380020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, w1"), 0x1e220020)
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
