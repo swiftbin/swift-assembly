@@ -810,6 +810,19 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func extractNarrow(_ kind: A64.VectorExtractNarrowKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        // Destination is the narrow arrangement (`8b`/`16b`/`4h`/`8h`/`2s`/`4s`); the
+        // source is the fully populated arrangement one element-size up.
+        guard [A64.VectorArrangement.b8, .b16, .h4, .h8, .s2, .s4].contains(rd.arrangement) else { throw fail() }
+        guard let expectedSource = doubledArrangement(rd.arrangement), rn.arrangement == expectedSource else { throw fail() }
+
+        let spec = kind.spec
+        let size = rd.arrangement.elementSize
+        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
+        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func tableLookup(_ kind: A64.VectorTableLookupKind, destination rd: VectorRegister, table: A64.VectorRegisterList, index rm: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
         // The destination and index share an 8b/16b arrangement; the table registers must be 16b.

@@ -39,6 +39,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
+        if let instruction = decodeVectorExtractNarrow(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -892,6 +893,35 @@ internal enum A64InstructionDecoder {
             kind,
             destination: VectorRegister(number: rdNum, arrangement: arrangement),
             source: VectorRegister(number: rnNum, arrangement: arrangement)
+        )
+    }
+
+    private static func decodeVectorExtractNarrow(_ word: UInt32) -> Instruction? {
+        // Shares the two-register-misc encoding; selected by opcodes 10010/10100.
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard opcode == 0b10010 || opcode == 0b10100 else { return nil }
+        guard let kind = A64.VectorExtractNarrowKind.decode(u: u, opcode: opcode),
+              let destination = fullVectorArrangement(size: size, q: q),
+              [A64.VectorArrangement.b8, .b16, .h4, .h8, .s2, .s4].contains(destination) else { return nil }
+        // The source is the fully populated arrangement one element-size up.
+        let source: A64.VectorArrangement
+        switch destination {
+        case .b8, .b16: source = .h8
+        case .h4, .h8: source = .s4
+        case .s2, .s4: source = .d2
+        default: return nil
+        }
+        return .vectorExtractNarrow(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: destination),
+            source: VectorRegister(number: rnNum, arrangement: source)
         )
     }
 

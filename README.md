@@ -50,6 +50,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD load/store single structure and replicate (ld1r–ld4r, and the single-lane ld1–ld4 / st1–st4 `{v0.s}[1]` forms) with all addressing modes
 - Advanced SIMD table lookup (tbl / tbx) with 1–4 register table lists
 - Advanced SIMD two-register-misc compare against zero (cmgt / cmeq / cmlt / cmge / cmle vs #0, and fcmgt / fcmeq / fcmlt / fcmge / fcmle vs #0.0)
+- Advanced SIMD two-register-misc extract-narrow (xtn(2) / sqxtn(2) / uqxtn(2) / sqxtun(2))
 - ...
 
 ## Usage

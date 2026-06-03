@@ -427,6 +427,27 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD two-register-misc extract-narrow (`Vd.Tb, Vn.Ta`); the `2`
+        // suffix selects the upper-half (128-bit destination) variant.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           isVectorRegisterOperand(instruction.operands[0]) {
+            let upper = mnemonic.hasSuffix("2")
+            let base = upper ? String(mnemonic.dropLast()) : mnemonic
+            if let kind = A64.VectorExtractNarrowKind(rawValue: base) {
+                let destination = try A64Parser.vectorRegister(instruction.operands[0])
+                // The `2` form requires a 128-bit destination; the plain form a 64-bit one.
+                guard (destination.arrangement.q == 1) == upper else {
+                    throw AssemblerError.invalidRegister(instruction.operands[0])
+                }
+                return .vectorExtractNarrow(
+                    kind,
+                    destination: destination,
+                    source: try A64Parser.vectorRegister(instruction.operands[1])
+                )
+            }
+        }
+
         // Advanced SIMD vector compare against zero (`Vd.T, Vn.T, #0` or `#0.0`).
         // Only the immediate forms route here; the three-register shapes fall through
         // to the three-same group below.

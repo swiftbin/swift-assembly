@@ -360,6 +360,26 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD two-register-misc extract-narrow (`XTN`/`SQXTN`/`UQXTN`/`SQXTUN`).
+    /// The `2` upper-half variants are distinguished by a 128-bit (`Q=1`) destination.
+    enum VectorExtractNarrowKind: String, Equatable, CaseIterable {
+        case xtn, sqxtn, uqxtn, sqxtun
+
+        /// The `U` bit at [29] and the 5-bit `opcode` at [16:12].
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .xtn: return (0, 0b10010)
+            case .sqxtun: return (1, 0b10010)
+            case .sqxtn: return (0, 0b10100)
+            case .uqxtn: return (1, 0b10100)
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32) -> VectorExtractNarrowKind? {
+            allCases.first { $0.spec == (u, opcode) }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -1015,6 +1035,7 @@ internal enum A64 {
         case scalarShiftFixedPoint(ScalarShiftFixedPointKind, destination: FPRegister, source: FPRegister, fbits: Int)
         case vectorTableLookup(VectorTableLookupKind, destination: VectorRegister, table: VectorRegisterList, index: VectorRegister)
         case vectorCompareZero(VectorCompareZeroKind, destination: VectorRegister, source: VectorRegister)
+        case vectorExtractNarrow(VectorExtractNarrowKind, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -1053,3 +1074,4 @@ internal typealias ScalarTwoRegisterMiscNarrowKind = A64.ScalarTwoRegisterMiscNa
 internal typealias ScalarShiftFixedPointKind = A64.ScalarShiftFixedPointKind
 internal typealias VectorTableLookupKind = A64.VectorTableLookupKind
 internal typealias VectorCompareZeroKind = A64.VectorCompareZeroKind
+internal typealias VectorExtractNarrowKind = A64.VectorExtractNarrowKind

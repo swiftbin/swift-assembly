@@ -1985,6 +1985,56 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmgt v0.4s, v1.4s, #0"))   // FP needs #0.0
     }
 
+    func testVectorExtractNarrowInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xtn v0.8b, v1.8h"), 0x0e212820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xtn v0.4h, v1.4s"), 0x0e612820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xtn v0.2s, v1.2d"), 0x0ea12820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xtn2 v0.16b, v1.8h"), 0x4e212820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xtn2 v0.8h, v1.4s"), 0x4e612820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xtn2 v0.4s, v1.2d"), 0x4ea12820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn v0.8b, v1.8h"), 0x0e214820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn v0.4h, v1.4s"), 0x0e614820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn v0.2s, v1.2d"), 0x0ea14820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn2 v0.16b, v1.8h"), 0x4e214820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqxtn v0.8b, v1.8h"), 0x2e214820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqxtn v0.2s, v1.2d"), 0x2ea14820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqxtn2 v0.8h, v1.4s"), 0x6e614820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtun v0.8b, v1.8h"), 0x2e212820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtun v0.4h, v1.4s"), 0x2e612820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtun2 v0.4s, v1.2d"), 0x6ea12820)
+    }
+
+    func testDisassembleVectorExtractNarrow() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e212820), "xtn v0.8b, v1.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea12820), "xtn2 v0.4s, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e214820), "sqxtn v0.8b, v1.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e214820), "uqxtn v0.8b, v1.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea12820), "sqxtun2 v0.4s, v1.2d")
+    }
+
+    func testVectorExtractNarrowRoundTrip() throws {
+        let sources = [
+            "xtn v0.8b, v1.8h", "xtn v2.4h, v3.4s", "xtn v4.2s, v5.2d",
+            "xtn2 v0.16b, v1.8h", "xtn2 v2.8h, v3.4s", "xtn2 v4.4s, v5.2d",
+            "sqxtn v0.8b, v1.8h", "sqxtn2 v6.16b, v7.8h",
+            "uqxtn v8.4h, v9.4s", "uqxtn2 v10.8h, v11.4s",
+            "sqxtun v12.2s, v13.2d", "sqxtun2 v14.4s, v15.2d",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorExtractNarrowInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("xtn v0.8b, v1.4s"))    // source must be one size up (8h)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("xtn v0.16b, v1.8h"))   // 16b dest needs the xtn2 mnemonic
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("xtn2 v0.8b, v1.8h"))   // xtn2 needs a 128-bit dest
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("xtn v0.1d, v1.2d"))    // no D destination
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
