@@ -103,7 +103,21 @@ internal enum A64InstructionFormatter {
             return formatVectorShiftImmediate(kind, destination: destination, source: source, shift: shift)
         case .vectorModifiedImmediate(let kind, let destination, let imm8, let shift):
             return formatVectorModifiedImmediate(kind, destination: destination, imm8: imm8, shift: shift)
+        case .vectorDuplicateElement(let destination, let source):
+            return "dup \(formatVectorRegister(destination)), \(formatVectorElement(source))"
+        case .vectorDuplicateGeneral(let destination, let source):
+            return "dup \(formatVectorRegister(destination)), \(formatRegister(source))"
+        case .vectorMoveToGeneral(let signed, let destination, let source):
+            return "\(signed ? "smov" : "umov") \(formatRegister(destination)), \(formatVectorElement(source))"
+        case .vectorInsertGeneral(let destination, let source):
+            return "ins \(formatVectorElement(destination)), \(formatRegister(source))"
+        case .vectorInsertElement(let destination, let source):
+            return "ins \(formatVectorElement(destination)), \(formatVectorElement(source))"
         }
+    }
+
+    private static func formatVectorElement(_ element: VectorElement) -> String {
+        "v\(element.number).\(element.width.rawValue)[\(element.index)]"
     }
 
     private static func formatVectorModifiedImmediate(_ kind: VectorModifiedImmediateKind, destination: VectorRegister, imm8: UInt8, shift: VectorImmediateShift) -> String {

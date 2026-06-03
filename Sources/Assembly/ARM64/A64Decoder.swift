@@ -36,6 +36,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
+        if let instruction = decodeVectorCopy(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -797,6 +798,81 @@ internal enum A64InstructionDecoder {
                 destination: VectorRegister(number: rdNum, arrangement: arrangement),
                 source: VectorRegister(number: rnNum, arrangement: arrangement),
                 shift: shift)
+        }
+    }
+
+    private static func decodeVectorCopy(_ word: UInt32) -> Instruction? {
+        // bit31=0, bits[28:21]=01110000, bit15=0, bit10=1.
+        guard word & 0x9fe0_8400 == 0x0e00_0400 else { return nil }
+        let q = (word >> 30) & 1
+        let op = (word >> 29) & 1
+        let imm5 = (word >> 16) & 0x1f
+        let imm4 = (word >> 11) & 0xf
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // The lowest set bit of `imm5` selects the element size.
+        let width: A64.VectorElementWidth
+        let sizeShift: UInt32
+        if imm5 & 0b00001 != 0 { width = .b; sizeShift = 0 }
+        else if imm5 & 0b00010 != 0 { width = .h; sizeShift = 1 }
+        else if imm5 & 0b00100 != 0 { width = .s; sizeShift = 2 }
+        else if imm5 & 0b01000 != 0 { width = .d; sizeShift = 3 }
+        else { return nil }
+        let index = Int(imm5 >> (sizeShift + 1))
+
+        if op == 1 {
+            // INS (element): both lanes share the element width; `imm4` holds the source index.
+            guard q == 1 else { return nil }
+            let sourceIndex = Int(imm4 >> sizeShift)
+            return .vectorInsertElement(
+                destination: A64.VectorElement(number: rdNum, width: width, index: index),
+                source: A64.VectorElement(number: rnNum, width: width, index: sourceIndex)
+            )
+        }
+
+        switch imm4 {
+        case 0b0000:
+            guard let arrangement = copyArrangement(width: width, q: q) else { return nil }
+            return .vectorDuplicateElement(
+                destination: VectorRegister(number: rdNum, arrangement: arrangement),
+                source: A64.VectorElement(number: rnNum, width: width, index: index)
+            )
+        case 0b0001:
+            guard let arrangement = copyArrangement(width: width, q: q) else { return nil }
+            return .vectorDuplicateGeneral(
+                destination: VectorRegister(number: rdNum, arrangement: arrangement),
+                source: integerRegister(number: rnNum, width: width == .d ? 64 : 32)
+            )
+        case 0b0011:
+            guard q == 1 else { return nil }
+            return .vectorInsertGeneral(
+                destination: A64.VectorElement(number: rdNum, width: width, index: index),
+                source: integerRegister(number: rnNum, width: width == .d ? 64 : 32)
+            )
+        case 0b0101, 0b0111:
+            return .vectorMoveToGeneral(
+                signed: imm4 == 0b0101,
+                destination: integerRegister(number: rdNum, width: q == 1 ? 64 : 32),
+                source: A64.VectorElement(number: rnNum, width: width, index: index)
+            )
+        default:
+            return nil
+        }
+    }
+
+    /// Maps an element width and `Q` to a vector arrangement; `(D, Q=0)` is the
+    /// scalar `1d` form and is rejected for the copy group.
+    private static func copyArrangement(width: A64.VectorElementWidth, q: UInt32) -> A64.VectorArrangement? {
+        switch (width, q) {
+        case (.b, 0): return .b8
+        case (.b, 1): return .b16
+        case (.h, 0): return .h4
+        case (.h, 1): return .h8
+        case (.s, 0): return .s2
+        case (.s, 1): return .s4
+        case (.d, 1): return .d2
+        default: return nil
         }
     }
 

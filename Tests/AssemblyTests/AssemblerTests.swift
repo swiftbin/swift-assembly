@@ -819,6 +819,93 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov v0.2s, #100.0"))        // not representable
     }
 
+    func testVectorCopyInstructions() throws {
+        // DUP (element)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.8b, v1.b[3]"), 0x0e070420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.16b, v1.b[3]"), 0x4e070420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.4h, v1.h[2]"), 0x0e0a0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.2s, v1.s[1]"), 0x0e0c0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.2d, v1.d[1]"), 0x4e180420)
+        // DUP (general)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.8b, w1"), 0x0e010c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.4h, w1"), 0x0e020c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.2s, w1"), 0x0e040c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dup v0.2d, x1"), 0x4e080c20)
+        // SMOV
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smov w0, v1.b[3]"), 0x0e072c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smov w0, v1.h[2]"), 0x0e0a2c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smov x0, v1.b[3]"), 0x4e072c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smov x0, v1.s[1]"), 0x4e0c2c20)
+        // UMOV
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umov w0, v1.b[3]"), 0x0e073c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umov w0, v1.h[2]"), 0x0e0a3c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umov w0, v1.s[1]"), 0x0e0c3c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umov x0, v1.d[1]"), 0x4e183c20)
+        // INS (general)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.b[3], w1"), 0x4e071c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.h[2], w1"), 0x4e0a1c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.s[1], w1"), 0x4e0c1c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.d[1], x1"), 0x4e181c20)
+        // INS (element)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.b[3], v1.b[5]"), 0x6e072c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.h[2], v1.h[1]"), 0x6e0a1420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.s[1], v1.s[0]"), 0x6e0c0420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ins v0.d[1], v1.d[0]"), 0x6e180420)
+    }
+
+    func testVectorCopyMovAliases() throws {
+        // MOV is an alias of INS (element/general) and UMOV.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mov v0.b[3], v1.b[5]"), 0x6e072c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mov v0.s[1], w1"), 0x4e0c1c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mov v0.d[1], x1"), 0x4e181c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mov w0, v1.s[1]"), 0x0e0c3c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mov x0, v1.d[1]"), 0x4e183c20)
+    }
+
+    func testDisassembleVectorCopy() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e070420), "dup v0.8b, v1.b[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e180420), "dup v0.2d, v1.d[1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e080c20), "dup v0.2d, x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e072c20), "smov x0, v1.b[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e183c20), "umov x0, v1.d[1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e181c20), "ins v0.d[1], x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e072c20), "ins v0.b[3], v1.b[5]")
+    }
+
+    func testVectorCopyRoundTrip() throws {
+        let sources = [
+            "dup v0.8b, v1.b[3]", "dup v2.16b, v3.b[7]", "dup v4.4h, v5.h[2]",
+            "dup v6.8h, v7.h[6]", "dup v8.2s, v9.s[1]", "dup v10.4s, v11.s[3]",
+            "dup v12.2d, v13.d[1]",
+            "dup v14.8b, w15", "dup v16.4h, w17", "dup v18.2s, w19", "dup v20.2d, x21",
+            "smov w0, v1.b[15]", "smov w2, v3.h[7]", "smov x4, v5.b[3]", "smov x6, v7.s[1]",
+            "umov w8, v9.b[3]", "umov w10, v11.h[2]", "umov w12, v13.s[3]", "umov x14, v15.d[1]",
+            "ins v0.b[15], w1", "ins v2.h[7], w3", "ins v4.s[3], w5", "ins v6.d[1], x7",
+            "ins v8.b[3], v9.b[5]", "ins v10.h[2], v11.h[1]", "ins v12.s[1], v13.s[0]",
+            "ins v14.d[1], v15.d[0]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorCopyInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup v0.1d, v1.d[0]"))   // 1d is the scalar form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup v0.8b, v1.h[2]"))   // element width mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup v0.8b, v1.b[16]"))  // index out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup v0.8b, x1"))        // B element needs W register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dup v0.2d, w1"))        // D element needs X register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smov x0, v1.d[0]"))     // SMOV cannot take D
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smov w0, v1.s[0]"))     // SMOV Wd max is H
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("umov w0, v1.d[0]"))     // UMOV Wd cannot take D
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("umov x0, v1.b[0]"))     // UMOV Xd only takes D
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ins v0.s[1], x1"))      // S element needs W register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ins v0.b[3], v1.h[1]")) // element width mismatch
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

@@ -247,6 +247,79 @@ internal enum A64VectorEncoder {
         return (q << 30) | (op << 29) | base | (abc << 16) | (cmode << 12) | (defgh << 5) | rd.encodedNumber
     }
 
+    // MARK: - Copy (DUP / SMOV / UMOV / INS)
+
+    /// The element width implied by a vector arrangement.
+    private static func elementWidth(of arrangement: A64.VectorArrangement) -> A64.VectorElementWidth {
+        switch arrangement.elementWidth {
+        case 8: return .b
+        case 16: return .h
+        case 32: return .s
+        default: return .d
+        }
+    }
+
+    private static func encodeCopy(q: UInt32, op: UInt32, imm5: UInt32, imm4: UInt32, rn: UInt32, rd: UInt32) -> UInt32 {
+        // Base: bits[28:24]=01110, bit10=1.
+        let base: UInt32 = 0x0e00_0400
+        return (q << 30) | (op << 29) | base | (imm5 << 16) | (imm4 << 11) | (rn << 5) | rd
+    }
+
+    private static func validateLane(_ element: A64.VectorElement) throws {
+        guard element.index >= 0, element.index <= element.width.maxIndex else {
+            throw AssemblerError.invalidRegister("v\(element.number).\(element.width.rawValue)[\(element.index)]")
+        }
+    }
+
+    static func duplicateElement(destination rd: VectorRegister, source element: A64.VectorElement) throws -> UInt32 {
+        guard rd.arrangement != .d1 else { throw AssemblerError.invalidRegister("dup") }
+        guard elementWidth(of: rd.arrangement) == element.width else { throw AssemblerError.invalidRegister("dup") }
+        try validateLane(element)
+        let imm5 = element.width.imm5(index: element.index)
+        return encodeCopy(q: rd.arrangement.q, op: 0, imm5: imm5, imm4: 0b0000, rn: element.encodedNumber, rd: rd.encodedNumber)
+    }
+
+    static func duplicateGeneral(destination rd: VectorRegister, source rn: IntegerRegister) throws -> UInt32 {
+        guard rd.arrangement != .d1 else { throw AssemblerError.invalidRegister("dup") }
+        let width = elementWidth(of: rd.arrangement)
+        // A 64-bit element requires an X register; narrower elements require W.
+        guard rn.is64Bit == (width == .d) else { throw AssemblerError.invalidRegister("dup") }
+        let imm5 = width.imm5(index: 0)
+        return encodeCopy(q: rd.arrangement.q, op: 0, imm5: imm5, imm4: 0b0001, rn: rn.encodedNumber, rd: rd.encodedNumber)
+    }
+
+    static func moveToGeneral(signed: Bool, destination rd: IntegerRegister, source element: A64.VectorElement) throws -> UInt32 {
+        try validateLane(element)
+        // SMOV: Wd <- B/H, Xd <- B/H/S.   UMOV: Wd <- B/H/S, Xd <- D.
+        let valid: Bool
+        if signed {
+            valid = rd.is64Bit ? [.b, .h, .s].contains(element.width) : [.b, .h].contains(element.width)
+        } else {
+            valid = rd.is64Bit ? element.width == .d : [.b, .h, .s].contains(element.width)
+        }
+        guard valid else { throw AssemblerError.invalidRegister(signed ? "smov" : "umov") }
+        let imm4: UInt32 = signed ? 0b0101 : 0b0111
+        let q: UInt32 = rd.is64Bit ? 1 : 0
+        let imm5 = element.width.imm5(index: element.index)
+        return encodeCopy(q: q, op: 0, imm5: imm5, imm4: imm4, rn: element.encodedNumber, rd: rd.encodedNumber)
+    }
+
+    static func insertGeneral(destination element: A64.VectorElement, source rn: IntegerRegister) throws -> UInt32 {
+        try validateLane(element)
+        guard rn.is64Bit == (element.width == .d) else { throw AssemblerError.invalidRegister("ins") }
+        let imm5 = element.width.imm5(index: element.index)
+        return encodeCopy(q: 1, op: 0, imm5: imm5, imm4: 0b0011, rn: rn.encodedNumber, rd: element.encodedNumber)
+    }
+
+    static func insertElement(destination dst: A64.VectorElement, source src: A64.VectorElement) throws -> UInt32 {
+        guard dst.width == src.width else { throw AssemblerError.invalidRegister("ins") }
+        try validateLane(dst)
+        try validateLane(src)
+        let imm5 = dst.width.imm5(index: dst.index)
+        let imm4 = UInt32(src.index) << dst.width.sizeShift
+        return encodeCopy(q: 1, op: 1, imm5: imm5, imm4: imm4, rn: src.encodedNumber, rd: dst.encodedNumber)
+    }
+
     private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
         let amount: Int
         switch shift {

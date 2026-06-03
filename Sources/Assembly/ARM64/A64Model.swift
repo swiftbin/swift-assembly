@@ -429,6 +429,39 @@ internal enum A64 {
         case movi, mvni, orr, bic, fmov
     }
 
+    /// A single addressed lane of a vector register, e.g. `v1.s[2]`.
+    struct VectorElement: Equatable {
+        var number: UInt32
+        var width: VectorElementWidth
+        var index: Int
+
+        var encodedNumber: UInt32 { number & 0x1f }
+    }
+
+    enum VectorElementWidth: String, Equatable {
+        case b, h, s, d
+
+        /// `log2` of the element size in bytes (B=0, H=1, S=2, D=3).
+        var sizeShift: UInt32 {
+            switch self {
+            case .b: return 0
+            case .h: return 1
+            case .s: return 2
+            case .d: return 3
+            }
+        }
+
+        var bitWidth: Int { 8 << sizeShift }
+
+        /// The largest valid lane index for a 128-bit register.
+        var maxIndex: Int { (128 / bitWidth) - 1 }
+
+        /// The `imm5` selector field for `index` (low set bit marks the size).
+        func imm5(index: Int) -> UInt32 {
+            (UInt32(index) << (sizeShift + 1)) | (1 << sizeShift)
+        }
+    }
+
     /// The optional shift applied to a vector modified-immediate byte.
     enum VectorImmediateShift: Equatable {
         case none
@@ -496,6 +529,11 @@ internal enum A64 {
         case vectorThreeSame(VectorThreeSameKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorShiftImmediate(VectorShiftImmediateKind, destination: VectorRegister, source: VectorRegister, shift: Int)
         case vectorModifiedImmediate(VectorModifiedImmediateKind, destination: VectorRegister, imm8: UInt8, shift: VectorImmediateShift)
+        case vectorDuplicateElement(destination: VectorRegister, source: VectorElement)
+        case vectorDuplicateGeneral(destination: VectorRegister, source: Register)
+        case vectorMoveToGeneral(signed: Bool, destination: Register, source: VectorElement)
+        case vectorInsertGeneral(destination: VectorElement, source: Register)
+        case vectorInsertElement(destination: VectorElement, source: VectorElement)
     }
 }
 
@@ -512,3 +550,5 @@ internal typealias ParsedShift = A64.Shift
 internal typealias VectorShiftImmediateKind = A64.VectorShiftImmediateKind
 internal typealias VectorModifiedImmediateKind = A64.VectorModifiedImmediateKind
 internal typealias VectorImmediateShift = A64.VectorImmediateShift
+internal typealias VectorElement = A64.VectorElement
+internal typealias VectorElementWidth = A64.VectorElementWidth

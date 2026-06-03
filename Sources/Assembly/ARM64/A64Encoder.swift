@@ -144,6 +144,16 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.shiftImmediate(kind, destination: destination, source: source, shift: shift)
         case .vectorModifiedImmediate(let kind, let destination, let imm8, let shift):
             return try A64VectorEncoder.modifiedImmediate(kind, destination: destination, imm8: imm8, shift: shift)
+        case .vectorDuplicateElement(let destination, let source):
+            return try A64VectorEncoder.duplicateElement(destination: destination, source: source)
+        case .vectorDuplicateGeneral(let destination, let source):
+            return try A64VectorEncoder.duplicateGeneral(destination: destination, source: source)
+        case .vectorMoveToGeneral(let signed, let destination, let source):
+            return try A64VectorEncoder.moveToGeneral(signed: signed, destination: destination, source: source)
+        case .vectorInsertGeneral(let destination, let source):
+            return try A64VectorEncoder.insertGeneral(destination: destination, source: source)
+        case .vectorInsertElement(let destination, let source):
+            return try A64VectorEncoder.insertElement(destination: destination, source: source)
         }
     }
 }

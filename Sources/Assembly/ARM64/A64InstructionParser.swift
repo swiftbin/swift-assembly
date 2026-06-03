@@ -109,6 +109,29 @@ internal enum A64Parser {
         return A64.VectorRegister(number: number, arrangement: arrangement)
     }
 
+    /// Parses an addressed vector lane such as `v1.s[2]`.
+    static func vectorElement(_ text: String) throws -> A64.VectorElement {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard lower.hasSuffix("]"), let bracket = lower.firstIndex(of: "[") else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        let head = String(lower[lower.startIndex..<bracket])               // v1.s
+        let indexText = String(lower[lower.index(after: bracket)..<lower.index(before: lower.endIndex)])
+        let parts = head.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, let prefix = parts[0].first, prefix == "v",
+              let number = UInt32(parts[0].dropFirst()), number <= 31,
+              let width = A64.VectorElementWidth(rawValue: parts[1]),
+              let index = Int(indexText), index >= 0 else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        return A64.VectorElement(number: number, width: width, index: index)
+    }
+
+    static func isVectorElementOperand(_ text: String) -> Bool {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return lower.hasPrefix("v") && lower.contains(".") && lower.hasSuffix("]")
+    }
+
     static func floatImmediate(_ text: String) throws -> Double {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("#") { value.removeFirst() }
@@ -290,6 +313,28 @@ internal enum A64InstructionParser {
         case "mov":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
+            // Vector copy aliases: MOV maps onto INS / UMOV.
+            let destIsElement = A64Parser.isVectorElementOperand(instruction.operands[0])
+            let srcIsElement = A64Parser.isVectorElementOperand(instruction.operands[1])
+            if destIsElement && srcIsElement {
+                return .vectorInsertElement(
+                    destination: try A64Parser.vectorElement(instruction.operands[0]),
+                    source: try A64Parser.vectorElement(instruction.operands[1])
+                )
+            }
+            if destIsElement {
+                return .vectorInsertGeneral(
+                    destination: try A64Parser.vectorElement(instruction.operands[0]),
+                    source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+                )
+            }
+            if srcIsElement {
+                return .vectorMoveToGeneral(
+                    signed: false,
+                    destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                    source: try A64Parser.vectorElement(instruction.operands[1])
+                )
+            }
             let destination = try A64Parser.integerRegister(instruction.operands[0], allowSP: true)
             let sourceText = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
             let source: A64.MoveAliasSource = sourceText.hasPrefix("#")
@@ -562,6 +607,42 @@ internal enum A64InstructionParser {
         case "movi", "mvni":
             guard parts.count == 1 else { return nil }
             return try vectorModifiedImmediate(instruction, kind: A64.VectorModifiedImmediateKind(rawValue: mnemonic)!)
+        case "dup":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            if A64Parser.isVectorElementOperand(instruction.operands[1]) {
+                return .vectorDuplicateElement(
+                    destination: destination,
+                    source: try A64Parser.vectorElement(instruction.operands[1])
+                )
+            }
+            return .vectorDuplicateGeneral(
+                destination: destination,
+                source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            )
+        case "smov", "umov":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .vectorMoveToGeneral(
+                signed: mnemonic == "smov",
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.vectorElement(instruction.operands[1])
+            )
+        case "ins":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let destination = try A64Parser.vectorElement(instruction.operands[0])
+            if A64Parser.isVectorElementOperand(instruction.operands[1]) {
+                return .vectorInsertElement(
+                    destination: destination,
+                    source: try A64Parser.vectorElement(instruction.operands[1])
+                )
+            }
+            return .vectorInsertGeneral(
+                destination: destination,
+                source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            )
         case "sshr", "ushr", "ssra", "usra", "srshr", "urshr", "srsra", "ursra", "sri",
              "shl", "sli", "sqshlu",
              "shrn", "rshrn", "sqshrn", "sqrshrn", "sqshrun", "sqrshrun", "uqshrn", "uqrshrn",
