@@ -352,6 +352,45 @@ internal enum A64VectorEncoder {
         return head | (rm.encodedNumber << 16) | (UInt32(index) << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - Three different (long / wide / narrow)
+
+    static func threeDifferent(_ kind: A64.VectorThreeDifferentKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // The narrow operand fixes both `size` and `Q`.
+        let narrow: A64.VectorArrangement
+        switch spec.form {
+        case .long:
+            guard rn.arrangement == rm.arrangement,
+                  doubledArrangement(rn.arrangement) == rd.arrangement else { throw fail() }
+            narrow = rn.arrangement
+        case .wide:
+            guard rd.arrangement == rn.arrangement,
+                  doubledArrangement(rm.arrangement) == rd.arrangement else { throw fail() }
+            narrow = rm.arrangement
+        case .narrow:
+            guard rn.arrangement == rm.arrangement,
+                  doubledArrangement(rd.arrangement) == rn.arrangement else { throw fail() }
+            narrow = rd.arrangement
+        }
+
+        let size = narrow.elementSize
+        switch kind {
+        case .pmull:
+            // Only the byte form (`Vd.8H, Vn.8B`) is supported; the 64→128 (`1q`) form is out of scope.
+            guard size == 0b00 else { throw fail() }
+        case .sqdmull, .sqdmlal, .sqdmlsl:
+            guard size == 0b01 || size == 0b10 else { throw fail() }
+        default:
+            break
+        }
+
+        let base: UInt32 = 0x0e20_0000
+        let head = (narrow.q << 30) | (spec.u << 29) | base | (size << 22)
+        return head | (rm.encodedNumber << 16) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
         let amount: Int
         switch shift {

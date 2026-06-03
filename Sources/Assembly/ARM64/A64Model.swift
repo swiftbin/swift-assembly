@@ -479,6 +479,52 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD "three different" instructions.
+    ///
+    /// `long` forms widen both sources (`Vd.Ta, Vn.Tb, Vm.Tb`); `wide` forms
+    /// widen only the second source (`Vd.Ta, Vn.Ta, Vm.Tb`); `narrow` forms
+    /// produce a half-width result (`Vd.Tb, Vn.Ta, Vm.Ta`). In every form the
+    /// `size`/`Q` fields come from the narrow operand.
+    enum VectorThreeDifferentKind: String, Equatable, CaseIterable {
+        case saddl, saddw, ssubl, ssubw, addhn, sabal, subhn, sabdl,
+             smlal, sqdmlal, smlsl, sqdmlsl, smull, sqdmull, pmull,
+             uaddl, uaddw, usubl, usubw, raddhn, uabal, rsubhn, uabdl,
+             umlal, umlsl, umull
+
+        enum Form { case long, wide, narrow }
+
+        var spec: (form: Form, u: UInt32, opcode: UInt32) {
+            switch self {
+            case .saddl: return (.long, 0, 0b0000)
+            case .saddw: return (.wide, 0, 0b0001)
+            case .ssubl: return (.long, 0, 0b0010)
+            case .ssubw: return (.wide, 0, 0b0011)
+            case .addhn: return (.narrow, 0, 0b0100)
+            case .sabal: return (.long, 0, 0b0101)
+            case .subhn: return (.narrow, 0, 0b0110)
+            case .sabdl: return (.long, 0, 0b0111)
+            case .smlal: return (.long, 0, 0b1000)
+            case .sqdmlal: return (.long, 0, 0b1001)
+            case .smlsl: return (.long, 0, 0b1010)
+            case .sqdmlsl: return (.long, 0, 0b1011)
+            case .smull: return (.long, 0, 0b1100)
+            case .sqdmull: return (.long, 0, 0b1101)
+            case .pmull: return (.long, 0, 0b1110)
+            case .uaddl: return (.long, 1, 0b0000)
+            case .uaddw: return (.wide, 1, 0b0001)
+            case .usubl: return (.long, 1, 0b0010)
+            case .usubw: return (.wide, 1, 0b0011)
+            case .raddhn: return (.narrow, 1, 0b0100)
+            case .uabal: return (.long, 1, 0b0101)
+            case .rsubhn: return (.narrow, 1, 0b0110)
+            case .uabdl: return (.long, 1, 0b0111)
+            case .umlal: return (.long, 1, 0b1000)
+            case .umlsl: return (.long, 1, 0b1010)
+            case .umull: return (.long, 1, 0b1100)
+            }
+        }
+    }
+
     /// The optional shift applied to a vector modified-immediate byte.
     enum VectorImmediateShift: Equatable {
         case none
@@ -553,6 +599,7 @@ internal enum A64 {
         case vectorInsertElement(destination: VectorElement, source: VectorElement)
         case vectorPermute(VectorPermuteKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorExtract(destination: VectorRegister, first: VectorRegister, second: VectorRegister, index: Int)
+        case vectorThreeDifferent(VectorThreeDifferentKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
     }
 }
 
@@ -572,3 +619,4 @@ internal typealias VectorImmediateShift = A64.VectorImmediateShift
 internal typealias VectorElement = A64.VectorElement
 internal typealias VectorElementWidth = A64.VectorElementWidth
 internal typealias VectorPermuteKind = A64.VectorPermuteKind
+internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind

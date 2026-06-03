@@ -158,6 +158,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.permute(kind, destination: destination, first: first, second: second)
         case .vectorExtract(let destination, let first, let second, let index):
             return try A64VectorEncoder.extract(destination: destination, first: first, second: second, index: index)
+        case .vectorThreeDifferent(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.threeDifferent(kind, destination: destination, first: first, second: second)
         }
     }
 }

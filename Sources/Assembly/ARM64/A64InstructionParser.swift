@@ -702,6 +702,20 @@ internal enum A64InstructionParser {
             }
             return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
         default:
+            // Advanced SIMD three-different (long/wide/narrow); the `2` suffix is
+            // the upper-half form (implied by the `Q=1` arrangement).
+            if parts.count == 1 {
+                let base = mnemonic.hasSuffix("2") ? String(mnemonic.dropLast()) : mnemonic
+                if let kind = A64.VectorThreeDifferentKind(rawValue: base) {
+                    try expectOperandCount(instruction, exactly: 3)
+                    return .vectorThreeDifferent(
+                        kind,
+                        destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                        first: try A64Parser.vectorRegister(instruction.operands[1]),
+                        second: try A64Parser.vectorRegister(instruction.operands[2])
+                    )
+                }
+            }
             return nil
         }
     }

@@ -117,6 +117,16 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .vectorExtract(let destination, let first, let second, let index):
             return "ext \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second)), #\(index)"
+        case .vectorThreeDifferent(let kind, let destination, let first, let second):
+            // The narrow operand carries `Q`; `Q=1` prints the `2` upper-half form.
+            let narrowQ: UInt32
+            switch kind.spec.form {
+            case .long: narrowQ = first.arrangement.q
+            case .wide: narrowQ = second.arrangement.q
+            case .narrow: narrowQ = destination.arrangement.q
+            }
+            let suffix = narrowQ == 1 ? "2" : ""
+            return "\(kind.rawValue)\(suffix) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         }
     }
 

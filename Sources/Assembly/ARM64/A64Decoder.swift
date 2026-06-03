@@ -39,6 +39,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorCopy(word) { return instruction }
         if let instruction = decodeVectorPermute(word) { return instruction }
         if let instruction = decodeVectorExtract(word) { return instruction }
+        if let instruction = decodeVectorThreeDifferent(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -896,6 +897,60 @@ internal enum A64InstructionDecoder {
             first: VectorRegister(number: rnNum, arrangement: arrangement),
             second: VectorRegister(number: rmNum, arrangement: arrangement),
             index: Int(imm4))
+    }
+
+    private static func decodeVectorThreeDifferent(_ word: UInt32) -> Instruction? {
+        // bit31=0, bits[28:24]=01110, bit21=1, bits[11:10]=00.
+        guard word & 0x9f20_0c00 == 0x0e20_0000 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 0x3
+        let opcode = (word >> 12) & 0xf
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.VectorThreeDifferentKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        // Per-instruction size restrictions mirror the encoder.
+        switch kind {
+        case .pmull: guard size == 0b00 else { return nil }
+        case .sqdmull, .sqdmlal, .sqdmlsl: guard size == 0b01 || size == 0b10 else { return nil }
+        default: break
+        }
+
+        guard let narrow = differentNarrowArrangement(size: size, q: q),
+              let wide = doubledArrangement(narrow) else { return nil }
+
+        let destination: A64.VectorArrangement
+        let first: A64.VectorArrangement
+        let second: A64.VectorArrangement
+        switch kind.spec.form {
+        case .long:   destination = wide; first = narrow; second = narrow
+        case .wide:   destination = wide; first = wide;   second = narrow
+        case .narrow: destination = narrow; first = wide; second = wide
+        }
+
+        return .vectorThreeDifferent(kind,
+            destination: VectorRegister(number: rdNum, arrangement: destination),
+            first: VectorRegister(number: rnNum, arrangement: first),
+            second: VectorRegister(number: rmNum, arrangement: second))
+    }
+
+    /// Maps the narrow operand's `size`/`Q` to an arrangement; `size=11` is reserved.
+    private static func differentNarrowArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {
+        switch (size, q) {
+        case (0b00, 0): return .b8
+        case (0b00, 1): return .b16
+        case (0b01, 0): return .h4
+        case (0b01, 1): return .h8
+        case (0b10, 0): return .s2
+        case (0b10, 1): return .s4
+        default: return nil
+        }
     }
 
     /// Maps an element width and `Q` to a vector arrangement; `(D, Q=0)` is the

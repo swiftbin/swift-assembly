@@ -962,6 +962,81 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ext v0.16b, v1.16b, v2.16b, #16")) // index out of range
     }
 
+    func testVectorThreeDifferentInstructions() throws {
+        // Long forms (Vd.Ta, Vn.Tb, Vm.Tb), including the `2` upper-half forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddl v0.8h, v1.8b, v2.8b"), 0x0e220020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddl2 v0.8h, v1.16b, v2.16b"), 0x4e220020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddl v0.4s, v1.4h, v2.4h"), 0x0e620020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddl v0.2d, v1.2s, v2.2s"), 0x0ea20020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddl v0.8h, v1.8b, v2.8b"), 0x2e220020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ssubl v0.4s, v1.4h, v2.4h"), 0x0e622020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usubl v0.2d, v1.2s, v2.2s"), 0x2ea22020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sabal v0.8h, v1.8b, v2.8b"), 0x0e225020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uabal v0.4s, v1.4h, v2.4h"), 0x2e625020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sabdl v0.2d, v1.2s, v2.2s"), 0x0ea27020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uabdl v0.8h, v1.8b, v2.8b"), 0x2e227020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smlal v0.4s, v1.4h, v2.4h"), 0x0e628020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umlal v0.2d, v1.2s, v2.2s"), 0x2ea28020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smlsl v0.8h, v1.8b, v2.8b"), 0x0e22a020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umlsl v0.4s, v1.4h, v2.4h"), 0x2e62a020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smull v0.2d, v1.2s, v2.2s"), 0x0ea2c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umull v0.8h, v1.8b, v2.8b"), 0x2e22c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smull2 v0.4s, v1.8h, v2.8h"), 0x4e62c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pmull v0.8h, v1.8b, v2.8b"), 0x0e22e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pmull2 v0.8h, v1.16b, v2.16b"), 0x4e22e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull v0.4s, v1.4h, v2.4h"), 0x0e62d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlal v0.2d, v1.2s, v2.2s"), 0x0ea29020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlsl v0.4s, v1.4h, v2.4h"), 0x0e62b020)
+        // Wide forms (Vd.Ta, Vn.Ta, Vm.Tb).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddw v0.8h, v1.8h, v2.8b"), 0x0e221020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("saddw2 v0.8h, v1.8h, v2.16b"), 0x4e221020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uaddw v0.4s, v1.4s, v2.4h"), 0x2e621020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ssubw v0.2d, v1.2d, v2.2s"), 0x0ea23020)
+        // Narrow forms (Vd.Tb, Vn.Ta, Vm.Ta).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addhn v0.8b, v1.8h, v2.8h"), 0x0e224020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addhn2 v0.16b, v1.8h, v2.8h"), 0x4e224020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subhn v0.4h, v1.4s, v2.4s"), 0x0e626020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("raddhn v0.2s, v1.2d, v2.2d"), 0x2ea24020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rsubhn v0.8b, v1.8h, v2.8h"), 0x2e226020)
+    }
+
+    func testDisassembleVectorThreeDifferent() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e220020), "saddl v0.8h, v1.8b, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e220020), "saddl2 v0.8h, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ea2c020), "smull v0.2d, v1.2s, v2.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e22e020), "pmull v0.8h, v1.8b, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e22e020), "pmull2 v0.8h, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e221020), "saddw v0.8h, v1.8h, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e224020), "addhn2 v0.16b, v1.8h, v2.8h")
+    }
+
+    func testVectorThreeDifferentRoundTrip() throws {
+        let sources = [
+            "saddl v0.8h, v1.8b, v2.8b", "saddl2 v3.4s, v4.8h, v5.8h",
+            "uaddl v6.2d, v7.2s, v8.2s", "ssubl2 v9.8h, v10.16b, v11.16b",
+            "smull v12.4s, v13.4h, v14.4h", "umull2 v15.2d, v16.4s, v17.4s",
+            "pmull v18.8h, v19.8b, v20.8b", "pmull2 v21.8h, v22.16b, v23.16b",
+            "sqdmull v24.4s, v25.4h, v26.4h", "sqdmlal v27.2d, v28.2s, v29.2s",
+            "saddw v0.8h, v1.8h, v2.8b", "uaddw2 v3.4s, v4.4s, v5.8h",
+            "addhn v6.8b, v7.8h, v8.8h", "subhn2 v9.8h, v10.4s, v11.4s",
+            "raddhn v12.2s, v13.2d, v14.2d", "rsubhn2 v15.16b, v16.8h, v17.8h",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorThreeDifferentInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddl v0.8h, v1.4h, v2.4h"))   // source must be half-width
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddl v0.8h, v1.8b, v2.16b"))  // sources must match
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pmull v0.4s, v1.4h, v2.4h"))   // pmull is byte-only here
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull v0.8h, v1.8b, v2.8b")) // sqdmull excludes byte
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addhn v0.8h, v1.8h, v2.8h"))   // narrow dest must be half
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

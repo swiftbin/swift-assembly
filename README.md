@@ -31,6 +31,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD modified immediate (movi / mvni / orr / bic / fmov, with lsl / msl shifts and the 64-bit movi forms)
 - Advanced SIMD copy (dup from element / general register, smov / umov, ins from element / general register, and the mov aliases)
 - Advanced SIMD permute (zip1 / zip2 / uzp1 / uzp2 / trn1 / trn2) and extract (ext)
+- Advanced SIMD three-different (saddl(2) / ssubl / saddw / addhn(2) / subhn / sabal / sabdl / smlal / smlsl / smull(2) / pmull(2) / sqdmull / sqdmlal / sqdmlsl and the unsigned / rounding variants)
 - ...
 
 ## Usage
