@@ -1173,6 +1173,51 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("add d0, d1, s2"))      // widths must match
     }
 
+    func testScalarPairwiseInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addp d0, v1.2d"), 0x5ef1b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("faddp s0, v1.2s"), 0x7e30d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("faddp d0, v1.2d"), 0x7e70d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxp s0, v1.2s"), 0x7e30f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxp d0, v1.2d"), 0x7e70f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminp s0, v1.2s"), 0x7eb0f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminp d0, v1.2d"), 0x7ef0f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmp s0, v1.2s"), 0x7e30c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmp d0, v1.2d"), 0x7e70c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmp s0, v1.2s"), 0x7eb0c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmp d0, v1.2d"), 0x7ef0c820)
+    }
+
+    func testDisassembleScalarPairwise() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ef1b820), "addp d0, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e30d820), "faddp s0, v1.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ef0f820), "fminp d0, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e70c820), "fmaxnmp d0, v1.2d")
+    }
+
+    func testScalarPairwiseRoundTrip() throws {
+        let sources = [
+            "addp d0, v1.2d",
+            "faddp s2, v3.2s", "faddp d4, v5.2d",
+            "fmaxp s6, v7.2s", "fmaxp d8, v9.2d",
+            "fminp s10, v11.2s", "fminp d12, v13.2d",
+            "fmaxnmp s14, v15.2s", "fmaxnmp d16, v17.2d",
+            "fminnmp s18, v19.2s", "fminnmp d20, v21.2d",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarPairwiseInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addp s0, v1.2s"))    // addp is double-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addp d0, v1.4s"))    // source must be 2d
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("faddp d0, v1.2s"))   // dest width must match source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("faddp s0, v1.4s"))   // unsupported source arrangement
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

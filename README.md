@@ -34,6 +34,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD three-different (saddl(2) / ssubl / saddw / addhn(2) / subhn / sabal / sabdl / smlal / smlsl / smull(2) / pmull(2) / sqdmull / sqdmlal / sqdmlsl and the unsigned / rounding variants)
 - Advanced SIMD vector x indexed element (mul / mla / mls / sqdmulh / sqrdmulh / fmul / fmla / fmls / fmulx and the long smull(2) / umull / smlal / umlsl / sqdmull / sqdmlal(2) / sqdmlsl forms)
 - Advanced SIMD scalar three-same (add / sub / cmeq / cmge / cmgt / cmhi / cmhs / cmtst / sqadd / uqadd / sqsub / uqsub / sshl / ushl / srshl / urshl / sqshl / uqshl / sqrshl / uqrshl / sqdmulh / sqrdmulh)
+- Advanced SIMD scalar pairwise reductions (addp / faddp / fmaxp / fminp / fmaxnmp / fminnmp)
 - ...
 
 ## Usage

@@ -42,6 +42,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSame(word) { return instruction }
+        if let instruction = decodeScalarPairwise(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1044,6 +1045,38 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: width),
             first: floatRegister(number: rnNum, width: width),
             second: floatRegister(number: rmNum, width: width))
+    }
+
+    private static func decodeScalarPairwise(_ word: UInt32) -> Instruction? {
+        // bit31=0, bit30=1, bits[28:24]=11110, bits[21:17]=11000, bits[11:10]=10.
+        guard word & 0xdf3e_0c00 == 0x5e30_0800 else { return nil }
+        let u = (word >> 29) & 1
+        let o1 = (word >> 23) & 1
+        let sz = (word >> 22) & 1
+        let size = (word >> 22) & 0x3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarPairwiseKind.allCases.first(where: {
+            let spec = $0.spec
+            guard spec.u == u else { return false }
+            return spec.fp ? (spec.opcode == opcode && spec.o1 == o1) : (spec.opcode == opcode)
+        }) else { return nil }
+
+        let arrangement: A64.VectorArrangement
+        let width: Int
+        if kind.spec.fp {
+            if sz == 0 { arrangement = .s2; width = 32 } else { arrangement = .d2; width = 64 }
+        } else {
+            guard size == 0b11 else { return nil }
+            arrangement = .d2
+            width = 64
+        }
+
+        return .scalarPairwise(kind,
+            destination: floatRegister(number: rdNum, width: width),
+            source: VectorRegister(number: rnNum, arrangement: arrangement))
     }
 
     /// Maps the narrow operand's `size`/`Q` to an arrangement; `size=11` is reserved.

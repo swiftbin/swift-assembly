@@ -481,6 +481,28 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (size << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarPairwise(_ kind: A64.ScalarPairwiseKind, destination rd: FloatRegister, source rn: VectorRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=11000, bits[11:10]=10.
+        let base: UInt32 = 0x5e30_0800
+
+        if spec.fp {
+            let sz: UInt32
+            switch rn.arrangement {
+            case .s2: guard rd.width == 32 else { throw fail() }; sz = 0
+            case .d2: guard rd.width == 64 else { throw fail() }; sz = 1
+            default: throw fail()
+            }
+            return base | (spec.u << 29) | (spec.o1 << 23) | (sz << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        } else {
+            // `addp` reduces a `2d` source into a scalar `d`.
+            guard rn.arrangement == .d2, rd.width == 64 else { throw fail() }
+            return base | (spec.u << 29) | (0b11 << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
+    }
+
     private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
         let amount: Int
         switch shift {

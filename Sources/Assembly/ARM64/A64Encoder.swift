@@ -164,6 +164,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.indexed(kind, destination: destination, first: first, element: element)
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return try A64VectorEncoder.scalarThreeSame(kind, destination: destination, first: first, second: second)
+        case .scalarPairwise(let kind, let destination, let source):
+            return try A64VectorEncoder.scalarPairwise(kind, destination: destination, source: source)
         }
     }
 }

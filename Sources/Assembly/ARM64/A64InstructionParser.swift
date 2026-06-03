@@ -270,6 +270,19 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar pairwise: scalar FP destination, single vector source.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           isVectorRegisterOperand(instruction.operands[1]),
+           let kind = A64.ScalarPairwiseKind(rawValue: mnemonic) {
+            return .scalarPairwise(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        }
+
         switch mnemonic {
         case "b" where parts.count == 2:
             try expectOperandCount(instruction, exactly: 1)

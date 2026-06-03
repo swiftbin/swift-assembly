@@ -599,6 +599,22 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar pairwise reductions (`Vd, Vn.T`).
+    enum ScalarPairwiseKind: String, Equatable, CaseIterable {
+        case addp, faddp, fmaxp, fminp, fmaxnmp, fminnmp
+
+        var spec: (u: UInt32, fp: Bool, o1: UInt32, opcode: UInt32) {
+            switch self {
+            case .addp:    return (0, false, 0, 0b11011)
+            case .faddp:   return (1, true,  0, 0b01101)
+            case .fmaxp:   return (1, true,  0, 0b01111)
+            case .fminp:   return (1, true,  1, 0b01111)
+            case .fmaxnmp: return (1, true,  0, 0b01100)
+            case .fminnmp: return (1, true,  1, 0b01100)
+            }
+        }
+    }
+
     /// The optional shift applied to a vector modified-immediate byte.
     enum VectorImmediateShift: Equatable {
         case none
@@ -676,6 +692,7 @@ internal enum A64 {
         case vectorThreeDifferent(VectorThreeDifferentKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
+        case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
     }
 }
 
@@ -698,3 +715,4 @@ internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
+internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
