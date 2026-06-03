@@ -85,6 +85,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         case .vectorPairwiseLongAdd(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
+        case .vectorRoundReciprocal(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"

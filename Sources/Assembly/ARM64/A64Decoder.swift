@@ -41,6 +41,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
         if let instruction = decodeVectorConvert(word) { return instruction }
+        if let instruction = decodeVectorRoundReciprocal(word) { return instruction }
         if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
@@ -957,6 +958,38 @@ internal enum A64InstructionDecoder {
             kind,
             destination: VectorRegister(number: rdNum, arrangement: destination),
             source: VectorRegister(number: rnNum, arrangement: source)
+        )
+    }
+
+    private static func decodeVectorRoundReciprocal(_ word: UInt32) -> Instruction? {
+        // Shares the two-register-misc encoding; opcodes 11000/11001 (frint),
+        // 11100/11101 (estimates). The high `size` bit at [23] separates these
+        // from the convert group that reuses the same opcodes.
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let sizeHi = (word >> 23) & 1
+        let sz = (word >> 22) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        switch opcode {
+        case 0b11000, 0b11001, 0b11100, 0b11101: break
+        default: return nil
+        }
+        guard let kind = A64.VectorRoundReciprocalKind.decode(u: u, opcode: opcode, sizeHi: sizeHi) else { return nil }
+        let arrangement: A64.VectorArrangement
+        switch (sz, q) {
+        case (0, 0): arrangement = .s2
+        case (0, 1): arrangement = .s4
+        case (1, 1) where kind.allowsDouble: arrangement = .d2
+        default: return nil
+        }
+        return .vectorRoundReciprocal(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            source: VectorRegister(number: rnNum, arrangement: arrangement)
         )
     }
 

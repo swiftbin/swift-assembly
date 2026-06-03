@@ -206,6 +206,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.convert(kind, destination: destination, source: source)
         case .vectorPairwiseLongAdd(let kind, let destination, let source):
             return try A64VectorEncoder.pairwiseLongAdd(kind, destination: destination, source: source)
+        case .vectorRoundReciprocal(let kind, let destination, let source):
+            return try A64VectorEncoder.roundReciprocal(kind, destination: destination, source: source)
         }
     }
 }

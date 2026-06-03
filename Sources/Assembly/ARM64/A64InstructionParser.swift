@@ -552,6 +552,20 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD two-register-misc FP rounding and reciprocal estimates (`Vd.T, Vn.T`).
+        // The vector-register shape distinguishes it from the scalar estimate forms below.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           isVectorRegisterOperand(instruction.operands[0]),
+           isVectorRegisterOperand(instruction.operands[1]),
+           let kind = A64.VectorRoundReciprocalKind(rawValue: mnemonic) {
+            return .vectorRoundReciprocal(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD scalar FP two-register misc compare-against-zero (`Vd, Vn, #0.0`).
         if parts.count == 1,
            instruction.operands.count == 3,

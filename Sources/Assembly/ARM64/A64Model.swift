@@ -390,6 +390,45 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD two-register-misc floating-point rounding (`FRINTN`…`FRINTI`)
+    /// and reciprocal estimates (`FRECPE`/`FRSQRTE`/`URECPE`/`URSQRTE`).
+    /// Shares the convert opcode space; the high `size` bit at [23] disambiguates.
+    enum VectorRoundReciprocalKind: String, Equatable, CaseIterable {
+        case frintn, frintm, frintp, frintz, frinta, frintx, frinti
+        case frecpe, frsqrte, urecpe, ursqrte
+
+        /// The `U` bit at [29], the 5-bit `opcode` at [16:12], and the high `size`
+        /// bit at [23] (`sz` at [22] still selects single vs. double precision).
+        var spec: (u: UInt32, opcode: UInt32, sizeHi: UInt32) {
+            switch self {
+            case .frintn:  return (0, 0b11000, 0)
+            case .frintm:  return (0, 0b11001, 0)
+            case .frintp:  return (0, 0b11000, 1)
+            case .frintz:  return (0, 0b11001, 1)
+            case .frinta:  return (1, 0b11000, 0)
+            case .frintx:  return (1, 0b11001, 0)
+            case .frinti:  return (1, 0b11001, 1)
+            case .frecpe:  return (0, 0b11101, 1)
+            case .frsqrte: return (1, 0b11101, 1)
+            case .urecpe:  return (0, 0b11100, 1)
+            case .ursqrte: return (1, 0b11100, 1)
+            }
+        }
+
+        /// `URECPE`/`URSQRTE` are integer estimates restricted to `2s`/`4s`;
+        /// the rest accept the `2d` double-precision arrangement too.
+        var allowsDouble: Bool {
+            switch self {
+            case .urecpe, .ursqrte: return false
+            default: return true
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32, sizeHi: UInt32) -> VectorRoundReciprocalKind? {
+            allCases.first { $0.spec == (u, opcode, sizeHi) }
+        }
+    }
+
     /// Advanced SIMD two-register-misc extract-narrow (`XTN`/`SQXTN`/`UQXTN`/`SQXTUN`).
     /// The `2` upper-half variants are distinguished by a 128-bit (`Q=1`) destination.
     enum VectorExtractNarrowKind: String, Equatable, CaseIterable {
@@ -1090,6 +1129,7 @@ internal enum A64 {
         case vectorExtractNarrow(VectorExtractNarrowKind, destination: VectorRegister, source: VectorRegister)
         case vectorConvert(VectorConvertKind, destination: VectorRegister, source: VectorRegister)
         case vectorPairwiseLongAdd(VectorPairwiseLongAddKind, destination: VectorRegister, source: VectorRegister)
+        case vectorRoundReciprocal(VectorRoundReciprocalKind, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -1131,3 +1171,4 @@ internal typealias VectorCompareZeroKind = A64.VectorCompareZeroKind
 internal typealias VectorExtractNarrowKind = A64.VectorExtractNarrowKind
 internal typealias VectorConvertKind = A64.VectorConvertKind
 internal typealias VectorPairwiseLongAddKind = A64.VectorPairwiseLongAddKind
+internal typealias VectorRoundReciprocalKind = A64.VectorRoundReciprocalKind

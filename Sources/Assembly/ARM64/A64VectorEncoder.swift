@@ -823,6 +823,18 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func roundReciprocal(_ kind: A64.VectorRoundReciprocalKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        guard rd.arrangement == rn.arrangement else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let allowed: [A64.VectorArrangement] = kind.allowsDouble ? [.s2, .s4, .d2] : [.s2, .s4]
+        guard allowed.contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
+
+        let spec = kind.spec
+        let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
+        let size = (spec.sizeHi << 1) | sz
+        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
+        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func extractNarrow(_ kind: A64.VectorExtractNarrowKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
         // Destination is the narrow arrangement (`8b`/`16b`/`4h`/`8h`/`2s`/`4s`); the

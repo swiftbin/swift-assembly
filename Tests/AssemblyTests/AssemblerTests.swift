@@ -2143,6 +2143,59 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlp v0.1d, v1.1d"))   // source cannot be a D arrangement
     }
 
+    func testVectorRoundReciprocalInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintn v0.2s, v1.2s"), 0x0e218820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintn v0.4s, v1.4s"), 0x4e218820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintn v0.2d, v1.2d"), 0x4e618820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintm v0.4s, v1.4s"), 0x4e219820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintp v0.2s, v1.2s"), 0x0ea18820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintz v0.4s, v1.4s"), 0x4ea19820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinta v0.2d, v1.2d"), 0x6e618820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintx v0.4s, v1.4s"), 0x6e219820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinti v0.2d, v1.2d"), 0x6ee19820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpe v0.2s, v1.2s"), 0x0ea1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpe v0.4s, v1.4s"), 0x4ea1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpe v0.2d, v1.2d"), 0x4ee1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrte v0.4s, v1.4s"), 0x6ea1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrte v0.2d, v1.2d"), 0x6ee1d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("urecpe v0.2s, v1.2s"), 0x0ea1c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("urecpe v0.4s, v1.4s"), 0x4ea1c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ursqrte v0.4s, v1.4s"), 0x6ea1c820)
+    }
+
+    func testDisassembleVectorRoundReciprocal() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e618820), "frintn v0.2d, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ea18820), "frintp v0.2s, v1.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ee19820), "frinti v0.2d, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ee1d820), "frecpe v0.2d, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea1d820), "frsqrte v0.4s, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ea1c820), "urecpe v0.2s, v1.2s")
+    }
+
+    func testVectorRoundReciprocalRoundTrip() throws {
+        let sources = [
+            "frintn v0.2s, v1.2s", "frintn v2.2d, v3.2d", "frintm v4.4s, v5.4s",
+            "frintp v6.2s, v7.2s", "frintz v8.4s, v9.4s", "frinta v10.2d, v11.2d",
+            "frintx v12.4s, v13.4s", "frinti v14.2d, v15.2d",
+            "frecpe v16.2s, v17.2s", "frecpe v18.2d, v19.2d", "frsqrte v20.4s, v21.4s",
+            "frsqrte v22.2d, v23.2d", "urecpe v24.2s, v25.2s", "urecpe v26.4s, v27.4s",
+            "ursqrte v28.2s, v29.2s", "ursqrte v30.4s, v31.4s",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorRoundReciprocalInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frintn v0.8b, v1.8b"))   // integer arrangement
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("urecpe v0.2d, v1.2d"))   // urecpe has no double form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ursqrte v0.2d, v1.2d"))  // ursqrte has no double form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frecpe v0.2s, v1.4s"))   // arrangement mismatch
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
