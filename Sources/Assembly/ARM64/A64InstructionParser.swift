@@ -1068,6 +1068,14 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "aese", "aesd", "aesmc", "aesimc":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .cryptoAES(
+                A64.CryptoAESKind(rawValue: mnemonic)!,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
         case "zip1", "zip2", "uzp1", "uzp2", "trn1", "trn2":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 3)

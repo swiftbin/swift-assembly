@@ -37,6 +37,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPMoveImmediate(word) { return instruction }
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
+        if let instruction = decodeCryptoAES(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -830,6 +831,22 @@ internal enum A64InstructionDecoder {
         let isLong = kind == .saddlv || kind == .uaddlv
         let destinationWidth = isLong ? arrangement.elementWidth * 2 : arrangement.elementWidth
         return .acrossLanesInteger(kind, destination: floatRegister(number: rdNum, width: destinationWidth), source: VectorRegister(number: rnNum, arrangement: arrangement))
+    }
+
+    private static func decodeCryptoAES(_ word: UInt32) -> Instruction? {
+        // Crypto AES (`Vd.16b, Vn.16b`): fixed bits 01001110 00 10100 0 001xx 10.
+        // Decoded ahead of the two-register-misc group, whose mask does not check
+        // bit[19] and would otherwise mis-decode these as `cls`/`clz` forms.
+        guard word & 0xffff_cc00 == 0x4e28_4800 else { return nil }
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        guard let kind = A64.CryptoAESKind.decode(opcode: opcode) else { return nil }
+        return .cryptoAES(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: .b16),
+            source: VectorRegister(number: rnNum, arrangement: .b16)
+        )
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {

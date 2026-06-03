@@ -823,6 +823,12 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func cryptoAES(_ kind: A64.CryptoAESKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        // Both operands are fixed `16b`.
+        guard rd.arrangement == .b16, rn.arrangement == .b16 else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        return 0x4e28_0800 | (kind.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func fpConvertPrecision(_ kind: A64.VectorFPConvertPrecisionKind, upper: Bool, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
         // Resolve `sz` (the [22] precision selector) from the destination/source

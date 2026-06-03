@@ -90,6 +90,8 @@ internal enum A64InstructionFormatter {
         case .vectorFPConvertPrecision(let kind, let upper, let destination, let source):
             let suffix = upper ? "2" : ""
             return "\(kind.rawValue)\(suffix) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
+        case .cryptoAES(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"

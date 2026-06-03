@@ -2240,6 +2240,41 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtn v0.4h, v1.8h"))    // source must be FP
     }
 
+    func testCryptoAESInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("aese v0.16b, v1.16b"), 0x4e284820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("aesd v0.16b, v1.16b"), 0x4e285820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("aesmc v0.16b, v1.16b"), 0x4e286820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("aesimc v0.16b, v1.16b"), 0x4e287820)
+    }
+
+    func testDisassembleCryptoAES() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e284820), "aese v0.16b, v1.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e285820), "aesd v0.16b, v1.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e286820), "aesmc v0.16b, v1.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e287820), "aesimc v0.16b, v1.16b")
+        // The neighbouring two-register-misc cls form must still decode correctly.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e204820), "cls v0.16b, v1.16b")
+    }
+
+    func testCryptoAESRoundTrip() throws {
+        let sources = [
+            "aese v0.16b, v1.16b", "aesd v2.16b, v3.16b",
+            "aesmc v4.16b, v5.16b", "aesimc v6.16b, v7.16b",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testCryptoAESInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("aese v0.8b, v1.8b"))    // must be 16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("aese v0.4s, v1.4s"))    // must be 16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("aese v0.16b, v1.8b"))   // both must be 16b
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

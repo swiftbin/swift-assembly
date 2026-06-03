@@ -490,6 +490,25 @@ internal enum A64 {
         }
     }
 
+    /// Cryptographic AES single-round instructions (`Vd.16b, Vn.16b`).
+    enum CryptoAESKind: String, Equatable, CaseIterable {
+        case aese, aesd, aesmc, aesimc
+
+        /// The 5-bit `opcode` at [16:12].
+        var opcode: UInt32 {
+            switch self {
+            case .aese:   return 0b00100
+            case .aesd:   return 0b00101
+            case .aesmc:  return 0b00110
+            case .aesimc: return 0b00111
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoAESKind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
     enum VectorTwoRegisterMiscKind: String, Equatable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
@@ -1151,6 +1170,7 @@ internal enum A64 {
         case vectorPairwiseLongAdd(VectorPairwiseLongAddKind, destination: VectorRegister, source: VectorRegister)
         case vectorRoundReciprocal(VectorRoundReciprocalKind, destination: VectorRegister, source: VectorRegister)
         case vectorFPConvertPrecision(VectorFPConvertPrecisionKind, upper: Bool, destination: VectorRegister, source: VectorRegister)
+        case cryptoAES(CryptoAESKind, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -1194,3 +1214,4 @@ internal typealias VectorConvertKind = A64.VectorConvertKind
 internal typealias VectorPairwiseLongAddKind = A64.VectorPairwiseLongAddKind
 internal typealias VectorRoundReciprocalKind = A64.VectorRoundReciprocalKind
 internal typealias VectorFPConvertPrecisionKind = A64.VectorFPConvertPrecisionKind
+internal typealias CryptoAESKind = A64.CryptoAESKind
