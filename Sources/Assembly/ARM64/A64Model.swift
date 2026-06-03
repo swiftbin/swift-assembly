@@ -561,6 +561,44 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar three-same instructions (`Vd, Vn, Vm` on scalar FP registers).
+    enum ScalarThreeSameKind: String, Equatable, CaseIterable {
+        case add, sub, cmeq, cmge, cmgt, cmhi, cmhs, cmtst
+        case sqadd, uqadd, sqsub, uqsub
+        case sshl, ushl, srshl, urshl, sqshl, uqshl, sqrshl, uqrshl
+        case sqdmulh, sqrdmulh
+
+        /// Which scalar element widths an instruction permits.
+        enum SizeClass { case doubleOnly, anySize, halfSingle }
+
+        var spec: (u: UInt32, opcode: UInt32, size: SizeClass) {
+            switch self {
+            case .add:      return (0, 0b10000, .doubleOnly)
+            case .sub:      return (1, 0b10000, .doubleOnly)
+            case .cmeq:     return (1, 0b10001, .doubleOnly)
+            case .cmtst:    return (0, 0b10001, .doubleOnly)
+            case .cmge:     return (0, 0b00111, .doubleOnly)
+            case .cmhs:     return (1, 0b00111, .doubleOnly)
+            case .cmgt:     return (0, 0b00110, .doubleOnly)
+            case .cmhi:     return (1, 0b00110, .doubleOnly)
+            case .sshl:     return (0, 0b01000, .doubleOnly)
+            case .ushl:     return (1, 0b01000, .doubleOnly)
+            case .srshl:    return (0, 0b01010, .doubleOnly)
+            case .urshl:    return (1, 0b01010, .doubleOnly)
+            case .sqadd:    return (0, 0b00001, .anySize)
+            case .uqadd:    return (1, 0b00001, .anySize)
+            case .sqsub:    return (0, 0b00101, .anySize)
+            case .uqsub:    return (1, 0b00101, .anySize)
+            case .sqshl:    return (0, 0b01001, .anySize)
+            case .uqshl:    return (1, 0b01001, .anySize)
+            case .sqrshl:   return (0, 0b01011, .anySize)
+            case .uqrshl:   return (1, 0b01011, .anySize)
+            case .sqdmulh:  return (0, 0b10110, .halfSingle)
+            case .sqrdmulh: return (1, 0b10110, .halfSingle)
+            }
+        }
+    }
+
     /// The optional shift applied to a vector modified-immediate byte.
     enum VectorImmediateShift: Equatable {
         case none
@@ -637,6 +675,7 @@ internal enum A64 {
         case vectorExtract(destination: VectorRegister, first: VectorRegister, second: VectorRegister, index: Int)
         case vectorThreeDifferent(VectorThreeDifferentKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
+        case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
     }
 }
 
@@ -658,3 +697,4 @@ internal typealias VectorElementWidth = A64.VectorElementWidth
 internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
+internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind

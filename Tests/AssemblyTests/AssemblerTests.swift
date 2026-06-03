@@ -1106,6 +1106,73 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmul v0.2d, v1.4s, v2.s[1]"))   // fp dest/source mismatch
     }
 
+    func testScalarThreeSameInstructions() throws {
+        // Double-only forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add d0, d1, d2"), 0x5ee28420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sub d0, d1, d2"), 0x7ee28420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmeq d0, d1, d2"), 0x7ee28c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmge d0, d1, d2"), 0x5ee23c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmgt d0, d1, d2"), 0x5ee23420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmhi d0, d1, d2"), 0x7ee23420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmhs d0, d1, d2"), 0x7ee23c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmtst d0, d1, d2"), 0x5ee28c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sshl d0, d1, d2"), 0x5ee24420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ushl d0, d1, d2"), 0x7ee24420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("srshl d0, d1, d2"), 0x5ee25420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("urshl d0, d1, d2"), 0x7ee25420)
+        // Saturating forms accept all element widths.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqadd b0, b1, b2"), 0x5e220c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqadd h0, h1, h2"), 0x5e620c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqadd s0, s1, s2"), 0x5ea20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqadd d0, d1, d2"), 0x5ee20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqadd d0, d1, d2"), 0x7ee20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqsub d0, d1, d2"), 0x5ee22c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqsub d0, d1, d2"), 0x7ee22c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqshl b0, b1, b2"), 0x5e224c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqshl h0, h1, h2"), 0x7e624c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrshl s0, s1, s2"), 0x5ea25c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqrshl d0, d1, d2"), 0x7ee25c20)
+        // sqdmulh / sqrdmulh accept only half and single widths.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmulh h0, h1, h2"), 0x5e62b420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmulh s0, s1, s2"), 0x5ea2b420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmulh h0, h1, h2"), 0x7e62b420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmulh s0, s1, s2"), 0x7ea2b420)
+    }
+
+    func testDisassembleScalarThreeSame() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ee28420), "add d0, d1, d2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ee28420), "sub d0, d1, d2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e220c20), "sqadd b0, b1, b2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea2b420), "sqdmulh s0, s1, s2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ee25c20), "uqrshl d0, d1, d2")
+    }
+
+    func testScalarThreeSameRoundTrip() throws {
+        let sources = [
+            "add d0, d1, d2", "sub d3, d4, d5", "cmeq d6, d7, d8",
+            "cmge d9, d10, d11", "cmgt d12, d13, d14", "cmhi d15, d16, d17",
+            "cmhs d18, d19, d20", "cmtst d21, d22, d23",
+            "sshl d24, d25, d26", "ushl d27, d28, d29", "srshl d30, d31, d0", "urshl d1, d2, d3",
+            "sqadd b4, b5, b6", "uqadd h7, h8, h9", "sqsub s10, s11, s12", "uqsub d13, d14, d15",
+            "sqshl b16, b17, b18", "uqshl h19, h20, h21", "sqrshl s22, s23, s24", "uqrshl d25, d26, d27",
+            "sqdmulh h28, h29, h30", "sqrdmulh s31, s0, s1",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarThreeSameInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("add s0, s1, s2"))      // add is double-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmeq b0, b1, b2"))     // cmeq is double-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmulh d0, d1, d2"))  // sqdmulh excludes double
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmulh b0, b1, b2"))  // sqdmulh excludes byte
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("add d0, d1, s2"))      // widths must match
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

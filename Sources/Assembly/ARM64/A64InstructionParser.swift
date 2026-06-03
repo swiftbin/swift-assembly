@@ -132,6 +132,13 @@ internal enum A64Parser {
         return lower.hasPrefix("v") && lower.contains(".") && lower.hasSuffix("]")
     }
 
+    /// True when the operand is a bare scalar floating-point register (`b0`, `h1`, `s2`, `d3`).
+    static func isScalarFloatRegisterOperand(_ text: String) -> Bool {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let first = lower.first, "bhsd".contains(first) else { return false }
+        return UInt32(lower.dropFirst()) != nil
+    }
+
     static func floatImmediate(_ text: String) throws -> Double {
         var value = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if value.hasPrefix("#") { value.removeFirst() }
@@ -247,6 +254,20 @@ internal enum A64InstructionParser {
                     element: try A64Parser.vectorElement(instruction.operands[2])
                 )
             }
+        }
+
+        // Advanced SIMD scalar three-same: shares mnemonics with the vector
+        // three-same forms, distinguished by bare scalar FP register operands.
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           instruction.operands.allSatisfy(A64Parser.isScalarFloatRegisterOperand),
+           let kind = A64.ScalarThreeSameKind(rawValue: mnemonic) {
+            return .scalarThreeSame(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                second: try A64Parser.floatRegister(instruction.operands[2])
+            )
         }
 
         switch mnemonic {

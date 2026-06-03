@@ -449,6 +449,38 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarThreeSame(_ kind: A64.ScalarThreeSameKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        guard rd.width == rn.width, rn.width == rm.width else { throw fail() }
+
+        let size: UInt32
+        switch spec.size {
+        case .doubleOnly:
+            guard rd.width == 64 else { throw fail() }
+            size = 0b11
+        case .halfSingle:
+            switch rd.width {
+            case 16: size = 0b01
+            case 32: size = 0b10
+            default: throw fail()
+            }
+        case .anySize:
+            switch rd.width {
+            case 8: size = 0b00
+            case 16: size = 0b01
+            case 32: size = 0b10
+            case 64: size = 0b11
+            default: throw fail()
+            }
+        }
+
+        // Base: bit30=1, bits[28:24]=11110, bit21=1, bit10=1.
+        let base: UInt32 = 0x5e20_0400
+        return base | (spec.u << 29) | (size << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
         let amount: Int
         switch shift {
