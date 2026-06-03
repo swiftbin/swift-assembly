@@ -2196,6 +2196,50 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("frecpe v0.2s, v1.4s"))   // arrangement mismatch
     }
 
+    func testVectorFPConvertPrecisionInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtn v0.4h, v1.4s"), 0x0e216820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtn2 v0.8h, v1.4s"), 0x4e216820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtn v0.2s, v1.2d"), 0x0e616820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtn2 v0.4s, v1.2d"), 0x4e616820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtl v0.4s, v1.4h"), 0x0e217820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtl2 v0.4s, v1.8h"), 0x4e217820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtl v0.2d, v1.2s"), 0x0e617820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtl2 v0.2d, v1.4s"), 0x4e617820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtxn v0.2s, v1.2d"), 0x2e616820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtxn2 v0.4s, v1.2d"), 0x6e616820)
+    }
+
+    func testDisassembleVectorFPConvertPrecision() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e216820), "fcvtn v0.4h, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e616820), "fcvtn2 v0.4s, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e217820), "fcvtl v0.4s, v1.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e617820), "fcvtl2 v0.2d, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e616820), "fcvtxn v0.2s, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e616820), "fcvtxn2 v0.4s, v1.2d")
+    }
+
+    func testVectorFPConvertPrecisionRoundTrip() throws {
+        let sources = [
+            "fcvtn v0.4h, v1.4s", "fcvtn2 v2.8h, v3.4s", "fcvtn v4.2s, v5.2d", "fcvtn2 v6.4s, v7.2d",
+            "fcvtl v8.4s, v9.4h", "fcvtl2 v10.4s, v11.8h", "fcvtl v12.2d, v13.2s", "fcvtl2 v14.2d, v15.4s",
+            "fcvtxn v16.2s, v17.2d", "fcvtxn2 v18.4s, v19.2d",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorFPConvertPrecisionInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtn v0.8h, v1.4s"))    // plain form needs 64-bit dest
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtn2 v0.4h, v1.4s"))   // 2 form needs 128-bit dest
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtl v0.2d, v1.4s"))    // wrong source for sz=1 plain
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtxn v0.2s, v1.4s"))   // fcvtxn source must be 2d
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtn v0.4h, v1.8h"))    // source must be FP
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

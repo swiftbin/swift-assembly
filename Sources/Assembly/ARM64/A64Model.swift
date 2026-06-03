@@ -429,6 +429,26 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD two-register-misc floating-point precision converts
+    /// (`FCVTN`/`FCVTL`/`FCVTXN`). The `2` upper-half variants set `Q=1`, and the
+    /// `sz` bit at [22] selects the half↔single (`sz=0`) vs. single↔double (`sz=1`) pair.
+    enum VectorFPConvertPrecisionKind: String, Equatable, CaseIterable {
+        case fcvtn, fcvtl, fcvtxn
+
+        /// The `U` bit at [29] and the 5-bit `opcode` at [16:12].
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .fcvtn:  return (0, 0b10110)
+            case .fcvtl:  return (0, 0b10111)
+            case .fcvtxn: return (1, 0b10110)
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32) -> VectorFPConvertPrecisionKind? {
+            allCases.first { $0.spec == (u, opcode) }
+        }
+    }
+
     /// Advanced SIMD two-register-misc extract-narrow (`XTN`/`SQXTN`/`UQXTN`/`SQXTUN`).
     /// The `2` upper-half variants are distinguished by a 128-bit (`Q=1`) destination.
     enum VectorExtractNarrowKind: String, Equatable, CaseIterable {
@@ -1130,6 +1150,7 @@ internal enum A64 {
         case vectorConvert(VectorConvertKind, destination: VectorRegister, source: VectorRegister)
         case vectorPairwiseLongAdd(VectorPairwiseLongAddKind, destination: VectorRegister, source: VectorRegister)
         case vectorRoundReciprocal(VectorRoundReciprocalKind, destination: VectorRegister, source: VectorRegister)
+        case vectorFPConvertPrecision(VectorFPConvertPrecisionKind, upper: Bool, destination: VectorRegister, source: VectorRegister)
     }
 }
 
@@ -1172,3 +1193,4 @@ internal typealias VectorExtractNarrowKind = A64.VectorExtractNarrowKind
 internal typealias VectorConvertKind = A64.VectorConvertKind
 internal typealias VectorPairwiseLongAddKind = A64.VectorPairwiseLongAddKind
 internal typealias VectorRoundReciprocalKind = A64.VectorRoundReciprocalKind
+internal typealias VectorFPConvertPrecisionKind = A64.VectorFPConvertPrecisionKind

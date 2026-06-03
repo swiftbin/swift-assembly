@@ -823,6 +823,45 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func fpConvertPrecision(_ kind: A64.VectorFPConvertPrecisionKind, upper: Bool, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        // Resolve `sz` (the [22] precision selector) from the destination/source
+        // arrangement pair; reject any combination not defined for the mnemonic.
+        let sz: UInt32
+        switch kind {
+        case .fcvtn:
+            // f32→f16 (sz=0) or f64→f32 (sz=1); the `2` form keeps a 128-bit destination.
+            switch (rn.arrangement, rd.arrangement) {
+            case (.s4, .h4) where !upper: sz = 0
+            case (.s4, .h8) where upper:  sz = 0
+            case (.d2, .s2) where !upper: sz = 1
+            case (.d2, .s4) where upper:  sz = 1
+            default: throw fail()
+            }
+        case .fcvtl:
+            // f16→f32 (sz=0) or f32→f64 (sz=1); the `2` form reads a 128-bit source.
+            switch (rn.arrangement, rd.arrangement) {
+            case (.h4, .s4) where !upper: sz = 0
+            case (.h8, .s4) where upper:  sz = 0
+            case (.s2, .d2) where !upper: sz = 1
+            case (.s4, .d2) where upper:  sz = 1
+            default: throw fail()
+            }
+        case .fcvtxn:
+            // f64→f32 with round-to-odd; sz is always 1.
+            switch (rn.arrangement, rd.arrangement) {
+            case (.d2, .s2) where !upper: sz = 1
+            case (.d2, .s4) where upper:  sz = 1
+            default: throw fail()
+            }
+        }
+
+        let spec = kind.spec
+        let q: UInt32 = upper ? 1 : 0
+        let head = (q << 30) | (spec.u << 29) | 0x0e20_0800 | (sz << 22)
+        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func roundReciprocal(_ kind: A64.VectorRoundReciprocalKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         guard rd.arrangement == rn.arrangement else { throw AssemblerError.invalidRegister(kind.rawValue) }
         let allowed: [A64.VectorArrangement] = kind.allowsDouble ? [.s2, .s4, .d2] : [.s2, .s4]

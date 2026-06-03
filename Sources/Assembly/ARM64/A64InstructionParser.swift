@@ -552,6 +552,25 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD two-register-misc FP precision converts (`Vd.Ta, Vn.Tb`); the
+        // `2` suffix selects the upper-half (`Q=1`) variant. Vector operands distinguish
+        // these from the scalar `fcvtxn` form handled below.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           isVectorRegisterOperand(instruction.operands[0]),
+           isVectorRegisterOperand(instruction.operands[1]) {
+            let upper = mnemonic.hasSuffix("2")
+            let base = upper ? String(mnemonic.dropLast()) : mnemonic
+            if let kind = A64.VectorFPConvertPrecisionKind(rawValue: base) {
+                return .vectorFPConvertPrecision(
+                    kind,
+                    upper: upper,
+                    destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                    source: try A64Parser.vectorRegister(instruction.operands[1])
+                )
+            }
+        }
+
         // Advanced SIMD two-register-misc FP rounding and reciprocal estimates (`Vd.T, Vn.T`).
         // The vector-register shape distinguishes it from the scalar estimate forms below.
         if parts.count == 1,

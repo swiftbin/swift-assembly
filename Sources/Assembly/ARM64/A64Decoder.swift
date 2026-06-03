@@ -40,6 +40,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
+        if let instruction = decodeVectorFPConvertPrecision(word) { return instruction }
         if let instruction = decodeVectorConvert(word) { return instruction }
         if let instruction = decodeVectorRoundReciprocal(word) { return instruction }
         if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
@@ -956,6 +957,45 @@ internal enum A64InstructionDecoder {
         }
         return .vectorExtractNarrow(
             kind,
+            destination: VectorRegister(number: rdNum, arrangement: destination),
+            source: VectorRegister(number: rnNum, arrangement: source)
+        )
+    }
+
+    private static func decodeVectorFPConvertPrecision(_ word: UInt32) -> Instruction? {
+        // Shares the two-register-misc encoding; selected by opcodes 10110 (fcvtn/fcvtxn) / 10111 (fcvtl).
+        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let sz = (word >> 22) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard opcode == 0b10110 || opcode == 0b10111 else { return nil }
+        guard let kind = A64.VectorFPConvertPrecisionKind.decode(u: u, opcode: opcode) else { return nil }
+        let upper = q == 1
+
+        let source: A64.VectorArrangement
+        let destination: A64.VectorArrangement
+        switch kind {
+        case .fcvtn:
+            switch sz {
+            case 0: source = .s4; destination = upper ? .h8 : .h4
+            default: source = .d2; destination = upper ? .s4 : .s2
+            }
+        case .fcvtl:
+            switch sz {
+            case 0: source = upper ? .h8 : .h4; destination = .s4
+            default: source = upper ? .s4 : .s2; destination = .d2
+            }
+        case .fcvtxn:
+            guard sz == 1 else { return nil }
+            source = .d2; destination = upper ? .s4 : .s2
+        }
+        return .vectorFPConvertPrecision(
+            kind,
+            upper: upper,
             destination: VectorRegister(number: rdNum, arrangement: destination),
             source: VectorRegister(number: rnNum, arrangement: source)
         )

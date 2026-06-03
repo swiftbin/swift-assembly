@@ -54,6 +54,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD two-register-misc floating-point ↔ integer convert (fcvtns / fcvtnu / fcvtps / fcvtpu / fcvtms / fcvtmu / fcvtzs / fcvtzu / fcvtas / fcvtau / scvtf / ucvtf)
 - Advanced SIMD two-register-misc pairwise long add and accumulate (saddlp / uaddlp / sadalp / uadalp)
 - Advanced SIMD two-register-misc floating-point rounding and reciprocal estimates (frintn / frintm / frintp / frintz / frinta / frintx / frinti / frecpe / frsqrte / urecpe / ursqrte)
+- Advanced SIMD two-register-misc floating-point precision converts (fcvtn(2) / fcvtl(2) / fcvtxn(2))
 - ...
 
 ## Usage

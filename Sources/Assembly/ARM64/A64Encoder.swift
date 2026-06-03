@@ -208,6 +208,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.pairwiseLongAdd(kind, destination: destination, source: source)
         case .vectorRoundReciprocal(let kind, let destination, let source):
             return try A64VectorEncoder.roundReciprocal(kind, destination: destination, source: source)
+        case .vectorFPConvertPrecision(let kind, let upper, let destination, let source):
+            return try A64VectorEncoder.fpConvertPrecision(kind, upper: upper, destination: destination, source: source)
         }
     }
 }
