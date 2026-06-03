@@ -1819,6 +1819,79 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld3 {v0.4s, v1.4s, v2.4s, v3.4s}, [x1]")) // LD3 needs exactly 3
     }
 
+    func testLoadStoreReplicateInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1r {v0.16b}, [x1]"), 0x4d40c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1r {v0.8h}, [x1]"), 0x4d40c420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1r {v0.4s}, [x1]"), 0x4d40c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1r {v0.2d}, [x1]"), 0x4d40cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld2r {v0.16b, v1.16b}, [x1]"), 0x4d60c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld3r {v0.4s, v1.4s, v2.4s}, [x1]"), 0x4d40e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld4r {v0.2d, v1.2d, v2.2d, v3.2d}, [x1]"), 0x4d60ec20)
+        // Post-index forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1r {v0.16b}, [x1], #1"), 0x4ddfc020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld2r {v0.8h, v1.8h}, [x1], #4"), 0x4dffc420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld4r {v0.2d, v1.2d, v2.2d, v3.2d}, [x1], #32"), 0x4dffec20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1r {v5.4s}, [x2], x3"), 0x4dc3c845)
+    }
+
+    func testLoadStoreSingleLaneInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1 {v0.b}[3], [x1]"), 0x0d400c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1 {v0.h}[5], [x1]"), 0x4d404820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1 {v0.s}[1], [x1]"), 0x0d409020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1 {v0.d}[1], [x1]"), 0x4d408420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st1 {v0.b}[15], [x1]"), 0x4d001c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st1 {v0.d}[0], [sp]"), 0x0d0087e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld2 {v0.s, v1.s}[2], [x1]"), 0x4d608020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st3 {v0.h, v1.h, v2.h}[7], [x1]"), 0x4d007820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld4 {v0.d, v1.d, v2.d, v3.d}[1], [x1]"), 0x4d60a420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st4 {v0.b, v1.b, v2.b, v3.b}[3], [x1]"), 0x0d202c20)
+        // Post-index forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1 {v0.s}[1], [x1], #4"), 0x0ddf9020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld1 {v0.b}[3], [x1], x2"), 0x0dc20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ld3 {v0.h, v1.h, v2.h}[7], [x1], #6"), 0x4ddf7820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st2 {v0.d, v1.d}[1], [x1], x5"), 0x4da58420)
+    }
+
+    func testDisassembleLoadStoreSingleStructure() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4d40c020), "ld1r {v0.16b}, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4d60ec20), "ld4r {v0.2d, v1.2d, v2.2d, v3.2d}, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ddfc020), "ld1r {v0.16b}, [x1], #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0d400c20), "ld1 {v0.b}[3], [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4d408420), "ld1 {v0.d}[1], [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4d007820), "st3 {v0.h, v1.h, v2.h}[7], [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ddf9020), "ld1 {v0.s}[1], [x1], #4")
+    }
+
+    func testLoadStoreSingleStructureRoundTrip() throws {
+        let sources = [
+            "ld1r {v0.16b}, [x1]", "ld1r {v3.8h}, [x4]", "ld1r {v7.4s}, [x8]", "ld1r {v9.2d}, [x10]",
+            "ld2r {v0.16b, v1.16b}, [x1]", "ld3r {v5.4s, v6.4s, v7.4s}, [x8]",
+            "ld4r {v0.2d, v1.2d, v2.2d, v3.2d}, [x1]",
+            "ld1r {v0.16b}, [x1], #1", "ld1r {v5.4s}, [x2], x3",
+            "ld1 {v0.b}[3], [x1]", "ld1 {v2.h}[5], [x3]", "ld1 {v4.s}[1], [x5]", "ld1 {v6.d}[1], [x7]",
+            "st1 {v0.b}[15], [x1]", "st4 {v0.b, v1.b, v2.b, v3.b}[3], [x1]",
+            "ld2 {v0.s, v1.s}[2], [x1]", "st3 {v0.h, v1.h, v2.h}[7], [x1]",
+            "ld4 {v0.d, v1.d, v2.d, v3.d}[1], [x1]",
+            "ld1 {v0.s}[1], [x1], #4", "ld1 {v0.b}[3], [x1], x2", "st2 {v0.d, v1.d}[1], [x1], x5",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testLoadStoreSingleStructureInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld1 {v0.b}[16], [x1]"))         // index out of range (B: max 15)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld1 {v0.s}[4], [x1]"))          // index out of range (S: max 3)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld1 {v0.d}[2], [x1]"))          // index out of range (D: max 1)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld2 {v0.s}[1], [x1]"))          // LD2 needs 2 registers
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld2 {v0.s, v2.s}[1], [x1]"))    // non-consecutive
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld1 {v0.s}[1], [x1], #8"))      // wrong post-index immediate
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ld2r {v0.16b}, [x1]"))          // LD2R needs 2 registers
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

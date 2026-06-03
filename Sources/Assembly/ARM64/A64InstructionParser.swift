@@ -127,6 +127,44 @@ internal enum A64Parser {
         return A64.VectorRegisterList(firstNumber: first, count: registers.count, arrangement: arrangement)
     }
 
+    /// Parses a brace-delimited single-lane register list such as `{v0.s, v1.s}[1]`. The registers
+    /// must share an element width and be numbered consecutively (wrapping at v31), and the trailing
+    /// `[index]` selects the lane.
+    static func vectorLaneList(_ text: String) throws -> A64.VectorLaneList {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard let close = trimmed.firstIndex(of: "}"), trimmed.hasPrefix("{"),
+              trimmed.hasSuffix("]") else { throw AssemblerError.invalidRegister(text) }
+        let inner = String(trimmed[trimmed.index(after: trimmed.startIndex)..<close])
+        let after = trimmed[trimmed.index(after: close)...]
+        guard after.hasPrefix("["), let bracket = after.firstIndex(of: "[") else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        let indexText = String(after[after.index(after: bracket)..<after.index(before: after.endIndex)])
+        guard let index = Int(indexText), index >= 0 else { throw AssemblerError.invalidRegister(text) }
+
+        let items = inner.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard !items.isEmpty, items.count <= 4 else { throw AssemblerError.invalidRegister(text) }
+        var widths: [A64.VectorElementWidth] = []
+        var numbers: [UInt32] = []
+        for item in items {
+            let parts = item.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+            guard parts.count == 2, let prefix = parts[0].first, prefix == "v",
+                  let number = UInt32(parts[0].dropFirst()), number <= 31,
+                  let width = A64.VectorElementWidth(rawValue: parts[1]) else {
+                throw AssemblerError.invalidRegister(text)
+            }
+            widths.append(width)
+            numbers.append(number)
+        }
+        let width = widths[0]
+        guard widths.allSatisfy({ $0 == width }) else { throw AssemblerError.invalidRegister(text) }
+        let first = numbers[0]
+        for (offset, number) in numbers.enumerated() {
+            guard number == (first + UInt32(offset)) % 32 else { throw AssemblerError.invalidRegister(text) }
+        }
+        return A64.VectorLaneList(firstNumber: first, count: numbers.count, width: width, index: index)
+    }
+
     /// Parses the addressing form for structured load/store: `[Xn]`, `[Xn], #imm`, or `[Xn], Xm`.
     /// For the immediate post-index form the literal must equal `expectedPostImmediate`.
     static func vectorMemoryOperand(_ operands: [String], baseIndex: Int, expectedPostImmediate: Int64) throws -> A64.VectorMemoryOperand {
@@ -747,10 +785,35 @@ internal enum A64InstructionParser {
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)
             let kind = A64.LoadStoreMultipleKind(rawValue: mnemonic)!
+            // A `}[` in the register list selects the single-lane form (e.g. `{v0.s}[1]`),
+            // otherwise it is the multiple-structures form (e.g. `{v0.4s}`).
+            if instruction.operands[0].contains("}[") || instruction.operands[0].contains("} [") {
+                let list = try A64Parser.vectorLaneList(instruction.operands[0])
+                let expected = Int64(list.count) << list.width.sizeShift
+                return .loadStoreSingleLane(
+                    kind,
+                    registers: list,
+                    address: try A64Parser.vectorMemoryOperand(instruction.operands, baseIndex: 1, expectedPostImmediate: expected)
+                )
+            }
             let list = try A64Parser.vectorRegisterList(instruction.operands[0])
             let bytesPerRegister: Int64 = list.arrangement.q == 1 ? 16 : 8
             let expected = Int64(list.count) * bytesPerRegister
             return .loadStoreMultiple(
+                kind,
+                registers: list,
+                address: try A64Parser.vectorMemoryOperand(instruction.operands, baseIndex: 1, expectedPostImmediate: expected)
+            )
+        case "ld1r", "ld2r", "ld3r", "ld4r":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            let kind = A64.LoadStoreReplicateKind(rawValue: mnemonic)!
+            let list = try A64Parser.vectorRegisterList(instruction.operands[0])
+            // Each register loads one element; the implicit post-index immediate is
+            // selem * elementBytes.
+            let elementBytes = Int64(list.arrangement.elementWidth / 8)
+            let expected = Int64(list.count) * elementBytes
+            return .loadStoreReplicate(
                 kind,
                 registers: list,
                 address: try A64Parser.vectorMemoryOperand(instruction.operands, baseIndex: 1, expectedPostImmediate: expected)

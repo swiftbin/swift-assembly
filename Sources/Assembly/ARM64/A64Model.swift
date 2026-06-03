@@ -89,6 +89,18 @@ internal enum A64 {
         var encodedNumber: UInt32 { firstNumber & 0x1f }
     }
 
+    /// A brace-delimited list of consecutively numbered vector registers sharing an element
+    /// width, together with a single lane index, e.g. `{v0.s, v1.s}[1]` used by the
+    /// load/store single-structure instructions.
+    struct VectorLaneList: Equatable {
+        var firstNumber: UInt32
+        var count: Int
+        var width: VectorElementWidth
+        var index: Int
+
+        var encodedNumber: UInt32 { firstNumber & 0x1f }
+    }
+
     /// Addressing forms used by the Advanced SIMD structured load/store instructions.
     enum VectorMemoryOperand: Equatable {
         case base(Register)                         // [Xn]
@@ -247,6 +259,24 @@ internal enum A64 {
             case (3, true):  return .ld3
             case (4, false): return .st4
             case (4, true):  return .ld4
+            default: return nil
+            }
+        }
+    }
+
+    /// Advanced SIMD load single structure and replicate (`LD1R`–`LD4R`).
+    enum LoadStoreReplicateKind: String, Equatable, CaseIterable {
+        case ld1r, ld2r, ld3r, ld4r
+
+        /// The structure size / number of registers (1 for LD1R … 4 for LD4R).
+        var structure: Int { Int(String(rawValue.dropFirst(2).dropLast()))! }
+
+        static func forStructure(_ structure: Int) -> LoadStoreReplicateKind? {
+            switch structure {
+            case 1: return .ld1r
+            case 2: return .ld2r
+            case 3: return .ld3r
+            case 4: return .ld4r
             default: return nil
             }
         }
@@ -906,6 +936,8 @@ internal enum A64 {
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
         case loadStorePairFP(LoadStorePairKind, first: FPRegister, second: FPRegister, memory: MemoryOperand)
         case loadStoreMultiple(LoadStoreMultipleKind, registers: VectorRegisterList, address: VectorMemoryOperand)
+        case loadStoreSingleLane(LoadStoreMultipleKind, registers: VectorLaneList, address: VectorMemoryOperand)
+        case loadStoreReplicate(LoadStoreReplicateKind, registers: VectorRegisterList, address: VectorMemoryOperand)
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
@@ -954,6 +986,8 @@ internal typealias VectorRegister = A64.VectorRegister
 internal typealias VectorRegisterList = A64.VectorRegisterList
 internal typealias VectorMemoryOperand = A64.VectorMemoryOperand
 internal typealias LoadStoreMultipleKind = A64.LoadStoreMultipleKind
+internal typealias VectorLaneList = A64.VectorLaneList
+internal typealias LoadStoreReplicateKind = A64.LoadStoreReplicateKind
 internal typealias Condition = A64.Condition
 internal typealias ShiftKind = A64.ShiftKind
 internal typealias ExtendKind = A64.ExtendKind

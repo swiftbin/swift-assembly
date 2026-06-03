@@ -28,6 +28,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
         if let instruction = decodeLoadStorePairFP(word) { return instruction }
         if let instruction = decodeLoadStoreMultiple(word) { return instruction }
+        if let instruction = decodeLoadStoreSingleStructure(word) { return instruction }
         if let instruction = decodeFPDataProcessing3(word) { return instruction }
         if let instruction = decodeFPDataProcessing2(word) { return instruction }
         if let instruction = decodeFPDataProcessing1(word) { return instruction }
@@ -541,6 +542,72 @@ internal enum A64InstructionDecoder {
             address = rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
         }
         return .loadStoreMultiple(kind, registers: list, address: address)
+    }
+
+    private static func decodeLoadStoreSingleStructure(_ word: UInt32) -> Instruction? {
+        // Advanced SIMD load/store single structure & replicate: bit31=0, bits[29:23]=0011010, bit24=1.
+        guard word & 0xbf00_0000 == 0x0d00_0000 else { return nil }
+        let post = (word >> 23) & 1
+        if post == 0 {
+            // Non-post form: the Rm field (bits[20:16]) must be 0.
+            guard (word >> 16) & 0x1f == 0 else { return nil }
+        }
+        let q = (word >> 30) & 1
+        let l = (word >> 22) & 1
+        let r = (word >> 21) & 1
+        let opcode = (word >> 13) & 0b111
+        let s = (word >> 12) & 1
+        let size = (word >> 10) & 3
+        let rn = (word >> 5) & 0x1f
+        let rt = word & 0x1f
+        let sizeClass = opcode >> 1
+        let opcode0 = opcode & 1
+        let selem = Int((opcode0 << 1) | r) + 1
+
+        let base = xRegister(number: rn)
+        func address() -> A64.VectorMemoryOperand {
+            if post == 0 { return .base(base) }
+            let rm = (word >> 16) & 0x1f
+            return rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
+        }
+
+        if sizeClass == 0b11 {
+            // Replicate form (LD1R–LD4R): load-only with S == 0.
+            guard l == 1, s == 0 else { return nil }
+            guard let arrangement = fullVectorArrangement(size: size, q: q),
+                  let kind = A64.LoadStoreReplicateKind.forStructure(selem) else { return nil }
+            let list = A64.VectorRegisterList(firstNumber: rt, count: selem, arrangement: arrangement)
+            return .loadStoreReplicate(kind, registers: list, address: address())
+        }
+
+        // Single-lane form: recover the element width and lane index from Q/S/size.
+        let width: A64.VectorElementWidth
+        let index: Int
+        switch sizeClass {
+        case 0b00:
+            width = .b
+            index = Int((q << 3) | (s << 2) | size)
+        case 0b01:
+            guard size & 1 == 0 else { return nil }
+            width = .h
+            index = Int((q << 2) | (s << 1) | (size >> 1))
+        case 0b10:
+            if size == 0b00 {
+                width = .s
+                index = Int((q << 1) | s)
+            } else if size == 0b01 {
+                guard s == 0 else { return nil }
+                width = .d
+                index = Int(q)
+            } else {
+                return nil
+            }
+        default:
+            return nil
+        }
+        guard let kind = A64.LoadStoreMultipleKind.forStructure(selem, isLoad: l == 1) else { return nil }
+        let list = A64.VectorLaneList(firstNumber: rt, count: selem, width: width, index: index)
+        return .loadStoreSingleLane(kind, registers: list, address: address())
     }
 
     private static func fullVectorArrangement(size: UInt32, q: UInt32) -> A64.VectorArrangement? {

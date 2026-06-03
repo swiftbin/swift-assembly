@@ -116,6 +116,10 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.pairFP(kind, first: first, second: second, memory: memory)
         case .loadStoreMultiple(let kind, let registers, let address):
             return try A64LoadStoreEncoder.multiple(kind, registers: registers, address: address)
+        case .loadStoreSingleLane(let kind, let registers, let address):
+            return try A64LoadStoreEncoder.singleLane(kind, registers: registers, address: address)
+        case .loadStoreReplicate(let kind, let registers, let address):
+            return try A64LoadStoreEncoder.replicate(kind, registers: registers, address: address)
         case .pointerAuthentication(let kind, let register, let architecture):
             return try A64PointerAuthenticationEncoder.encode(kind, register: register, architecture: architecture)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
@@ -461,6 +465,81 @@ internal enum A64LoadStoreEncoder {
             return 0x0c80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
         case .postRegister(let rn, let rm):
             return 0x0c80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
+        }
+    }
+
+    static func singleLane(_ kind: A64.LoadStoreMultipleKind, registers list: A64.VectorLaneList, address: A64.VectorMemoryOperand) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        let selem = kind.structure
+        guard kind.structure == list.count, (1...4).contains(selem) else { throw fail() }
+        guard list.index >= 0, list.index <= list.width.maxIndex else { throw fail() }
+
+        let opcode0 = UInt32((selem - 1) >> 1)
+        let r = UInt32((selem - 1) & 1)
+        let index = UInt32(list.index)
+
+        // The lane index is spread across Q (bit30), S (bit12), and size (bits[11:10])
+        // differently for each element width.
+        let q: UInt32
+        let s: UInt32
+        let size: UInt32
+        let sizeClass: UInt32
+        switch list.width {
+        case .b:
+            q = (index >> 3) & 1
+            s = (index >> 2) & 1
+            size = index & 0b11
+            sizeClass = 0b00
+        case .h:
+            q = (index >> 2) & 1
+            s = (index >> 1) & 1
+            size = (index & 1) << 1
+            sizeClass = 0b01
+        case .s:
+            q = (index >> 1) & 1
+            s = index & 1
+            size = 0b00
+            sizeClass = 0b10
+        case .d:
+            q = index & 1
+            s = 0
+            size = 0b01
+            sizeClass = 0b10
+        }
+        let opcode = (sizeClass << 1) | opcode0
+        let l: UInt32 = kind.isLoad ? 1 : 0
+        let common = (q << 30) | (l << 22) | (r << 21) | (opcode << 13) | (s << 12) | (size << 10) | list.encodedNumber
+
+        switch address {
+        case .base(let rn):
+            return 0x0d00_0000 | common | (rn.encodedNumber << 5)
+        case .postImmediate(let rn):
+            return 0x0d80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
+        case .postRegister(let rn, let rm):
+            return 0x0d80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
+        }
+    }
+
+    static func replicate(_ kind: A64.LoadStoreReplicateKind, registers list: A64.VectorRegisterList, address: A64.VectorMemoryOperand) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        let selem = kind.structure
+        guard selem == list.count else { throw fail() }
+
+        let opcode0 = UInt32((selem - 1) >> 1)
+        let r = UInt32((selem - 1) & 1)
+        let opcode = (0b11 << 1) | opcode0   // sizeClass = 0b11 marks the replicate form.
+        let q = list.arrangement.q
+        let size = list.arrangement.elementSize
+        // Replicate is load-only (L = 1) with S = 0.
+        let common = (q << 30) | (1 << 22) | (r << 21) | (opcode << 13) | (size << 10) | list.encodedNumber
+
+        switch address {
+        case .base(let rn):
+            return 0x0d00_0000 | common | (rn.encodedNumber << 5)
+        case .postImmediate(let rn):
+            return 0x0d80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
+        case .postRegister(let rn, let rm):
+            return 0x0d80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
         }
     }
 
