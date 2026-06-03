@@ -1218,6 +1218,57 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("faddp s0, v1.4s"))   // unsupported source arrangement
     }
 
+    func testScalarTwoRegisterMiscInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("abs d0, d1"), 0x5ee0b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("neg d0, d1"), 0x7ee0b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqabs b0, b1"), 0x5e207820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqabs h0, h1"), 0x5e607820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqabs s0, s1"), 0x5ea07820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqabs d0, d1"), 0x5ee07820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqneg d0, d1"), 0x7ee07820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("suqadd b0, b1"), 0x5e203820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usqadd d0, d1"), 0x7ee03820)
+        // Compare-against-zero forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmeq d0, d1, #0"), 0x5ee09820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmge d0, d1, #0"), 0x7ee08820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmgt d0, d1, #0"), 0x5ee08820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmle d0, d1, #0"), 0x7ee09820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmlt d0, d1, #0"), 0x5ee0a820)
+    }
+
+    func testDisassembleScalarTwoRegisterMisc() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ee0b820), "abs d0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ee0b820), "neg d0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e207820), "sqabs b0, b1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ee09820), "cmeq d0, d1, #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ee0a820), "cmlt d0, d1, #0")
+    }
+
+    func testScalarTwoRegisterMiscRoundTrip() throws {
+        let sources = [
+            "abs d0, d1", "neg d2, d3",
+            "sqabs b4, b5", "sqabs h6, h7", "sqabs s8, s9", "sqabs d10, d11",
+            "sqneg b12, b13", "sqneg d14, d15",
+            "suqadd b16, b17", "suqadd s18, s19", "usqadd h20, h21", "usqadd d22, d23",
+            "cmeq d24, d25, #0", "cmge d26, d27, #0", "cmgt d28, d29, #0",
+            "cmle d30, d31, #0", "cmlt d0, d1, #0",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarTwoRegisterMiscInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("abs s0, s1"))         // abs is double-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("neg b0, b1"))         // neg is double-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmlt s0, s1, #0"))    // compare-zero is double-only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("abs d0, s1"))         // widths must match
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cmeq d0, d1, #1"))    // only #0 is allowed
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

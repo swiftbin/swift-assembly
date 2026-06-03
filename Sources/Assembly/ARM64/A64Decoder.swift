@@ -43,6 +43,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSame(word) { return instruction }
         if let instruction = decodeScalarPairwise(word) { return instruction }
+        if let instruction = decodeScalarTwoRegisterMisc(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1045,6 +1046,34 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: width),
             first: floatRegister(number: rnNum, width: width),
             second: floatRegister(number: rmNum, width: width))
+    }
+
+    private static func decodeScalarTwoRegisterMisc(_ word: UInt32) -> Instruction? {
+        // bit31=0, bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
+        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 0x3
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarTwoRegisterMiscKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        let width: Int
+        switch kind.spec.size {
+        case .doubleOnly:
+            guard size == 0b11 else { return nil }
+            width = 64
+        case .anySize:
+            width = 8 << size
+        }
+
+        return .scalarTwoRegisterMisc(kind,
+            destination: floatRegister(number: rdNum, width: width),
+            source: floatRegister(number: rnNum, width: width))
     }
 
     private static func decodeScalarPairwise(_ word: UInt32) -> Instruction? {

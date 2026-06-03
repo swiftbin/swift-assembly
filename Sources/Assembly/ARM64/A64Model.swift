@@ -599,6 +599,30 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar two-register misc (`Vd, Vn`, plus the compare-against-`#0` forms).
+    enum ScalarTwoRegisterMiscKind: String, Equatable, CaseIterable {
+        case abs, neg, sqabs, sqneg, suqadd, usqadd
+        case cmgt, cmge, cmeq, cmle, cmlt   // compared against #0
+
+        enum SizeClass { case doubleOnly, anySize }
+
+        var spec: (u: UInt32, opcode: UInt32, size: SizeClass, comparesZero: Bool) {
+            switch self {
+            case .abs:    return (0, 0b01011, .doubleOnly, false)
+            case .neg:    return (1, 0b01011, .doubleOnly, false)
+            case .sqabs:  return (0, 0b00111, .anySize, false)
+            case .sqneg:  return (1, 0b00111, .anySize, false)
+            case .suqadd: return (0, 0b00011, .anySize, false)
+            case .usqadd: return (1, 0b00011, .anySize, false)
+            case .cmgt:   return (0, 0b01000, .doubleOnly, true)
+            case .cmge:   return (1, 0b01000, .doubleOnly, true)
+            case .cmeq:   return (0, 0b01001, .doubleOnly, true)
+            case .cmle:   return (1, 0b01001, .doubleOnly, true)
+            case .cmlt:   return (0, 0b01010, .doubleOnly, true)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar pairwise reductions (`Vd, Vn.T`).
     enum ScalarPairwiseKind: String, Equatable, CaseIterable {
         case addp, faddp, fmaxp, fminp, fmaxnmp, fminnmp
@@ -693,6 +717,7 @@ internal enum A64 {
         case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
+        case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
     }
 }
 
@@ -716,3 +741,4 @@ internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
 internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
+internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind

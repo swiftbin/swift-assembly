@@ -283,6 +283,34 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar two-register misc: two scalar FP registers.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           instruction.operands.allSatisfy(A64Parser.isScalarFloatRegisterOperand),
+           let kind = A64.ScalarTwoRegisterMiscKind(rawValue: mnemonic),
+           !kind.spec.comparesZero {
+            return .scalarTwoRegisterMisc(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        }
+
+        // Advanced SIMD scalar compare against zero (`Vd, Vn, #0`).
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[1]),
+           instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines) == "#0",
+           let kind = A64.ScalarTwoRegisterMiscKind(rawValue: mnemonic),
+           kind.spec.comparesZero {
+            return .scalarTwoRegisterMisc(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        }
+
         switch mnemonic {
         case "b" where parts.count == 2:
             try expectOperandCount(instruction, exactly: 1)

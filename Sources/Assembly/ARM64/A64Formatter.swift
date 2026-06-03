@@ -135,6 +135,9 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarPairwise(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatVectorRegister(source))"
+        case .scalarTwoRegisterMisc(let kind, let destination, let source):
+            let zero = kind.spec.comparesZero ? ", #0" : ""
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(source))\(zero)"
         }
     }
 

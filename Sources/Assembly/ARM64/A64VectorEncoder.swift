@@ -481,6 +481,32 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (size << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarTwoRegisterMisc(_ kind: A64.ScalarTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        guard rd.width == rn.width else { throw fail() }
+
+        let size: UInt32
+        switch spec.size {
+        case .doubleOnly:
+            guard rd.width == 64 else { throw fail() }
+            size = 0b11
+        case .anySize:
+            switch rd.width {
+            case 8: size = 0b00
+            case 16: size = 0b01
+            case 32: size = 0b10
+            case 64: size = 0b11
+            default: throw fail()
+            }
+        }
+
+        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
+        let base: UInt32 = 0x5e20_0800
+        return base | (spec.u << 29) | (size << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarPairwise(_ kind: A64.ScalarPairwiseKind, destination rd: FloatRegister, source rn: VectorRegister) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
