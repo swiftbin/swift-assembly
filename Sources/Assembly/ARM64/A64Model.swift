@@ -435,6 +435,7 @@ internal enum A64 {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
         case sqabs, sqneg
+        case suqadd, usqadd
         case fabs, fneg, fsqrt
     }
 

@@ -72,6 +72,8 @@ internal enum A64VectorEncoder {
         case .clz: u = 1; opcode = 0b00100
         case .sqabs: u = 0; opcode = 0b00111
         case .sqneg: u = 1; opcode = 0b00111
+        case .suqadd: u = 0; opcode = 0b00011
+        case .usqadd: u = 1; opcode = 0b00011
         case .abs: u = 0; opcode = 0b01011
         case .neg: u = 1; opcode = 0b01011
         case .fabs: u = 0; opcode = 0b01111
@@ -787,7 +789,7 @@ internal enum A64VectorEncoder {
             return [.b8, .b16, .h4, .h8].contains(arrangement)
         case .rev16, .cnt, .mvn, .rbit:
             return [.b8, .b16].contains(arrangement)
-        case .abs, .neg, .sqabs, .sqneg:
+        case .abs, .neg, .sqabs, .sqneg, .suqadd, .usqadd:
             return [.b8, .b16, .h4, .h8, .s2, .s4, .d2].contains(arrangement)
         case .fabs, .fneg, .fsqrt:
             return [.s2, .s4, .d2].contains(arrangement)

@@ -25,7 +25,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
 - Advanced SIMD across-lanes reductions (addv / saddlv / uaddlv / smaxv / umaxv / sminv / uminv / fmaxv / fminv / fmaxnmv / fminnmv)
-- Advanced SIMD two-register misc (rev64 / rev32 / rev16 / abs / neg / mvn / rbit / cnt / cls / clz / sqabs / sqneg / fabs / fneg / fsqrt)
+- Advanced SIMD two-register misc (rev64 / rev32 / rev16 / abs / neg / mvn / rbit / cnt / cls / clz / sqabs / sqneg / suqadd / usqadd / fabs / fneg / fsqrt)
 - Advanced SIMD three-same (add / sub / mul / and / orr / eor / bic / orn / bsl / cmeq / cmgt / smax / umin / sshl / sqadd / sqdmulh / fadd / fsub / fmul / fdiv / fmla / fcmeq / frecps / ...)
 - Advanced SIMD shift by immediate (sshr / ushr / ssra / usra / srshr / sri / shl / sli / sqshl / sqshlu / shrn(2) / rshrn(2) / sqshrn(2) / sqshrun(2) / uqshrn(2) / sshll(2) / ushll(2) / sxtl(2) / uxtl(2) / scvtf / ucvtf / fcvtzs / fcvtzu)
 - Advanced SIMD modified immediate (movi / mvni / orr / bic / fmov, with lsl / msl shifts and the 64-bit movi forms)

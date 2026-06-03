@@ -850,6 +850,8 @@ internal enum A64InstructionDecoder {
         case (1, 0b00100): kind = .clz
         case (0, 0b00111): kind = .sqabs
         case (1, 0b00111): kind = .sqneg
+        case (0, 0b00011): kind = .suqadd
+        case (1, 0b00011): kind = .usqadd
         case (0, 0b01011): kind = .abs
         case (1, 0b01011): kind = .neg
         case (0, 0b01111): kind = .fabs
@@ -1871,7 +1873,7 @@ internal enum A64InstructionDecoder {
             case (0b01, 1): return .b16
             default: return nil
             }
-        case .abs, .neg, .sqabs, .sqneg:
+        case .abs, .neg, .sqabs, .sqneg, .suqadd, .usqadd:
             switch (size, q) {
             case (0b00, 0): return .b8
             case (0b00, 1): return .b16

@@ -1026,7 +1026,7 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
-        case "rev64", "rev32", "rev16", "abs", "neg", "not", "rbit", "cnt", "cls", "clz", "sqabs", "sqneg":
+        case "rev64", "rev32", "rev16", "abs", "neg", "not", "rbit", "cnt", "cls", "clz", "sqabs", "sqneg", "suqadd", "usqadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
             let kind = mnemonic == "not" ? A64.VectorTwoRegisterMiscKind.mvn : A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!

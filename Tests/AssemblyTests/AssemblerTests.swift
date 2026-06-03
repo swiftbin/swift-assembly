@@ -537,6 +537,10 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("clz v10.2s, v11.2s"), 0x2ea0496a)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqabs v12.8b, v13.8b"), 0x0e2079ac)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqneg v14.4h, v15.4h"), 0x2e6079ee)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("suqadd v0.8b, v1.8b"), 0x0e203820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("suqadd v0.2d, v1.2d"), 0x4ee03820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usqadd v0.16b, v1.16b"), 0x6e203820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usqadd v0.2d, v1.2d"), 0x6ee03820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fabs v12.4s, v13.4s"), 0x4ea0f9ac)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fneg v14.2d, v15.2d"), 0x6ee0f9ee)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fsqrt v16.4s, v17.4s"), 0x6ea1fa30)
@@ -555,6 +559,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2ea0496a), "clz v10.2s, v11.2s")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e2079ac), "sqabs v12.8b, v13.8b")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e6079ee), "sqneg v14.4h, v15.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e203820), "suqadd v0.8b, v1.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ee03820), "usqadd v0.2d, v1.2d")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea0f9ac), "fabs v12.4s, v13.4s")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ee0f9ee), "fneg v14.2d, v15.2d")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea1fa30), "fsqrt v16.4s, v17.4s")
@@ -566,6 +572,7 @@ final class AssemblerTests: XCTestCase {
             "rev32 v6.8b, v7.8b", "rev32 v8.4h, v9.4h", "rev16 v10.8b, v11.8b",
             "abs v0.2d, v1.2d", "neg v2.2d, v3.2d", "mvn v4.16b, v5.16b", "rbit v6.16b, v7.16b", "cnt v6.8b, v7.8b",
             "cls v8.4s, v9.4s", "clz v10.2s, v11.2s", "sqabs v12.2d, v13.2d", "sqneg v14.2d, v15.2d",
+            "suqadd v16.8h, v17.8h", "suqadd v18.2d, v19.2d", "usqadd v20.4h, v21.4h", "usqadd v22.4s, v23.4s",
             "fabs v12.4s, v13.4s", "fneg v14.2d, v15.2d", "fsqrt v16.4s, v17.4s",
         ]
         for source in sources {
