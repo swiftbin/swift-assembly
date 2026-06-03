@@ -45,6 +45,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarPairwise(word) { return instruction }
         if let instruction = decodeScalarTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeScalarShiftImmediate(word) { return instruction }
+        if let instruction = decodeScalarThreeDifferent(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1073,6 +1074,31 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: 64),
             source: floatRegister(number: rnNum, width: 64),
             shift: shift)
+    }
+
+    private static func decodeScalarThreeDifferent(_ word: UInt32) -> Instruction? {
+        // bit31=0, bit30=1, bits[28:24]=11110, bit21=1, bits[11:10]=00.
+        guard word & 0xdf20_0c00 == 0x5e20_0000 else { return nil }
+        let size = (word >> 22) & 0x3
+        let opcode = (word >> 12) & 0xf
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarThreeDifferentKind.allCases.first(where: { $0.opcode == opcode }) else { return nil }
+
+        let sourceWidth: Int
+        let destWidth: Int
+        switch size {
+        case 0b01: sourceWidth = 16; destWidth = 32   // h -> s
+        case 0b10: sourceWidth = 32; destWidth = 64   // s -> d
+        default: return nil
+        }
+
+        return .scalarThreeDifferent(kind,
+            destination: floatRegister(number: rdNum, width: destWidth),
+            first: floatRegister(number: rnNum, width: sourceWidth),
+            second: floatRegister(number: rmNum, width: sourceWidth))
     }
 
     private static func decodeScalarTwoRegisterMisc(_ word: UInt32) -> Instruction? {

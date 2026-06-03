@@ -1322,6 +1322,42 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sshr s0, s1, #1"))    // only double-width supported
     }
 
+    func testScalarThreeDifferentInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull s0, h1, h2"), 0x5e62d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull d0, s1, s2"), 0x5ea2d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlal s0, h1, h2"), 0x5e629020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlal d0, s1, s2"), 0x5ea29020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlsl s0, h1, h2"), 0x5e62b020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlsl d0, s1, s2"), 0x5ea2b020)
+    }
+
+    func testDisassembleScalarThreeDifferent() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e62d020), "sqdmull s0, h1, h2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea2d020), "sqdmull d0, s1, s2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e629020), "sqdmlal s0, h1, h2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e62b020), "sqdmlsl s0, h1, h2")
+    }
+
+    func testScalarThreeDifferentRoundTrip() throws {
+        let sources = [
+            "sqdmull s0, h1, h2", "sqdmull d3, s4, s5",
+            "sqdmlal s6, h7, h8", "sqdmlal d9, s10, s11",
+            "sqdmlsl s12, h13, h14", "sqdmlsl d15, s16, s17",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarThreeDifferentInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull d0, h1, h2"))   // h source must produce s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull b0, b1, b2"))   // byte not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull q0, d1, d2"))   // double source not allowed
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

@@ -624,6 +624,19 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar three different (`Vd, Vn, Vm` — long, saturating doubling).
+    enum ScalarThreeDifferentKind: String, Equatable, CaseIterable {
+        case sqdmlal, sqdmlsl, sqdmull
+
+        var opcode: UInt32 {
+            switch self {
+            case .sqdmlal: return 0b1001
+            case .sqdmlsl: return 0b1011
+            case .sqdmull: return 0b1101
+            }
+        }
+    }
+
     /// Advanced SIMD scalar two-register misc (`Vd, Vn`, plus the compare-against-`#0` forms).
     enum ScalarTwoRegisterMiscKind: String, Equatable, CaseIterable {
         case abs, neg, sqabs, sqneg, suqadd, usqadd
@@ -744,6 +757,7 @@ internal enum A64 {
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
         case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
         case scalarShiftImmediate(ScalarShiftImmediateKind, destination: FPRegister, source: FPRegister, shift: Int)
+        case scalarThreeDifferent(ScalarThreeDifferentKind, destination: FPRegister, first: FPRegister, second: FPRegister)
     }
 }
 
@@ -769,3 +783,4 @@ internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
 internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind
 internal typealias ScalarTwoRegisterMiscKind = A64.ScalarTwoRegisterMiscKind
 internal typealias ScalarShiftImmediateKind = A64.ScalarShiftImmediateKind
+internal typealias ScalarThreeDifferentKind = A64.ScalarThreeDifferentKind

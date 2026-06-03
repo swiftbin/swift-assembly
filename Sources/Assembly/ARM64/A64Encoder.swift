@@ -170,6 +170,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.scalarTwoRegisterMisc(kind, destination: destination, source: source)
         case .scalarShiftImmediate(let kind, let destination, let source, let shift):
             return try A64VectorEncoder.scalarShiftImmediate(kind, destination: destination, source: source, shift: shift)
+        case .scalarThreeDifferent(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.scalarThreeDifferent(kind, destination: destination, first: first, second: second)
         }
     }
 }

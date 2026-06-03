@@ -140,6 +140,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(source))\(zero)"
         case .scalarShiftImmediate(let kind, let destination, let source, let shift):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(source)), #\(shift)"
+        case .scalarThreeDifferent(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         }
     }
 

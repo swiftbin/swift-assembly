@@ -326,6 +326,19 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar three different (`Vd, Vn, Vm` — long saturating doubling).
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           instruction.operands.allSatisfy(A64Parser.isScalarFloatRegisterOperand),
+           let kind = A64.ScalarThreeDifferentKind(rawValue: mnemonic) {
+            return .scalarThreeDifferent(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                second: try A64Parser.floatRegister(instruction.operands[2])
+            )
+        }
+
         switch mnemonic {
         case "b" where parts.count == 2:
             try expectOperandCount(instruction, exactly: 1)

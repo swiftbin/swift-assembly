@@ -504,6 +504,22 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarThreeDifferent(_ kind: A64.ScalarThreeDifferentKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // Long, saturating-doubling: source elements are H or S, the result is one size up.
+        let size: UInt32
+        switch (rn.width, rm.width, rd.width) {
+        case (16, 16, 32): size = 0b01    // h, h -> s
+        case (32, 32, 64): size = 0b10    // s, s -> d
+        default: throw fail()
+        }
+
+        // Base: bit30=1, bits[28:24]=11110, bit21=1, bits[11:10]=00.
+        let base: UInt32 = 0x5e20_0000
+        return base | (size << 22) | (rm.encodedNumber << 16) | (kind.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarTwoRegisterMisc(_ kind: A64.ScalarTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
