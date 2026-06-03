@@ -46,6 +46,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeScalarShiftImmediate(word) { return instruction }
         if let instruction = decodeScalarThreeDifferent(word) { return instruction }
+        if let instruction = decodeScalarIndexed(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
     }
@@ -1074,6 +1075,72 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: 64),
             source: floatRegister(number: rnNum, width: 64),
             shift: shift)
+    }
+
+    private static func decodeScalarIndexed(_ word: UInt32) -> Instruction? {
+        // bit31=0, bit30=1, bits[28:24]=11111, bit10=0.
+        guard word & 0xdf00_0400 == 0x5f00_0000 else { return nil }
+        let u = (word >> 29) & 1
+        let size = (word >> 22) & 0x3
+        let l = (word >> 21) & 1
+        let m = (word >> 20) & 1
+        let rmField = (word >> 16) & 0xf
+        let opcode = (word >> 12) & 0xf
+        let h = (word >> 11) & 1
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.VectorIndexedKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.opcode == opcode
+        }) else { return nil }
+
+        let width: A64.VectorElementWidth
+        let index: Int
+        let vm: UInt32
+        switch size {
+        case 0b01:
+            width = .h
+            index = Int((h << 2) | (l << 1) | m)
+            vm = rmField
+        case 0b10:
+            width = .s
+            index = Int((h << 1) | l)
+            vm = (m << 4) | rmField
+        case 0b11:
+            width = .d
+            index = Int(h)
+            vm = (m << 4) | rmField
+        default:
+            return nil
+        }
+
+        let elementBits: Int
+        switch width {
+        case .h: elementBits = 16
+        case .s: elementBits = 32
+        case .d: elementBits = 64
+        case .b: return nil
+        }
+
+        let destWidth: Int
+        let firstWidth: Int
+        switch kind.spec.form {
+        case .same:
+            guard elementBits == 16 || elementBits == 32 else { return nil }
+            destWidth = elementBits; firstWidth = elementBits
+        case .fp:
+            guard elementBits == 32 || elementBits == 64 else { return nil }
+            destWidth = elementBits; firstWidth = elementBits
+        case .long:
+            guard elementBits == 16 || elementBits == 32 else { return nil }
+            firstWidth = elementBits; destWidth = elementBits * 2
+        }
+
+        return .scalarIndexed(kind,
+            destination: floatRegister(number: rdNum, width: destWidth),
+            first: floatRegister(number: rnNum, width: firstWidth),
+            element: VectorElement(number: vm, width: width, index: index))
     }
 
     private static func decodeScalarThreeDifferent(_ word: UInt32) -> Instruction? {

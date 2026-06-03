@@ -504,6 +504,72 @@ internal enum A64VectorEncoder {
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarIndexed(_ kind: A64.VectorIndexedKind, destination rd: FloatRegister, first rn: FloatRegister, element: A64.VectorElement) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // Scalar element width (bits) implied by the indexed element.
+        let elementBits: Int
+        switch element.width {
+        case .h: elementBits = 16
+        case .s: elementBits = 32
+        case .d: elementBits = 64
+        case .b: throw fail()
+        }
+
+        // Validate scalar operand widths per form.
+        switch spec.form {
+        case .same:
+            // sqdmulh / sqrdmulh: H or S only, all widths equal.
+            guard elementBits == 16 || elementBits == 32,
+                  rd.width == elementBits, rn.width == elementBits else { throw fail() }
+        case .fp:
+            // fmul / fmla / fmls / fmulx: S or D, all widths equal.
+            guard elementBits == 32 || elementBits == 64,
+                  rd.width == elementBits, rn.width == elementBits else { throw fail() }
+        case .long:
+            // sqdmlal / sqdmlsl / sqdmull: H->S or S->D.
+            guard elementBits == 16 || elementBits == 32,
+                  rn.width == elementBits, rd.width == elementBits * 2 else { throw fail() }
+        }
+
+        // Element-width-specific encoding of `size`, the index bits, and `Vm`.
+        let size: UInt32
+        let l: UInt32, m: UInt32, h: UInt32, rm: UInt32
+        switch element.width {
+        case .h:
+            guard element.number <= 15, element.index >= 0, element.index <= 7 else { throw fail() }
+            size = 0b01
+            let idx = UInt32(element.index)
+            h = (idx >> 2) & 1
+            l = (idx >> 1) & 1
+            m = idx & 1
+            rm = element.number & 0xf
+        case .s:
+            guard element.number <= 31, element.index >= 0, element.index <= 3 else { throw fail() }
+            size = 0b10
+            let idx = UInt32(element.index)
+            h = (idx >> 1) & 1
+            l = idx & 1
+            m = (element.number >> 4) & 1
+            rm = element.number & 0xf
+        case .d:
+            guard element.number <= 31, element.index >= 0, element.index <= 1 else { throw fail() }
+            size = 0b11
+            h = UInt32(element.index) & 1
+            l = 0
+            m = (element.number >> 4) & 1
+            rm = element.number & 0xf
+        case .b:
+            throw fail()
+        }
+
+        // Base: bit30=1, bits[28:24]=11111.
+        let base: UInt32 = 0x5f00_0000
+        let head = (spec.u << 29) | base | (size << 22)
+        return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarThreeDifferent(_ kind: A64.ScalarThreeDifferentKind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
 

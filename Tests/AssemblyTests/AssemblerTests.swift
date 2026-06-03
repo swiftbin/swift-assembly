@@ -1358,6 +1358,56 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull q0, d1, d2"))   // double source not allowed
     }
 
+    func testScalarIndexedInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull s0, h1, v2.h[3]"), 0x5f72b020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmull d0, s1, v2.s[3]"), 0x5fa2b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlal s0, h1, v2.h[7]"), 0x5f723820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmlsl d0, s1, v2.s[1]"), 0x5fa27020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmulh h0, h1, v2.h[3]"), 0x5f72c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqdmulh s0, s1, v2.s[3]"), 0x5fa2c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmulh h0, h1, v2.h[3]"), 0x5f72d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmulh s0, s1, v2.s[3]"), 0x5fa2d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul s0, s1, v2.s[3]"), 0x5fa29820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul d0, d1, v2.d[1]"), 0x5fc29820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla s0, s1, v2.s[3]"), 0x5fa21820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmls s0, s1, v2.s[3]"), 0x5fa25820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx s0, s1, v2.s[3]"), 0x7fa29820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx d0, d1, v2.d[1]"), 0x7fc29820)
+    }
+
+    func testDisassembleScalarIndexed() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f72b020), "sqdmull s0, h1, v2.h[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5fa2b820), "sqdmull d0, s1, v2.s[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f72c020), "sqdmulh h0, h1, v2.h[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5fa29820), "fmul s0, s1, v2.s[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7fc29820), "fmulx d0, d1, v2.d[1]")
+    }
+
+    func testScalarIndexedRoundTrip() throws {
+        let sources = [
+            "sqdmull s0, h1, v2.h[3]", "sqdmull d3, s4, v5.s[3]",
+            "sqdmlal s6, h7, v8.h[7]", "sqdmlsl d9, s10, v11.s[1]",
+            "sqdmulh h12, h13, v14.h[3]", "sqdmulh s15, s16, v17.s[2]",
+            "sqrdmulh h18, h19, v3.h[5]", "sqrdmulh s20, s21, v22.s[3]",
+            "fmul s23, s24, v25.s[1]", "fmul d26, d27, v28.d[0]",
+            "fmla s29, s30, v31.s[3]", "fmls s0, s1, v2.s[0]",
+            "fmulx s3, s4, v5.s[2]", "fmulx d6, d7, v8.d[1]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarIndexedInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull d0, h1, v2.h[3]"))    // h source must produce s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmulh d0, d1, v2.d[1]"))    // sqdmulh has no d form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmul h0, h1, v2.h[3]"))       // FP16 scalar indexed unsupported
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull s0, h1, v16.h[3]"))   // H element reg limited to 0-15
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

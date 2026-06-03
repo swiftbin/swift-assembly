@@ -239,6 +239,23 @@ internal enum A64InstructionParser {
         let parts = instruction.mnemonic.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         let mnemonic = parts[0]
 
+        // Advanced SIMD scalar x indexed element: scalar FP destination/first, vector
+        // element third operand. Checked before the vector form because the operands
+        // are bare scalar FP registers rather than arranged vectors.
+        if parts.count == 1,
+           instruction.operands.count == 3,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[1]),
+           A64Parser.isVectorElementOperand(instruction.operands[2]),
+           let kind = A64.VectorIndexedKind(rawValue: mnemonic) {
+            return .scalarIndexed(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                element: try A64Parser.vectorElement(instruction.operands[2])
+            )
+        }
+
         // Advanced SIMD vector x indexed element: any of these mnemonics whose third
         // operand is a vector element (`v2.s[1]`) routes here regardless of the per-mnemonic
         // handling below (which assumes a vector-register or scalar third operand).
