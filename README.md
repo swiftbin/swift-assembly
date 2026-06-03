@@ -36,6 +36,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD saturating rounding multiply-accumulate (sqrdmlah / sqrdmlsh) in the vector, scalar, and by-element forms
 - Advanced SIMD complex number arithmetic (fcadd with #90/#270 rotation, fcmla with #0/#90/#180/#270 in both the vector and by-element forms)
 - Advanced SIMD FP16→FP32 widening multiply-accumulate (fmlal / fmlal2 / fmlsl / fmlsl2) in both the vector (`.2s/.4s, .2h/.4h`) and by-element (`.h[index]`) forms
+- BFloat16 (bfdot in vector and `.2h[index]` forms, bfmlalb / bfmlalt in vector and `.h[index]` forms, bfmmla)
 - Advanced SIMD vector x indexed element (mul / mla / mls / sqdmulh / sqrdmulh / fmul / fmla / fmls / fmulx and the long smull(2) / umull / smlal / umlsl / sqdmull / sqdmlal(2) / sqdmlsl forms)
 - Advanced SIMD scalar three-same (add / sub / cmeq / cmge / cmgt / cmhi / cmhs / cmtst / sqadd / uqadd / sqsub / uqsub / sshl / ushl / srshl / urshl / sqshl / uqshl / sqrshl / uqrshl / sqdmulh / sqrdmulh)
 - Advanced SIMD scalar pairwise reductions (addp / faddp / fmaxp / fminp / fmaxnmp / fminnmp)

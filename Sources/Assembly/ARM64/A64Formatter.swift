@@ -187,6 +187,16 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .vectorFPMultiplyLongByElement(let kind, let destination, let first, let elementRegister, let index):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).h[\(index)]"
+        case .vectorBFDot(let destination, let first, let second):
+            return "bfdot \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorBFDotByElement(let destination, let first, let elementRegister, let index):
+            return "bfdot \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).2h[\(index)]"
+        case .vectorBFMLAL(let top, let destination, let first, let second):
+            return "\(top ? "bfmlalt" : "bfmlalb") \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorBFMLALByElement(let top, let destination, let first, let elementRegister, let index):
+            return "\(top ? "bfmlalt" : "bfmlalb") \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).h[\(index)]"
+        case .vectorBFMatrixMultiply(let destination, let first, let second):
+            return "bfmmla \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarPairwise(let kind, let destination, let source):

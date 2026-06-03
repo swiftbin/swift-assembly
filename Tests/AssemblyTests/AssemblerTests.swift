@@ -1263,6 +1263,58 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmlal v0.2s, v1.2h, v2.h[8]"))  // index <= 7
     }
 
+    func testVectorBFloat16Instructions() throws {
+        // BFDOT (vector and by-element).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfdot v0.2s, v1.4h, v2.4h"), 0x2e42fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfdot v0.4s, v1.8h, v2.8h"), 0x6e42fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfdot v0.2s, v1.4h, v2.2h[0]"), 0x0f42f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfdot v0.4s, v1.8h, v2.2h[3]"), 0x4f62f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfdot v0.2s, v1.4h, v18.2h[1]"), 0x0f72f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfdot v0.2s, v1.4h, v31.2h[3]"), 0x0f7ff820)
+        // BFMLALB / BFMLALT (vector and by-element).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalb v0.4s, v1.8h, v2.8h"), 0x2ec2fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalt v0.4s, v1.8h, v2.8h"), 0x6ec2fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalb v0.4s, v1.8h, v2.h[0]"), 0x0fc2f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalt v0.4s, v1.8h, v2.h[7]"), 0x4ff2f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalb v0.4s, v1.8h, v15.h[5]"), 0x0fdff820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalt v0.4s, v1.8h, v14.h[3]"), 0x4ffef020)
+        // BFMMLA.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfmmla v0.4s, v1.8h, v2.8h"), 0x6e42ec20)
+    }
+
+    func testDisassembleVectorBFloat16() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e42fc20), "bfdot v0.2s, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f62f820), "bfdot v0.4s, v1.8h, v2.2h[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2ec2fc20), "bfmlalb v0.4s, v1.8h, v2.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ec2fc20), "bfmlalt v0.4s, v1.8h, v2.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ff2f820), "bfmlalt v0.4s, v1.8h, v2.h[7]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e42ec20), "bfmmla v0.4s, v1.8h, v2.8h")
+    }
+
+    func testVectorBFloat16RoundTrip() throws {
+        let sources = [
+            "bfdot v0.2s, v1.4h, v2.4h", "bfdot v3.4s, v4.8h, v5.8h",
+            "bfdot v6.2s, v7.4h, v18.2h[1]", "bfdot v9.4s, v10.8h, v31.2h[3]",
+            "bfmlalb v0.4s, v1.8h, v2.8h", "bfmlalt v3.4s, v4.8h, v5.8h",
+            "bfmlalb v6.4s, v7.8h, v15.h[5]", "bfmlalt v9.4s, v10.8h, v14.h[3]",
+            "bfmmla v0.4s, v1.8h, v2.8h",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorBFloat16InvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfdot v0.4s, v1.4h, v2.4h"))      // .4s dest needs .8h sources
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfmlalb v0.2s, v1.8h, v2.8h"))    // bfmlal dest is .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfmlalb v0.4s, v1.8h, v16.h[0]")) // bfmlal element Vm <= 15
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfmmla v0.2s, v1.8h, v2.8h"))     // bfmmla dest is .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfdot v0.2s, v1.4h, v2.2h[4]"))   // pair index <= 3
+    }
+
     func testVectorIndexedInstructions() throws {
         // Same forms (Vd.T, Vn.T, Vm.Ts[index]).
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.h[3]"), 0x0f728020)

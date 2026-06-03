@@ -239,6 +239,25 @@ internal enum A64Parser {
         return (number, index)
     }
 
+    /// Parses a BFloat16 dot-product pair element such as `v2.2h[3]`, returning
+    /// the register number (0–31) and the pair index (0–3).
+    static func bfdotElement(_ text: String) throws -> (number: UInt32, index: UInt32) {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard lower.hasSuffix("]"), let bracket = lower.firstIndex(of: "[") else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        let head = String(lower[lower.startIndex..<bracket])               // v2.2h
+        let indexText = String(lower[lower.index(after: bracket)..<lower.index(before: lower.endIndex)])
+        let parts = head.split(separator: ".", maxSplits: 1, omittingEmptySubsequences: false).map(String.init)
+        guard parts.count == 2, let prefix = parts[0].first, prefix == "v",
+              let number = UInt32(parts[0].dropFirst()), number <= 31,
+              parts[1] == "2h",
+              let index = UInt32(indexText), index <= 3 else {
+            throw AssemblerError.invalidRegister(text)
+        }
+        return (number, index)
+    }
+
     static func isVectorElementOperand(_ text: String) -> Bool {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return lower.hasPrefix("v") && lower.contains(".") && lower.hasSuffix("]")
@@ -1149,6 +1168,35 @@ internal enum A64InstructionParser {
                 return .vectorFPMultiplyLongByElement(kind, destination: destination, first: first, elementRegister: element.number, index: UInt32(element.index))
             }
             return .vectorFPMultiplyLong(kind, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "bfdot":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            let first = try A64Parser.vectorRegister(instruction.operands[1])
+            if instruction.operands[2].contains("[") {
+                let element = try A64Parser.bfdotElement(instruction.operands[2])
+                return .vectorBFDotByElement(destination: destination, first: first, elementRegister: element.number, index: element.index)
+            }
+            return .vectorBFDot(destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "bfmlalb", "bfmlalt":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let top = mnemonic == "bfmlalt"
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            let first = try A64Parser.vectorRegister(instruction.operands[1])
+            if instruction.operands[2].contains("[") {
+                let element = try A64Parser.vectorElement(instruction.operands[2])
+                return .vectorBFMLALByElement(top: top, destination: destination, first: first, elementRegister: element.number, index: UInt32(element.index))
+            }
+            return .vectorBFMLAL(top: top, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "bfmmla":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .vectorBFMatrixMultiply(
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                first: try A64Parser.vectorRegister(instruction.operands[1]),
+                second: try A64Parser.vectorRegister(instruction.operands[2])
+            )
         case "sqrdmlah", "sqrdmlsh":
             // The indexed forms (`..., Vm.Ts[i]`) are routed earlier via
             // VectorIndexedKind; here only the non-indexed three-same-extra

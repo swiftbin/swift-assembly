@@ -49,6 +49,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
         if let instruction = decodeVectorThreeSameExtra(word) { return instruction }
         if let instruction = decodeVectorComplex(word) { return instruction }
+        if let instruction = decodeVectorBFloat16(word) { return instruction }
         if let instruction = decodeVectorFPMultiplyLong(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
@@ -1579,6 +1580,76 @@ internal enum A64InstructionDecoder {
                 destination: VectorRegister(number: rdNum, arrangement: destination),
                 first: VectorRegister(number: rnNum, arrangement: source),
                 elementRegister: elementRegister, index: index)
+        }
+
+        return nil
+    }
+
+    private static func decodeVectorBFloat16(_ word: UInt32) -> Instruction? {
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // BFDOT (vector): U=1, size=01, opcode[15:11]=11111, bit10=1.
+        if word & 0xbfe0_fc00 == 0x2e40_fc00 {
+            let q = (word >> 30) & 1
+            let dest: A64.VectorArrangement = q == 0 ? .s2 : .s4
+            let src: A64.VectorArrangement = q == 0 ? .h4 : .h8
+            let rmNum = (word >> 16) & 0x1f
+            return .vectorBFDot(
+                destination: VectorRegister(number: rdNum, arrangement: dest),
+                first: VectorRegister(number: rnNum, arrangement: src),
+                second: VectorRegister(number: rmNum, arrangement: src))
+        }
+
+        // BFMMLA: Q=1, U=1, size=01, opcode[15:11]=11101, bit10=1.
+        if word & 0xffe0_fc00 == 0x6e40_ec00 {
+            let rmNum = (word >> 16) & 0x1f
+            return .vectorBFMatrixMultiply(
+                destination: VectorRegister(number: rdNum, arrangement: .s4),
+                first: VectorRegister(number: rnNum, arrangement: .h8),
+                second: VectorRegister(number: rmNum, arrangement: .h8))
+        }
+
+        // BFMLALB/BFMLALT (vector): U=1, size=11, opcode[15:11]=11111, bit10=1;
+        // the Q bit selects bottom (0) / top (1).
+        if word & 0xbfe0_fc00 == 0x2ec0_fc00 {
+            let top = ((word >> 30) & 1) == 1
+            let rmNum = (word >> 16) & 0x1f
+            return .vectorBFMLAL(top: top,
+                destination: VectorRegister(number: rdNum, arrangement: .s4),
+                first: VectorRegister(number: rnNum, arrangement: .h8),
+                second: VectorRegister(number: rmNum, arrangement: .h8))
+        }
+
+        // BFDOT (by element): U=0, size=01, opcode[15:12]=1111, bit10=0.
+        if word & 0xbfc0_f400 == 0x0f40_f000 {
+            let q = (word >> 30) & 1
+            let dest: A64.VectorArrangement = q == 0 ? .s2 : .s4
+            let src: A64.VectorArrangement = q == 0 ? .h4 : .h8
+            let l = (word >> 21) & 1
+            let m = (word >> 20) & 1
+            let rmLow = (word >> 16) & 0xf
+            let h = (word >> 11) & 1
+            let index = (h << 1) | l
+            return .vectorBFDotByElement(
+                destination: VectorRegister(number: rdNum, arrangement: dest),
+                first: VectorRegister(number: rnNum, arrangement: src),
+                elementRegister: (m << 4) | rmLow, index: index)
+        }
+
+        // BFMLALB/BFMLALT (by element): U=0, size=11, opcode[15:12]=1111,
+        // bit10=0; Q selects bottom/top, Vm is V0–V15, index = H:L:M.
+        if word & 0xbfc0_f400 == 0x0fc0_f000 {
+            let top = ((word >> 30) & 1) == 1
+            let l = (word >> 21) & 1
+            let m = (word >> 20) & 1
+            let rmLow = (word >> 16) & 0xf
+            let h = (word >> 11) & 1
+            let index = (h << 2) | (l << 1) | m
+            return .vectorBFMLALByElement(top: top,
+                destination: VectorRegister(number: rdNum, arrangement: .s4),
+                first: VectorRegister(number: rnNum, arrangement: .h8),
+                elementRegister: rmLow, index: index)
         }
 
         return nil

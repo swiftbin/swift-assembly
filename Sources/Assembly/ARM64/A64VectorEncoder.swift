@@ -580,6 +580,75 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | ((elementRegister & 0xf) << 16) | (opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - BFloat16 (FEAT_BF16)
+
+    static func bfDot(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("bfdot") }
+        // Vd.2s/4s, Vn/Vm.4h/8h.
+        let q: UInt32
+        switch (rd.arrangement, rn.arrangement) {
+        case (.s2, .h4): q = 0
+        case (.s4, .h8): q = 1
+        default: throw fail()
+        }
+        guard rn.arrangement == rm.arrangement else { throw fail() }
+        // U=1, bits[28:24]=01110, size=01, opcode[15:11]=11111, bit10=1.
+        let base: UInt32 = 0x2e40_fc00
+        return (q << 30) | base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func bfDotByElement(destination rd: VectorRegister, first rn: VectorRegister, elementRegister: UInt32, index: UInt32) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("bfdot") }
+        let q: UInt32
+        switch (rd.arrangement, rn.arrangement) {
+        case (.s2, .h4): q = 0
+        case (.s4, .h8): q = 1
+        default: throw fail()
+        }
+        // Element is a BF16 pair `Vm.2h[index]`: index 0–3 as H:L, Vm = M:Rm (0–31).
+        guard elementRegister <= 31, index <= 3 else { throw fail() }
+        let l = index & 1
+        let h = (index >> 1) & 1
+        let m = (elementRegister >> 4) & 1
+        let rmLow = elementRegister & 0xf
+        // U=0, bits[28:24]=01111, size=01, opcode[15:12]=1111, bit10=0.
+        let base: UInt32 = 0x0f40_f000
+        return (q << 30) | base | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func bfMultiplyLong(top: Bool, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(top ? "bfmlalt" : "bfmlalb") }
+        // Vd.4s, Vn/Vm.8h. The bottom/top selector occupies the Q bit.
+        guard rd.arrangement == .s4, rn.arrangement == .h8, rm.arrangement == .h8 else { throw fail() }
+        // U=1, bits[28:24]=01110, size=11, opcode[15:11]=11111, bit10=1.
+        let base: UInt32 = 0x2ec0_fc00
+        let qt: UInt32 = top ? 1 : 0
+        return (qt << 30) | base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func bfMultiplyLongByElement(top: Bool, destination rd: VectorRegister, first rn: VectorRegister, elementRegister: UInt32, index: UInt32) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(top ? "bfmlalt" : "bfmlalb") }
+        guard rd.arrangement == .s4, rn.arrangement == .h8 else { throw fail() }
+        // Element `Vm.h[index]`: index 0–7 as H:L:M, Vm restricted to V0–V15.
+        guard elementRegister <= 15, index <= 7 else { throw fail() }
+        let m = index & 1
+        let l = (index >> 1) & 1
+        let h = (index >> 2) & 1
+        // U=0, bits[28:24]=01111, size=11, opcode[15:12]=1111, bit10=0.
+        let base: UInt32 = 0x0fc0_f000
+        let qt: UInt32 = top ? 1 : 0
+        return (qt << 30) | base | (l << 21) | (m << 20) | ((elementRegister & 0xf) << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func bfMatrixMultiply(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("bfmmla") }
+        // Vd.4s, Vn/Vm.8h. Q, U, size are fixed.
+        guard rd.arrangement == .s4, rn.arrangement == .h8, rm.arrangement == .h8 else { throw fail() }
+        // Q=1, U=1, bits[28:24]=01110, size=01, opcode[15:11]=11101, bit10=1.
+        let base: UInt32 = 0x6e40_ec00
+        return base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
