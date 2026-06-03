@@ -186,6 +186,10 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.complexMultiplyAdd(destination: destination, first: first, second: second, rotation: rotation)
         case .vectorComplexMultiplyAddByElement(let destination, let first, let elementRegister, let index, let rotation):
             return try A64VectorEncoder.complexMultiplyAddByElement(destination: destination, first: first, elementRegister: elementRegister, index: index, rotation: rotation)
+        case .vectorFPMultiplyLong(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.fpMultiplyLong(kind, destination: destination, first: first, second: second)
+        case .vectorFPMultiplyLongByElement(let kind, let destination, let first, let elementRegister, let index):
+            return try A64VectorEncoder.fpMultiplyLongByElement(kind, destination: destination, first: first, elementRegister: elementRegister, index: index)
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return try A64VectorEncoder.scalarThreeSame(kind, destination: destination, first: first, second: second)
         case .scalarPairwise(let kind, let destination, let source):

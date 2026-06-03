@@ -1211,6 +1211,58 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcmla v0.4s, v1.4s, v2.s[2], #0"))  // single index <= 1
     }
 
+    func testVectorFPMultiplyLongInstructions() throws {
+        // Vector forms (Vd.2s/4s, Vn.2h/4h, Vm.2h/4h).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal v0.2s, v1.2h, v2.2h"), 0x0e22ec20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal2 v0.2s, v1.2h, v2.2h"), 0x2e22cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal v0.4s, v1.4h, v2.4h"), 0x4e22ec20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal2 v0.4s, v1.4h, v2.4h"), 0x6e22cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl v0.2s, v1.2h, v2.2h"), 0x0ea2ec20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl2 v0.2s, v1.2h, v2.2h"), 0x2ea2cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl v0.4s, v1.4h, v2.4h"), 0x4ea2ec20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl2 v0.4s, v1.4h, v2.4h"), 0x6ea2cc20)
+        // By-element forms (Vm.h[index], index 0–7, Vm <= 15).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal v0.2s, v1.2h, v2.h[0]"), 0x0f820020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal2 v0.2s, v1.2h, v2.h[7]"), 0x2fb28820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal v0.4s, v1.4h, v2.h[3]"), 0x4fb20020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlal2 v0.4s, v1.4h, v2.h[5]"), 0x6f928820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl v0.2s, v1.2h, v2.h[1]"), 0x0f924020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl2 v0.2s, v1.2h, v2.h[2]"), 0x2fa2c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl v0.4s, v1.4h, v2.h[3]"), 0x4fb24020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmlsl2 v0.4s, v1.4h, v2.h[5]"), 0x6f92c820)
+    }
+
+    func testDisassembleVectorFPMultiplyLong() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e22ec20), "fmlal v0.2s, v1.2h, v2.2h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e22cc20), "fmlal2 v0.4s, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea2ec20), "fmlsl v0.4s, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f820020), "fmlal v0.2s, v1.2h, v2.h[0]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2fb28820), "fmlal2 v0.2s, v1.2h, v2.h[7]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6f92c820), "fmlsl2 v0.4s, v1.4h, v2.h[5]")
+    }
+
+    func testVectorFPMultiplyLongRoundTrip() throws {
+        let sources = [
+            "fmlal v0.2s, v1.2h, v2.2h", "fmlal2 v3.4s, v4.4h, v5.4h",
+            "fmlsl v6.2s, v7.2h, v8.2h", "fmlsl2 v9.4s, v10.4h, v11.4h",
+            "fmlal v0.4s, v1.4h, v15.h[3]", "fmlal2 v3.2s, v4.2h, v14.h[7]",
+            "fmlsl v6.4s, v7.4h, v2.h[0]", "fmlsl2 v9.2s, v10.2h, v13.h[6]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorFPMultiplyLongInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmlal v0.4s, v1.2h, v2.2h"))   // dest .4s needs .4h sources
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmlal v0.2d, v1.2s, v2.2s"))   // only .2s/.4s dest
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmlal v0.2s, v1.2h, v16.h[0]")) // element Vm <= 15
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmlal v0.2s, v1.2h, v2.h[8]"))  // index <= 7
+    }
+
     func testVectorIndexedInstructions() throws {
         // Same forms (Vd.T, Vn.T, Vm.Ts[index]).
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v2.h[3]"), 0x0f728020)

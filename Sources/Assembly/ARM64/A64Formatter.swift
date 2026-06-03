@@ -183,6 +183,10 @@ internal enum A64InstructionFormatter {
         case .vectorComplexMultiplyAddByElement(let destination, let first, let elementRegister, let index, let rotation):
             let elementWidth = destination.arrangement.elementSize == 0b01 ? "h" : "s"
             return "fcmla \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).\(elementWidth)[\(index)], #\(rotation)"
+        case .vectorFPMultiplyLong(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorFPMultiplyLongByElement(let kind, let destination, let first, let elementRegister, let index):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).h[\(index)]"
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarPairwise(let kind, let destination, let source):

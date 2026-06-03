@@ -49,6 +49,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorPairwiseLongAdd(word) { return instruction }
         if let instruction = decodeVectorThreeSameExtra(word) { return instruction }
         if let instruction = decodeVectorComplex(word) { return instruction }
+        if let instruction = decodeVectorFPMultiplyLong(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
         if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
@@ -1583,6 +1584,57 @@ internal enum A64InstructionDecoder {
         return nil
     }
 
+    private static func decodeVectorFPMultiplyLong(_ word: UInt32) -> Instruction? {
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        let destination: A64.VectorArrangement = q == 0 ? .s2 : .s4
+        let source: A64.VectorArrangement = q == 0 ? .h2 : .h4
+
+        // Vector form: bits[28:24]=01110, bit22=0, bit21=1, bits[15:14]=11,
+        // bit12=0, bit11=1, bit10=1. The (U, opcode) pair selects the form:
+        // U=0 ⇒ opcode 11101, U=1 ⇒ opcode 11001; bit23 is the subtract bit.
+        if word & 0x9f60_dc00 == 0x0e20_cc00 {
+            let opcode = (word >> 11) & 0b11111
+            let upper: UInt32
+            switch (u, opcode) {
+            case (0, 0b11101): upper = 0
+            case (1, 0b11001): upper = 1
+            default: return nil
+            }
+            let sub = (word >> 23) & 1
+            let kind = A64.VectorFPMultiplyLongKind.decode(upper: upper, sub: sub)
+            let rmNum = (word >> 16) & 0x1f
+            return .vectorFPMultiplyLong(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                second: VectorRegister(number: rmNum, arrangement: source))
+        }
+
+        // By-element form: bits[28:24]=01111, size[23:22]=10, bit10=0. The
+        // opcode[15:12] = (upper<<3)|(sub<<2) with bits[13:12]=00; index = H:L:M.
+        if word & 0x9fc0_0400 == 0x0f80_0000 {
+            let opcode = (word >> 12) & 0b1111
+            guard opcode & 0b0011 == 0 else { return nil }
+            let upper = (opcode >> 3) & 1
+            let sub = (opcode >> 2) & 1
+            guard upper == u else { return nil }
+            let kind = A64.VectorFPMultiplyLongKind.decode(upper: upper, sub: sub)
+            let l = (word >> 21) & 1
+            let m = (word >> 20) & 1
+            let rmLow = (word >> 16) & 0xf
+            let h = (word >> 11) & 1
+            let index = (h << 2) | (l << 1) | m
+            return .vectorFPMultiplyLongByElement(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                elementRegister: rmLow, index: index)
+        }
+
+        return nil
+    }
+
     private static func decodeVectorIndexed(_ word: UInt32) -> Instruction? {
         // bit31=0, bits[28:24]=01111, bit10=0.
         guard word & 0x9f00_0400 == 0x0f00_0000 else { return nil }
@@ -2089,7 +2141,7 @@ internal enum A64InstructionDecoder {
         case .b8, .b16: return .h8
         case .h4, .h8: return .s4
         case .s2, .s4: return .d2
-        case .d1, .d2, .q1: return nil
+        case .h2, .d1, .d2, .q1: return nil
         }
     }
 

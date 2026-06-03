@@ -1136,6 +1136,19 @@ internal enum A64InstructionParser {
                 destination: destination, first: first,
                 second: try A64Parser.vectorRegister(instruction.operands[2]), rotation: rotation
             )
+        case "fmlal", "fmlal2", "fmlsl", "fmlsl2":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.VectorFPMultiplyLongKind(rawValue: mnemonic)!
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            let first = try A64Parser.vectorRegister(instruction.operands[1])
+            // The third operand is either a plain vector (`Vm.2h/4h`) or an
+            // indexed FP16 element (`Vm.h[index]`).
+            if instruction.operands[2].contains("[") {
+                let element = try A64Parser.vectorElement(instruction.operands[2])
+                return .vectorFPMultiplyLongByElement(kind, destination: destination, first: first, elementRegister: element.number, index: UInt32(element.index))
+            }
+            return .vectorFPMultiplyLong(kind, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
         case "sqrdmlah", "sqrdmlsh":
             // The indexed forms (`..., Vm.Ts[i]`) are routed earlier via
             // VectorIndexedKind; here only the non-indexed three-same-extra

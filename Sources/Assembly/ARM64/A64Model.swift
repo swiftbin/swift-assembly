@@ -36,6 +36,7 @@ internal enum A64 {
     enum VectorArrangement: String, Equatable {
         case b8 = "8b"
         case b16 = "16b"
+        case h2 = "2h"
         case h4 = "4h"
         case h8 = "8h"
         case s2 = "2s"
@@ -51,7 +52,7 @@ internal enum A64 {
         var elementSize: UInt32 {
             switch self {
             case .b8, .b16: return 0b00
-            case .h4, .h8: return 0b01
+            case .h2, .h4, .h8: return 0b01
             case .s2, .s4: return 0b10
             case .d1, .d2, .q1: return 0b11
             }
@@ -61,7 +62,7 @@ internal enum A64 {
         var elementWidth: Int {
             switch self {
             case .b8, .b16: return 8
-            case .h4, .h8: return 16
+            case .h2, .h4, .h8: return 16
             case .s2, .s4: return 32
             case .d1, .d2: return 64
             case .q1: return 128
@@ -72,7 +73,7 @@ internal enum A64 {
         var q: UInt32 {
             switch self {
             case .b16, .h8, .s4, .d2: return 1
-            case .b8, .h4, .s2, .d1, .q1: return 0
+            case .b8, .h2, .h4, .s2, .d1, .q1: return 0
             }
         }
     }
@@ -613,6 +614,40 @@ internal enum A64 {
 
         static func decode(opcode: UInt32) -> VectorThreeSameExtraKind? {
             allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Advanced SIMD FP16→FP32 widening multiply-accumulate (FEAT_FHM):
+    /// `fmlal`/`fmlal2`/`fmlsl`/`fmlsl2`, in both the vector and
+    /// indexed-element forms. The destination is `.2s`/`.4s`, the sources
+    /// `.2h`/`.4h` (vector) or `Vm.h[index]` (indexed).
+    enum VectorFPMultiplyLongKind: String, Equatable, CaseIterable {
+        case fmlal, fmlal2, fmlsl, fmlsl2
+
+        /// Selects the upper half of the FP16 source elements; also the `U`
+        /// bit at [29] (the "2" suffix forms).
+        var upper: UInt32 {
+            switch self {
+            case .fmlal2, .fmlsl2: return 1
+            case .fmlal, .fmlsl: return 0
+            }
+        }
+
+        /// Subtract (multiply-subtract) rather than add.
+        var sub: UInt32 {
+            switch self {
+            case .fmlsl, .fmlsl2: return 1
+            case .fmlal, .fmlal2: return 0
+            }
+        }
+
+        static func decode(upper: UInt32, sub: UInt32) -> VectorFPMultiplyLongKind {
+            switch (upper, sub) {
+            case (0, 0): return .fmlal
+            case (0, _): return .fmlsl
+            case (_, 0): return .fmlal2
+            default: return .fmlsl2
+            }
         }
     }
 
@@ -1267,6 +1302,8 @@ internal enum A64 {
         case vectorComplexAdd(destination: VectorRegister, first: VectorRegister, second: VectorRegister, rotation: Int)
         case vectorComplexMultiplyAdd(destination: VectorRegister, first: VectorRegister, second: VectorRegister, rotation: Int)
         case vectorComplexMultiplyAddByElement(destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32, rotation: Int)
+        case vectorFPMultiplyLong(VectorFPMultiplyLongKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorFPMultiplyLongByElement(VectorFPMultiplyLongKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
         case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
@@ -1316,6 +1353,7 @@ internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias VectorDotProductKind = A64.VectorDotProductKind
+internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind
 internal typealias VectorThreeSameExtraKind = A64.VectorThreeSameExtraKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
 internal typealias ScalarPairwiseKind = A64.ScalarPairwiseKind

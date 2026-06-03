@@ -129,7 +129,7 @@ internal enum A64VectorEncoder {
         case .b8, .b16: return .h8
         case .h4, .h8: return .s4
         case .s2, .s4: return .d2
-        case .d1, .d2, .q1: return nil
+        case .h2, .d1, .d2, .q1: return nil
         }
     }
 
@@ -239,7 +239,7 @@ internal enum A64VectorEncoder {
                 // 64-bit `movi` (vector `.2d` or the scalar `d` form).
                 guard kind == .movi, case .none = shift else { throw fail() }
                 op = 1; cmode = 0b1110
-            case .q1:
+            case .h2, .q1:
                 throw fail()
             }
         }
@@ -541,6 +541,43 @@ internal enum A64VectorEncoder {
         let base: UInt32 = 0x2f00_1000   // U=1, bits[28:24]=01111, bit12=1, bit10=0.
         let head = (rd.arrangement.q << 30) | base | (size << 22)
         return head | (l << 21) | (m << 20) | (rm << 16) | (rot << 13) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    // MARK: - FP16→FP32 widening multiply-accumulate (FMLAL / FMLSL)
+
+    /// Maps the (dest, source) arrangement pair to the `Q` bit; the destination
+    /// is `.2s`/`.4s` and the sources are the matching `.2h`/`.4h`.
+    private static func fpMultiplyLongQ(destination rd: VectorRegister, first rn: VectorRegister) -> UInt32? {
+        switch (rd.arrangement, rn.arrangement) {
+        case (.s2, .h2): return 0
+        case (.s4, .h4): return 1
+        default:         return nil
+        }
+    }
+
+    static func fpMultiplyLong(_ kind: A64.VectorFPMultiplyLongKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard let q = fpMultiplyLongQ(destination: rd, first: rn), rn.arrangement == rm.arrangement else { throw fail() }
+        // bits[28:24]=01110, bit21=1, bit10=1; opcode[15:11]=11101 (non-"2") or
+        // 11001 ("2"); U=[29] and sz=[23] select the "2" and subtract forms.
+        let opcode: UInt32 = kind.upper == 1 ? 0b11001 : 0b11101
+        let base: UInt32 = 0x0e20_0400
+        let head = (q << 30) | (kind.upper << 29) | base | (kind.sub << 23)
+        return head | (rm.encodedNumber << 16) | (opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func fpMultiplyLongByElement(_ kind: A64.VectorFPMultiplyLongKind, destination rd: VectorRegister, first rn: VectorRegister, elementRegister: UInt32, index: UInt32) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard let q = fpMultiplyLongQ(destination: rd, first: rn) else { throw fail() }
+        // FP16 element: index 0–7 as H:L:M, Vm restricted to V0–V15.
+        guard elementRegister <= 15, index <= 7 else { throw fail() }
+        let m = index & 1
+        let l = (index >> 1) & 1
+        let h = (index >> 2) & 1
+        let opcode: UInt32 = (kind.upper << 3) | (kind.sub << 2)
+        let base: UInt32 = 0x0f80_0000   // bits[28:24]=01111, size[23:22]=10, bit10=0.
+        let head = (q << 30) | (kind.upper << 29) | base
+        return head | (l << 21) | (m << 20) | ((elementRegister & 0xf) << 16) | (opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
@@ -1062,7 +1099,7 @@ internal enum A64VectorEncoder {
         case .h8: return .s4
         case .s2: return .d1
         case .s4: return .d2
-        case .d1, .d2, .q1: return nil
+        case .h2, .d1, .d2, .q1: return nil
         }
     }
 
