@@ -34,6 +34,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorThreeSame(word) { return instruction }
+        if let instruction = decodeVectorModifiedImmediate(word) { return instruction }
         if let instruction = decodeVectorShiftImmediate(word) { return instruction }
 
         throw AssemblerError.unknownEncoding(word)
@@ -673,6 +674,60 @@ internal enum A64InstructionDecoder {
             first: VectorRegister(number: rnNum, arrangement: arrangement),
             second: VectorRegister(number: rmNum, arrangement: arrangement)
         )
+    }
+
+    private static func decodeVectorModifiedImmediate(_ word: UInt32) -> Instruction? {
+        // bits[28:24]=01111, bits[23:19]=00000, bit10=1.
+        guard word & 0x9ff8_0400 == 0x0f00_0400 else { return nil }
+        let q = (word >> 30) & 1
+        let op = (word >> 29) & 1
+        let cmode = (word >> 12) & 0xf
+        let abc = (word >> 16) & 0x7
+        let defgh = (word >> 5) & 0x1f
+        let imm8 = UInt8((abc << 5) | defgh)
+        let rdNum = word & 0x1f
+
+        let kind: A64.VectorModifiedImmediateKind
+        let arrangement: A64.VectorArrangement
+        var shift: A64.VectorImmediateShift = .none
+
+        func makeShift(lsl amount: UInt32) -> A64.VectorImmediateShift {
+            amount == 0 ? .none : .lsl(Int(amount))
+        }
+
+        if cmode == 0b1111 {
+            kind = .fmov
+            arrangement = op == 1 ? .d2 : (q == 1 ? .s4 : .s2)
+        } else if cmode == 0b1110 {
+            kind = .movi
+            if op == 0 {
+                arrangement = q == 1 ? .b16 : .b8
+            } else {
+                arrangement = q == 1 ? .d2 : .d1
+            }
+        } else if cmode == 0b1100 || cmode == 0b1101 {
+            // 32-bit MSL form (movi / mvni).
+            kind = op == 0 ? .movi : .mvni
+            arrangement = q == 1 ? .s4 : .s2
+            shift = .msl((cmode & 1) == 1 ? 16 : 8)
+        } else if (cmode & 0b1000) != 0 {
+            // 16-bit LSL form (cmode 1000..1011).
+            let logical = (cmode & 1) == 1
+            kind = logical ? (op == 0 ? .orr : .bic) : (op == 0 ? .movi : .mvni)
+            arrangement = q == 1 ? .h8 : .h4
+            shift = makeShift(lsl: ((cmode >> 1) & 1) * 8)
+        } else {
+            // 32-bit LSL form (cmode 0000..0111).
+            let logical = (cmode & 1) == 1
+            kind = logical ? (op == 0 ? .orr : .bic) : (op == 0 ? .movi : .mvni)
+            arrangement = q == 1 ? .s4 : .s2
+            shift = makeShift(lsl: ((cmode >> 1) & 0x3) * 8)
+        }
+
+        return .vectorModifiedImmediate(kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            imm8: imm8,
+            shift: shift)
     }
 
     private static func decodeVectorShiftImmediate(_ word: UInt32) -> Instruction? {

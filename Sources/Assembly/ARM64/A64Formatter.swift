@@ -101,7 +101,41 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .vectorShiftImmediate(let kind, let destination, let source, let shift):
             return formatVectorShiftImmediate(kind, destination: destination, source: source, shift: shift)
+        case .vectorModifiedImmediate(let kind, let destination, let imm8, let shift):
+            return formatVectorModifiedImmediate(kind, destination: destination, imm8: imm8, shift: shift)
         }
+    }
+
+    private static func formatVectorModifiedImmediate(_ kind: VectorModifiedImmediateKind, destination: VectorRegister, imm8: UInt8, shift: VectorImmediateShift) -> String {
+        let destinationText: String
+        if destination.arrangement == .d1 {
+            destinationText = "d\(destination.number)"   // scalar `movi d0` form
+        } else {
+            destinationText = formatVectorRegister(destination)
+        }
+
+        let immediateText: String
+        if kind == .fmov {
+            immediateText = formatFloatImmediate(A64FloatImmediate.decode(UInt32(imm8)))
+        } else if destination.arrangement == .d1 || destination.arrangement == .d2 {
+            // 64-bit form: expand each bit of `imm8` into a full byte.
+            var value: UInt64 = 0
+            for index in 0..<8 where (imm8 & (1 << index)) != 0 {
+                value |= 0xff << (UInt64(index) * 8)
+            }
+            immediateText = "#0x\(String(value, radix: 16))"
+        } else {
+            immediateText = "#0x\(String(imm8, radix: 16))"
+        }
+
+        let shiftText: String
+        switch shift {
+        case .none: shiftText = ""
+        case .lsl(let amount): shiftText = ", lsl #\(amount)"
+        case .msl(let amount): shiftText = ", msl #\(amount)"
+        }
+
+        return "\(kind.rawValue) \(destinationText), \(immediateText)\(shiftText)"
     }
 
     private static func formatVectorShiftImmediate(_ kind: VectorShiftImmediateKind, destination: VectorRegister, source: VectorRegister, shift: Int) -> String {

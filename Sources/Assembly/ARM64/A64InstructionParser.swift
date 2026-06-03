@@ -18,6 +18,23 @@ internal enum A64Parser {
         return sign * parsed
     }
 
+    /// Parses an immediate that may use the full unsigned 64-bit range (e.g. the
+    /// `movi Vd.2D, #imm64` bit pattern), where `Int64` parsing would overflow.
+    static func unsignedImmediate64(_ text: String) throws -> UInt64 {
+        var value = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if value.hasPrefix("#") { value.removeFirst() }
+        value = value.replacingOccurrences(of: "_", with: "")
+        let negative = value.hasPrefix("-")
+        if negative || value.hasPrefix("+") { value.removeFirst() }
+        guard !value.isEmpty else { throw AssemblerError.invalidImmediate(text) }
+        let parsed: UInt64?
+        if value.hasPrefix("0x") { parsed = UInt64(value.dropFirst(2), radix: 16) }
+        else if value.hasPrefix("0b") { parsed = UInt64(value.dropFirst(2), radix: 2) }
+        else { parsed = UInt64(value, radix: 10) }
+        guard let parsed else { throw AssemblerError.invalidImmediate(text) }
+        return negative ? ~parsed &+ 1 : parsed
+    }
+
     static func integerRegister(_ text: String, allowSP: Bool) throws -> A64.Register {
         let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if lower == "sp" {
@@ -314,6 +331,10 @@ internal enum A64InstructionParser {
             if ["and", "orr", "eor", "bic", "orn"].contains(mnemonic), allOperandsAreVectorRegisters(instruction) {
                 return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
             }
+            // `orr`/`bic` also have a vector modified-immediate form (`Vd.T, #imm{, lsl #n}`).
+            if (mnemonic == "orr" || mnemonic == "bic"), isVectorModifiedImmediate(instruction) {
+                return try vectorModifiedImmediate(instruction, kind: mnemonic == "orr" ? .orr : .bic)
+            }
             try expectOperandCount(instruction, 3...4)
             return .logical(
                 A64.LogicalKind(rawValue: mnemonic)!,
@@ -466,6 +487,10 @@ internal enum A64InstructionParser {
             return .fpCompare(A64.FPCompareKind(rawValue: mnemonic)!, first: first, second: second)
         case "fmov":
             guard parts.count == 1 else { return nil }
+            // Vector modified-immediate form: `Vd.T, #fp`.
+            if isVectorRegisterOperand(instruction.operands[0]) {
+                return try vectorModifiedImmediate(instruction, kind: .fmov)
+            }
             try expectOperandCount(instruction, exactly: 2)
             let destinationText = instruction.operands[0].trimmingCharacters(in: .whitespacesAndNewlines)
             let sourceText = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
@@ -534,6 +559,9 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
             )
+        case "movi", "mvni":
+            guard parts.count == 1 else { return nil }
+            return try vectorModifiedImmediate(instruction, kind: A64.VectorModifiedImmediateKind(rawValue: mnemonic)!)
         case "sshr", "ushr", "ssra", "usra", "srshr", "urshr", "srsra", "ursra", "sri",
              "shl", "sli", "sqshlu",
              "shrn", "rshrn", "sqshrn", "sqrshrn", "sqshrun", "sqrshrun", "uqshrn", "uqrshrn",
@@ -651,6 +679,69 @@ internal enum A64InstructionParser {
         return isVectorRegisterOperand(instruction.operands[0])
             && isVectorRegisterOperand(instruction.operands[1])
             && instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#")
+    }
+
+    /// True when the operands look like `Vd.T, #imm{, shift}` (vector modified immediate).
+    private static func isVectorModifiedImmediate(_ instruction: ParsedInstruction) -> Bool {
+        guard instruction.operands.count >= 2, isVectorRegisterOperand(instruction.operands[0]) else { return false }
+        return instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#")
+    }
+
+    private static func vectorImmediateShift(_ text: String) throws -> A64.VectorImmediateShift {
+        let parts = text.split(separator: " ", omittingEmptySubsequences: true).map { String($0).lowercased() }
+        guard parts.count == 2 else { throw AssemblerError.unsupportedShift(text) }
+        let amount = try A64Parser.immediate(parts[1])
+        switch parts[0] {
+        case "lsl": return amount == 0 ? .none : .lsl(Int(amount))
+        case "msl": return .msl(Int(amount))
+        default: throw AssemblerError.unsupportedShift(text)
+        }
+    }
+
+    static func vectorModifiedImmediate(_ instruction: ParsedInstruction, kind: A64.VectorModifiedImmediateKind) throws -> Instruction {
+        try expectOperandCount(instruction, 2...3)
+        let destinationText = instruction.operands[0].trimmingCharacters(in: .whitespacesAndNewlines)
+
+        let destination: VectorRegister
+        if isVectorRegisterOperand(destinationText) {
+            destination = try A64Parser.vectorRegister(destinationText)
+        } else if kind == .movi {
+            // Scalar `movi d0, #imm` form, modelled with the `1d` arrangement.
+            let scalar = try A64Parser.floatRegister(destinationText)
+            guard scalar.width == 64 else { throw AssemblerError.invalidRegister(destinationText) }
+            destination = VectorRegister(number: scalar.number, arrangement: .d1)
+        } else {
+            throw AssemblerError.invalidRegister(destinationText)
+        }
+
+        var shift: A64.VectorImmediateShift = .none
+        if instruction.operands.count == 3 {
+            shift = try vectorImmediateShift(instruction.operands[2])
+        }
+
+        let immediateText = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        let imm8: UInt8
+        if kind == .fmov {
+            let value = try A64Parser.floatImmediate(immediateText)
+            guard let encoded = A64FloatImmediate.encode(value) else { throw AssemblerError.invalidImmediate(immediateText) }
+            imm8 = UInt8(encoded & 0xff)
+        } else if destination.arrangement == .d1 || destination.arrangement == .d2 {
+            // 64-bit `movi`: each source byte must be all-zero or all-one.
+            let value = try A64Parser.unsignedImmediate64(immediateText)
+            var encoded: UInt8 = 0
+            for index in 0..<8 {
+                let byte = (value >> (index * 8)) & 0xff
+                if byte == 0xff { encoded |= UInt8(1 << index) }
+                else if byte != 0 { throw AssemblerError.invalidImmediate(immediateText) }
+            }
+            imm8 = encoded
+        } else {
+            let value = try A64Parser.immediate(immediateText)
+            try checkRange(value, 0...255, instruction: kind.rawValue)
+            imm8 = UInt8(value)
+        }
+
+        return .vectorModifiedImmediate(kind, destination: destination, imm8: imm8, shift: shift)
     }
 
     static func vectorShiftImmediate(_ instruction: ParsedInstruction, kind: A64.VectorShiftImmediateKind) throws -> Instruction {

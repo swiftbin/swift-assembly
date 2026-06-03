@@ -425,6 +425,17 @@ internal enum A64 {
         }
     }
 
+    enum VectorModifiedImmediateKind: String, Equatable {
+        case movi, mvni, orr, bic, fmov
+    }
+
+    /// The optional shift applied to a vector modified-immediate byte.
+    enum VectorImmediateShift: Equatable {
+        case none
+        case lsl(Int)   // 0, 8, 16, or 24
+        case msl(Int)   // 8 or 16 (shifting ones in)
+    }
+
     enum MoveAliasSource: Equatable {
         case immediate(Int64)
         case register(Register)
@@ -484,6 +495,7 @@ internal enum A64 {
         case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)
         case vectorThreeSame(VectorThreeSameKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorShiftImmediate(VectorShiftImmediateKind, destination: VectorRegister, source: VectorRegister, shift: Int)
+        case vectorModifiedImmediate(VectorModifiedImmediateKind, destination: VectorRegister, imm8: UInt8, shift: VectorImmediateShift)
     }
 }
 
@@ -498,3 +510,5 @@ internal typealias MemoryOperand = A64.MemoryOperand
 internal typealias Instruction = A64.Instruction
 internal typealias ParsedShift = A64.Shift
 internal typealias VectorShiftImmediateKind = A64.VectorShiftImmediateKind
+internal typealias VectorModifiedImmediateKind = A64.VectorModifiedImmediateKind
+internal typealias VectorImmediateShift = A64.VectorImmediateShift

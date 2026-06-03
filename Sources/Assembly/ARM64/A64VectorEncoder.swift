@@ -196,6 +196,68 @@ internal enum A64VectorEncoder {
         return head | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func modifiedImmediate(_ kind: A64.VectorModifiedImmediateKind, destination rd: VectorRegister, imm8: UInt8, shift: A64.VectorImmediateShift) throws -> UInt32 {
+        let arrangement = rd.arrangement
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // op[29] distinguishes the "negated" variants; cmode[15:12] selects the form.
+        let op: UInt32
+        let cmode: UInt32
+
+        switch kind {
+        case .fmov:
+            guard case .none = shift else { throw fail() }
+            switch arrangement {
+            case .s2, .s4: op = 0; cmode = 0b1111
+            case .d2: op = 1; cmode = 0b1111
+            default: throw fail()
+            }
+        case .movi, .mvni, .orr, .bic:
+            let isNegated = kind == .mvni || kind == .bic       // op = 1
+            let isLogical = kind == .orr || kind == .bic        // cmode bit0 = 1
+            switch arrangement {
+            case .b8, .b16:
+                guard kind == .movi, case .none = shift else { throw fail() }
+                op = 0; cmode = 0b1110
+            case .h4, .h8:
+                let amount = try lslAmount(shift, allowed: [0, 8], kind: kind)
+                op = isNegated ? 1 : 0
+                cmode = 0b1000 | (UInt32(amount / 8) << 1) | (isLogical ? 1 : 0)
+            case .s2, .s4:
+                if case .msl(let amount) = shift {
+                    guard !isLogical, amount == 8 || amount == 16 else { throw fail() }
+                    op = isNegated ? 1 : 0
+                    cmode = 0b1100 | (amount == 16 ? 1 : 0)
+                } else {
+                    let amount = try lslAmount(shift, allowed: [0, 8, 16, 24], kind: kind)
+                    op = isNegated ? 1 : 0
+                    cmode = 0b0000 | (UInt32(amount / 8) << 1) | (isLogical ? 1 : 0)
+                }
+            case .d1, .d2:
+                // 64-bit `movi` (vector `.2d` or the scalar `d` form).
+                guard kind == .movi, case .none = shift else { throw fail() }
+                op = 1; cmode = 0b1110
+            }
+        }
+
+        let q: UInt32 = arrangement == .d1 ? 0 : arrangement.q
+        let abc = (UInt32(imm8) >> 5) & 0x7
+        let defgh = UInt32(imm8) & 0x1f
+        let base: UInt32 = 0x0f00_0000 | (1 << 10)
+        return (q << 30) | (op << 29) | base | (abc << 16) | (cmode << 12) | (defgh << 5) | rd.encodedNumber
+    }
+
+    private static func lslAmount(_ shift: A64.VectorImmediateShift, allowed: [Int], kind: A64.VectorModifiedImmediateKind) throws -> Int {
+        let amount: Int
+        switch shift {
+        case .none: amount = 0
+        case .lsl(let value): amount = value
+        case .msl: throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        guard allowed.contains(amount) else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        return amount
+    }
+
     private static func isValidTwoRegisterMiscArrangement(_ kind: A64.VectorTwoRegisterMiscKind, _ arrangement: A64.VectorArrangement) -> Bool {
         switch kind {
         case .rev64, .cls, .clz:

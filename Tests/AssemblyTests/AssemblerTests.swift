@@ -746,6 +746,79 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.8b, v1.8b, #3"))
     }
 
+    func testVectorModifiedImmediateInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.8b, #0xab"), 0x0f05e560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.16b, #0xab"), 0x4f05e560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.4h, #0xab"), 0x0f058560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.4h, #0xab, lsl #8"), 0x0f05a560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.8h, #0xab, lsl #8"), 0x4f05a560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2s, #0xab"), 0x0f050560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2s, #0xab, lsl #8"), 0x0f052560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2s, #0xab, lsl #16"), 0x0f054560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2s, #0xab, lsl #24"), 0x0f056560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.4s, #0xab, lsl #24"), 0x4f056560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2s, #0xab, msl #8"), 0x0f05c560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2s, #0xab, msl #16"), 0x0f05d560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.4s, #0xab, msl #16"), 0x4f05d560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi d0, #0xff00ff00ff00ff00"), 0x2f05e540)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("movi v0.2d, #0xff00ff00ff00ff00"), 0x6f05e540)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mvni v0.4h, #0xab"), 0x2f058560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mvni v0.4h, #0xab, lsl #8"), 0x2f05a560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mvni v0.2s, #0xab, lsl #16"), 0x2f054560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mvni v0.4s, #0xab, msl #8"), 0x6f05c560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("orr v0.4h, #0xab"), 0x0f059560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("orr v0.4h, #0xab, lsl #8"), 0x0f05b560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("orr v0.2s, #0xab, lsl #16"), 0x0f055560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("orr v0.4s, #0xab"), 0x4f051560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bic v0.4h, #0xab"), 0x2f059560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bic v0.2s, #0xab, lsl #24"), 0x2f057560)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v0.2s, #1.0"), 0x0f03f600)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v0.4s, #1.0"), 0x4f03f600)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v0.2d, #1.0"), 0x6f03f600)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v0.2s, #-1.5"), 0x0f07f700)
+    }
+
+    func testDisassembleVectorModifiedImmediate() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f05e560), "movi v0.8b, #0xab")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f05a560), "movi v0.4h, #0xab, lsl #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f05c560), "movi v0.2s, #0xab, msl #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2f05e540), "movi d0, #0xff00ff00ff00ff00")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6f05e540), "movi v0.2d, #0xff00ff00ff00ff00")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6f05c560), "mvni v0.4s, #0xab, msl #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f051560), "orr v0.4s, #0xab")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2f057560), "bic v0.2s, #0xab, lsl #24")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6f03f600), "fmov v0.2d, #1.0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f07f700), "fmov v0.2s, #-1.5")
+    }
+
+    func testVectorModifiedImmediateRoundTrip() throws {
+        let sources = [
+            "movi v0.8b, #0", "movi v1.16b, #255", "movi v2.4h, #0x10, lsl #8",
+            "movi v3.8h, #0x10", "movi v4.2s, #0x7f, lsl #16", "movi v5.4s, #0x7f, msl #16",
+            "movi v6.2d, #0xffff0000ffff0000", "movi d7, #0x00ff00ff00ff00ff",
+            "mvni v8.4h, #0x33, lsl #8", "mvni v9.4s, #0x44, msl #8",
+            "orr v10.8h, #0x55", "orr v11.4s, #0x66, lsl #24",
+            "bic v12.4h, #0x77, lsl #8", "bic v13.2s, #0x88",
+            "fmov v14.2s, #1.0", "fmov v15.4s, #-3.5", "fmov v16.2d, #0.5",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorModifiedImmediateInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("movi v0.8b, #0x100"))     // byte out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("movi v0.8b, #0xab, lsl #8")) // 8-bit takes no shift
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("movi v0.4h, #0xab, lsl #16")) // 16-bit only lsl 0/8
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("movi v0.2s, #0xab, lsl #32")) // out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("orr v0.2s, #0xab, msl #8"))  // orr has no msl form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("movi v0.2d, #0x1234"))       // bytes not all 0x00/0xff
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov v0.2s, #100.0"))        // not representable
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
