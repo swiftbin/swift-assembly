@@ -654,6 +654,20 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD scalar two-register misc, narrowing (`Vd, Vn` — the destination is
+    /// one element size narrower than the source: saturating extract-narrow).
+    enum ScalarTwoRegisterMiscNarrowKind: String, Equatable, CaseIterable {
+        case sqxtun, sqxtn, uqxtn
+
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .sqxtun: return (1, 0b10010)
+            case .sqxtn:  return (0, 0b10100)
+            case .uqxtn:  return (1, 0b10100)
+            }
+        }
+    }
+
     /// Advanced SIMD scalar floating-point three-same (`Vd, Vn, Vm` on scalar FP registers).
     enum ScalarThreeSameFPKind: String, Equatable, CaseIterable {
         case fmulx, fcmeq, fcmge, fcmgt, facge, facgt, frecps, frsqrts, fabd
@@ -836,6 +850,7 @@ internal enum A64 {
         case scalarFPTwoRegisterMisc(ScalarFPTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)
         case scalarThreeSameFP(ScalarThreeSameFPKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarShiftNarrow(ScalarShiftNarrowKind, destination: FPRegister, source: FPRegister, shift: Int)
+        case scalarTwoRegisterMiscNarrow(ScalarTwoRegisterMiscNarrowKind, destination: FPRegister, source: FPRegister)
     }
 }
 
@@ -865,3 +880,4 @@ internal typealias ScalarThreeDifferentKind = A64.ScalarThreeDifferentKind
 internal typealias ScalarFPTwoRegisterMiscKind = A64.ScalarFPTwoRegisterMiscKind
 internal typealias ScalarThreeSameFPKind = A64.ScalarThreeSameFPKind
 internal typealias ScalarShiftNarrowKind = A64.ScalarShiftNarrowKind
+internal typealias ScalarTwoRegisterMiscNarrowKind = A64.ScalarTwoRegisterMiscNarrowKind

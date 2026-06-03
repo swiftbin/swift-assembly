@@ -43,6 +43,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD scalar FP two-register misc (fcvtns / fcvtnu / fcvtms / fcvtmu / fcvtas / fcvtau / fcvtps / fcvtpu / fcvtzs / fcvtzu / scvtf / ucvtf / frecpe / frsqrte / frecpx / fcvtxn and the compare-against-#0.0 fcmeq / fcmge / fcmgt / fcmle / fcmlt)
 - Advanced SIMD scalar FP three-same (fmulx / fcmeq / fcmge / fcmgt / facge / facgt / frecps / frsqrts / fabd)
 - Advanced SIMD scalar shift by immediate, narrowing (sqshrn / sqrshrn / uqshrn / uqrshrn / sqshrun / sqrshrun)
+- Advanced SIMD scalar two-register misc, saturating extract-narrow (sqxtn / uqxtn / sqxtun)
 - ...
 
 ## Usage

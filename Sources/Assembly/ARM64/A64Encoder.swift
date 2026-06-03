@@ -182,6 +182,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.scalarThreeSameFP(kind, destination: destination, first: first, second: second)
         case .scalarShiftNarrow(let kind, let destination, let source, let shift):
             return try A64VectorEncoder.scalarShiftNarrow(kind, destination: destination, source: source, shift: shift)
+        case .scalarTwoRegisterMiscNarrow(let kind, let destination, let source):
+            return try A64VectorEncoder.scalarTwoRegisterMiscNarrow(kind, destination: destination, source: source)
         }
     }
 }

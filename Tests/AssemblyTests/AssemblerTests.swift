@@ -1597,6 +1597,43 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqshrn d0, d1, #3"))   // no d destination
     }
 
+    func testScalarTwoRegisterMiscNarrowInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn b0, h1"), 0x5e214820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn h0, s1"), 0x5e614820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtn s0, d1"), 0x5ea14820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqxtn b0, h1"), 0x7e214820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uqxtn s0, d1"), 0x7ea14820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtun b0, h1"), 0x7e212820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sqxtun s0, d1"), 0x7ea12820)
+    }
+
+    func testDisassembleScalarTwoRegisterMiscNarrow() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e214820), "sqxtn b0, h1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea14820), "sqxtn s0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e214820), "uqxtn b0, h1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e212820), "sqxtun b0, h1")
+    }
+
+    func testScalarTwoRegisterMiscNarrowRoundTrip() throws {
+        let sources = [
+            "sqxtn b0, h1", "sqxtn h2, s3", "sqxtn s4, d5",
+            "uqxtn b6, h7", "uqxtn h8, s9", "uqxtn s10, d11",
+            "sqxtun b12, h13", "sqxtun h14, s15", "sqxtun s16, d17",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarTwoRegisterMiscNarrowInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqxtn b0, s1"))   // dest must be one size below source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqxtn d0, d1"))   // no d destination
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqxtn h0, h1"))   // source must be one size above dest
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

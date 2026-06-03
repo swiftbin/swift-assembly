@@ -313,6 +313,18 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Advanced SIMD scalar two-register misc, narrowing: two scalar FP registers.
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           instruction.operands.allSatisfy(A64Parser.isScalarFloatRegisterOperand),
+           let kind = A64.ScalarTwoRegisterMiscNarrowKind(rawValue: mnemonic) {
+            return .scalarTwoRegisterMiscNarrow(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD scalar two-register misc: two scalar FP registers.
         if parts.count == 1,
            instruction.operands.count == 2,

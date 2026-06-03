@@ -634,6 +634,24 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func scalarTwoRegisterMiscNarrow(_ kind: A64.ScalarTwoRegisterMiscNarrowKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
+        let spec = kind.spec
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+
+        // The destination is one element size narrower than the source.
+        let size: UInt32
+        switch (rd.width, rn.width) {
+        case (8, 16):  size = 0b00   // h -> b
+        case (16, 32): size = 0b01   // s -> h
+        case (32, 64): size = 0b10   // d -> s
+        default: throw fail()
+        }
+
+        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
+        let base: UInt32 = 0x5e20_0800
+        return base | (spec.u << 29) | (size << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func scalarShiftNarrow(_ kind: A64.ScalarShiftNarrowKind, destination rd: FloatRegister, source rn: FloatRegister, shift: Int) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
