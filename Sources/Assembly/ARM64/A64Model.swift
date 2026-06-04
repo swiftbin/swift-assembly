@@ -1467,6 +1467,8 @@ internal enum A64 {
         case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)
         case vectorThreeSame(VectorThreeSameKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorShiftImmediate(VectorShiftImmediateKind, destination: VectorRegister, source: VectorRegister, shift: Int)
+        /// Shift-left-long by element size (`shll`/`shll2`): the shift always equals the source element width.
+        case vectorShiftLeftLong(destination: VectorRegister, source: VectorRegister, shift: UInt32)
         case vectorModifiedImmediate(VectorModifiedImmediateKind, destination: VectorRegister, imm8: UInt8, shift: VectorImmediateShift)
         case vectorDuplicateElement(destination: VectorRegister, source: VectorElement)
         case vectorDuplicateGeneral(destination: VectorRegister, source: Register)

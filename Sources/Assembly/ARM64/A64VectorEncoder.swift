@@ -170,6 +170,23 @@ internal enum A64VectorEncoder {
         }
     }
 
+    static func shiftLeftLong(destination rd: VectorRegister, source rn: VectorRegister, shift: UInt32) throws -> UInt32 {
+        // `shll`/`shll2`: source is 8b/16b, 4h/8h, 2s/4s; destination is the long
+        // form 8h/4s/2d; the shift always equals the source element width.
+        switch (rn.arrangement, rd.arrangement) {
+        case (.b8, .h8), (.b16, .h8), (.h4, .s4), (.h8, .s4), (.s2, .d2), (.s4, .d2):
+            break
+        default:
+            throw AssemblerError.invalidRegister("shll")
+        }
+        guard shift == UInt32(rn.arrangement.elementWidth) else {
+            throw AssemblerError.invalidImmediate("#\(shift)")
+        }
+        let size = rn.arrangement.elementSize
+        let head: UInt32 = (rn.arrangement.q << 30) | (1 << 29) | 0x0e20_0800 | (size << 22)
+        return head | (0b10011 << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func shiftImmediate(_ kind: A64.VectorShiftImmediateKind, destination rd: VectorRegister, source rn: VectorRegister, shift: Int) throws -> UInt32 {
         let spec = kind.spec
         let base: UInt32 = 0x0f00_0400

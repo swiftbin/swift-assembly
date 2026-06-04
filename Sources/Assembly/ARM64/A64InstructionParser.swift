@@ -1525,6 +1525,22 @@ internal enum A64InstructionParser {
                 source: try A64Parser.vectorRegister(instruction.operands[1]),
                 shift: 0
             )
+        case "shll", "shll2":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let source = try A64Parser.vectorRegister(instruction.operands[1])
+            // The `2` suffix selects the upper-half (`Q=1`) source arrangement.
+            let expectedQ: UInt32 = mnemonic == "shll2" ? 1 : 0
+            guard source.arrangement.q == expectedQ else {
+                throw AssemblerError.invalidRegister(instruction.operands[1])
+            }
+            let shift = try A64Parser.immediate(instruction.operands[2])
+            guard shift >= 0 else { throw AssemblerError.invalidImmediate(instruction.operands[2]) }
+            return .vectorShiftLeftLong(
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: source,
+                shift: UInt32(shift)
+            )
         case "shadd", "uhadd", "sqadd", "uqadd", "srhadd", "urhadd",
              "shsub", "uhsub", "sqsub", "uqsub",
              "cmgt", "cmhi", "cmge", "cmhs",

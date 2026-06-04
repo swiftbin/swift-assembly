@@ -54,6 +54,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCryptoXAR(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMiscFP16(word) { return instruction }
         if let instruction = decodeVectorFRINTToInteger(word) { return instruction }
+        if let instruction = decodeVectorShiftLeftLong(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -1635,6 +1636,29 @@ internal enum A64InstructionDecoder {
             destination: VectorRegister(number: rdNum, arrangement: arrangement),
             imm8: imm8,
             shift: shift)
+    }
+
+    private static func decodeVectorShiftLeftLong(_ word: UInt32) -> Instruction? {
+        // Advanced SIMD two-register-misc, U=1, opcode=0b10011 (SHLL/SHLL2).
+        guard word & 0xbf3f_fc00 == 0x2e21_3800 else { return nil }
+        let q = (word >> 30) & 1
+        let size = (word >> 22) & 3
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        let dst: A64.VectorArrangement
+        let src: A64.VectorArrangement
+        switch size {
+        case 0b00: dst = .h8; src = q == 1 ? .b16 : .b8
+        case 0b01: dst = .s4; src = q == 1 ? .h8 : .h4
+        case 0b10: dst = .d2; src = q == 1 ? .s4 : .s2
+        default: return nil
+        }
+        let shift = UInt32(8 << size)
+        return .vectorShiftLeftLong(
+            destination: VectorRegister(number: rdNum, arrangement: dst),
+            source: VectorRegister(number: rnNum, arrangement: src),
+            shift: shift
+        )
     }
 
     private static func decodeVectorShiftImmediate(_ word: UInt32) -> Instruction? {

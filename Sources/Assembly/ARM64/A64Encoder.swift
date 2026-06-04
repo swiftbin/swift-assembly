@@ -166,6 +166,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.threeSame(kind, destination: destination, first: first, second: second)
         case .vectorShiftImmediate(let kind, let destination, let source, let shift):
             return try A64VectorEncoder.shiftImmediate(kind, destination: destination, source: source, shift: shift)
+        case .vectorShiftLeftLong(let destination, let source, let shift):
+            return try A64VectorEncoder.shiftLeftLong(destination: destination, source: source, shift: shift)
         case .vectorModifiedImmediate(let kind, let destination, let imm8, let shift):
             return try A64VectorEncoder.modifiedImmediate(kind, destination: destination, imm8: imm8, shift: shift)
         case .vectorDuplicateElement(let destination, let source):

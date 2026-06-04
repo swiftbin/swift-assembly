@@ -170,6 +170,9 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .vectorShiftImmediate(let kind, let destination, let source, let shift):
             return formatVectorShiftImmediate(kind, destination: destination, source: source, shift: shift)
+        case .vectorShiftLeftLong(let destination, let source, let shift):
+            let mnemonic = source.arrangement.q == 1 ? "shll2" : "shll"
+            return "\(mnemonic) \(formatVectorRegister(destination)), \(formatVectorRegister(source)), #\(shift)"
         case .vectorModifiedImmediate(let kind, let destination, let imm8, let shift):
             return formatVectorModifiedImmediate(kind, destination: destination, imm8: imm8, shift: shift)
         case .vectorDuplicateElement(let destination, let source):

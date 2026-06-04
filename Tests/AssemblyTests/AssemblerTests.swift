@@ -582,6 +582,44 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint32z v0.2s, v1.4s"))  // arrangements must match
     }
 
+    func testVectorShiftLeftLongInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shll v0.8h, v1.8b, #8"), 0x2e213820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shll2 v0.8h, v1.16b, #8"), 0x6e213820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shll v0.4s, v1.4h, #16"), 0x2e613820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shll2 v0.4s, v1.8h, #16"), 0x6e613820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shll v0.2d, v1.2s, #32"), 0x2ea13820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("shll2 v0.2d, v1.4s, #32"), 0x6ea13820)
+    }
+
+    func testDisassembleVectorShiftLeftLong() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e213820), "shll v0.8h, v1.8b, #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e213820), "shll2 v0.8h, v1.16b, #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e613820), "shll v0.4s, v1.4h, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ea13820), "shll2 v0.2d, v1.4s, #32")
+    }
+
+    func testVectorShiftLeftLongRoundTrip() throws {
+        let sources = [
+            "shll v0.8h, v1.8b, #8", "shll2 v2.8h, v3.16b, #8",
+            "shll v4.4s, v5.4h, #16", "shll2 v6.4s, v7.8h, #16",
+            "shll v8.2d, v9.2s, #32", "shll2 v10.2d, v11.4s, #32",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorShiftLeftLongInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shll v0.8h, v1.16b, #8"))  // 16b needs shll2
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shll2 v0.8h, v1.8b, #8"))  // 8b needs shll
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shll v0.8h, v1.8b, #4"))  // shift must equal element width
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shll v0.2d, v1.1d, #64"))  // 1d source not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("shll v0.4s, v1.8b, #8"))  // mismatched dest
+    }
+
     func testFJCVTZSInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fjcvtzs w0, d1"), 0x1e7e0020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fjcvtzs w5, d7"), 0x1e7e00e5)
