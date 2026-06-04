@@ -291,7 +291,7 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503203f), "yield")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503221f), "esb")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503229f), "csdb")
-        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50320df), "hint #6")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50320df), "dgh")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5032fff), "hint #127")
         // nop (#0) and the paciasp-family hints are not misdecoded as plain hints.
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503201f), "nop")
@@ -301,13 +301,49 @@ final class AssemblerTests: XCTestCase {
     func testHintRoundTrip() throws {
         for source in [
             "yield", "wfe", "wfi", "sev", "sevl", "esb", "csdb",
-            "hint #6", "hint #9", "hint #11", "hint #127",
+            "hint #9", "hint #11", "hint #127",
         ] {
             let word = try ARM64Assembler.assembleWord(source)
             let text = try ARM64Assembler.disassembleWord(word)
             XCTAssertEqual(text, source, "round trip failed for \(source)")
             XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
         }
+    }
+
+    func testBranchTargetAndHintBarrierInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dgh"), 0xd50320df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("psb csync"), 0xd503223f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tsb csync"), 0xd503225f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bti"), 0xd503241f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bti c"), 0xd503245f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bti j"), 0xd503249f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bti jc"), 0xd50324df)
+    }
+
+    func testDisassembleBranchTargetAndHintBarrier() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50320df), "dgh")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503223f), "psb csync")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503225f), "tsb csync")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503241f), "bti")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503245f), "bti c")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503249f), "bti j")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50324df), "bti jc")
+    }
+
+    func testBranchTargetAndHintBarrierRoundTrip() throws {
+        for source in ["dgh", "psb csync", "tsb csync", "bti", "bti c", "bti j", "bti jc"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testBranchTargetAndHintBarrierInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bti x"))       // invalid target
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("tsb"))         // missing csync
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("psb foo"))     // invalid operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dgh #0"))      // dgh takes no operand
     }
 
     func testHintInvalidInputsThrow() throws {

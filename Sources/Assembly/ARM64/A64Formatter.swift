@@ -46,6 +46,15 @@ internal enum A64InstructionFormatter {
         case .barrier(.dataMemory, let option):
             return "dmb \(formatBarrierOption(option))"
         case .hint(let immediate):
+            switch immediate {
+            case 17: return "psb csync"
+            case 18: return "tsb csync"
+            case 32: return "bti"
+            case 34: return "bti c"
+            case 36: return "bti j"
+            case 38: return "bti jc"
+            default: break
+            }
             if let kind = HintKind.decode(immediate: immediate) { return kind.rawValue }
             return "hint #\(immediate)"
         case .moveAlias(let destination, let source):

@@ -50,6 +50,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - memory tagging load/store tag (stg / stzg / st2g / stz2g / ldg / stgp / stgm / stzgm / ldgm, with offset / pre-index / post-index)
 - flag manipulation (rmif / setf8 / setf16)
 - exception generation (hvc / smc / dcps1 / dcps2 / dcps3, alongside the existing svc / brk / hlt)
+- branch target identification and hint barriers (bti / bti c / bti j / bti jc / dgh / psb csync / tsb csync)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
 - scalar floating-point round-to-integral (frintn / frintm / frintp / frintz / frinta / frintx / frinti on `s`/`d`/`h`, and the Armv8.5 frint32z / frint32x / frint64z / frint64x on `s`/`d`)
 - scalar floating-point JavaScript convert to signed fixed-point (fjcvtzs `w<d>, d<n>`)

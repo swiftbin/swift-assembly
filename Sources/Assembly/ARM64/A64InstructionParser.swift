@@ -777,10 +777,27 @@ internal enum A64InstructionParser {
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
             return .nop
-        case "yield", "wfe", "wfi", "sev", "sevl", "esb", "csdb":
+        case "yield", "wfe", "wfi", "sev", "sevl", "esb", "csdb", "dgh":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
             return .hint(A64.HintKind(rawValue: mnemonic)!.immediate)
+        case "bti":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 0...1)
+            if instruction.operands.isEmpty { return .hint(32) }
+            switch instruction.operands[0].trimmingCharacters(in: .whitespaces).lowercased() {
+            case "c": return .hint(34)
+            case "j": return .hint(36)
+            case "jc": return .hint(38)
+            default: throw AssemblerError.unsupportedOperand(instruction.operands[0])
+            }
+        case "psb", "tsb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 1)
+            guard instruction.operands[0].trimmingCharacters(in: .whitespaces).lowercased() == "csync" else {
+                throw AssemblerError.unsupportedOperand(instruction.operands[0])
+            }
+            return .hint(mnemonic == "psb" ? 17 : 18)
         case "cfinv", "axflag", "xaflag":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)

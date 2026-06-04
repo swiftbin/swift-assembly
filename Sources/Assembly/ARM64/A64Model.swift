@@ -173,7 +173,7 @@ internal enum A64 {
     /// Named `HINT #imm` instructions. Unrecognised immediates round-trip
     /// through the generic `hint #imm` form.
     enum HintKind: String, Equatable, CaseIterable {
-        case yield, wfe, wfi, sev, sevl, esb, csdb
+        case yield, wfe, wfi, sev, sevl, esb, csdb, dgh
 
         /// The 7-bit `CRm:op2` immediate.
         var immediate: UInt32 {
@@ -185,6 +185,7 @@ internal enum A64 {
             case .sevl: return 5
             case .esb: return 16
             case .csdb: return 20
+            case .dgh: return 6
             }
         }
 
