@@ -20,6 +20,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - logical (and / orr / eor / bic / orn / ...) and mvn
 - shifts (lsl / lsr / asr), extract and rotate (extr / ror)
 - multiply / divide (mul / madd / msub / udiv / sdiv)
+- data-processing (1 source) (rbit / rev16 / rev32 / rev / clz / cls)
 - conditional select (csel / csinc / csinv / csneg, with a condition operand)
 - conditional compare (ccmp / ccmn, register and `#imm5` forms with `#nzcv` and a condition)
 - conditional set / select aliases (cset / csetm / cinc / cinv / cneg, preferred on disassembly)

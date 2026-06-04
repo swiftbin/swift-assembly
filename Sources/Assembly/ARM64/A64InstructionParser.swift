@@ -924,6 +924,24 @@ internal enum A64InstructionParser {
                 first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
             )
+        case "rbit", "rev16", "rev32", "rev", "clz", "cls":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            // `rbit`/`rev16`/`rev32`/`clz`/`cls` also exist as SIMD
+            // two-register-misc forms (`rbit v0.8b, v1.8b`); route those by
+            // operand type. Plain `rev` has no vector form.
+            if mnemonic != "rev", operandsAreVectorRegisters(instruction) {
+                return .vectorTwoRegisterMisc(
+                    A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                    source: try A64Parser.vectorRegister(instruction.operands[1])
+                )
+            }
+            return .dataProcessingOneSource(
+                A64.DataProcessingOneSourceKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            )
         case "csel", "csinc", "csinv", "csneg":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 4)
@@ -1404,7 +1422,7 @@ internal enum A64InstructionParser {
                 first: try A64Parser.vectorRegister(instruction.operands[1]),
                 second: try A64Parser.vectorRegister(instruction.operands[2])
             )
-        case "rev64", "rev32", "rev16", "abs", "neg", "not", "rbit", "cnt", "cls", "clz", "sqabs", "sqneg", "suqadd", "usqadd":
+        case "rev64", "abs", "neg", "not", "cnt", "sqabs", "sqneg", "suqadd", "usqadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
             let kind = mnemonic == "not" ? A64.VectorTwoRegisterMiscKind.mvn : A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!

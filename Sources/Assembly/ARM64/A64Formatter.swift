@@ -60,6 +60,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first), formatRegister(second)] + (accumulator.map { [formatRegister($0)] } ?? [])).joined(separator: ", "))"
         case .divide(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
+        case .dataProcessingOneSource(let kind, let destination, let source):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(source))"
         case .conditionalSelect(let kind, let destination, let first, let second, let condition):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second)), \(formatCondition(condition))"
         case .conditionalCompare(let kind, let first, let second, let nzcv, let condition):

@@ -202,6 +202,41 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// Data-processing (1 source): bit/byte reversals and count operations.
+    enum DataProcessingOneSourceKind: String, Equatable, CaseIterable {
+        case rbit, rev16, rev32, rev, clz, cls
+
+        /// Whether the operation is only defined on 64-bit registers.
+        var is64BitOnly: Bool { self == .rev32 }
+
+        /// The `opcode` field at [15:10] for the given operand width.
+        func opcode(is64Bit: Bool) -> UInt32 {
+            switch self {
+            case .rbit: return 0b000000
+            case .rev16: return 0b000001
+            case .rev32: return 0b000010
+            // `rev` shares opcode 2 with `rev32` but selects it only when 32-bit;
+            // the 64-bit form uses opcode 3.
+            case .rev: return is64Bit ? 0b000011 : 0b000010
+            case .clz: return 0b000100
+            case .cls: return 0b000101
+            }
+        }
+
+        /// Reconstruct the operation from the encoded `opcode` and `sf` bits.
+        static func decode(opcode: UInt32, is64Bit: Bool) -> DataProcessingOneSourceKind? {
+            switch opcode {
+            case 0b000000: return .rbit
+            case 0b000001: return .rev16
+            case 0b000010: return is64Bit ? .rev32 : .rev
+            case 0b000011: return is64Bit ? .rev : nil
+            case 0b000100: return .clz
+            case 0b000101: return .cls
+            default: return nil
+            }
+        }
+    }
+
     /// Conditional select family (`csel`/`csinc`/`csinv`/`csneg`).
     enum ConditionalSelectKind: String, Equatable, CaseIterable {
         case csel, csinc, csinv, csneg
@@ -1502,6 +1537,7 @@ internal enum A64 {
         case extractOrRotateAlias(ExtractKind, destination: Register, first: Register, operand: ExtractOperand)
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
+        case dataProcessingOneSource(DataProcessingOneSourceKind, destination: Register, source: Register)
         case conditionalSelect(ConditionalSelectKind, destination: Register, first: Register, second: Register, condition: Condition)
         case conditionalCompare(ConditionalCompareKind, first: Register, second: ConditionalCompareOperand, nzcv: UInt32, condition: Condition)
         case conditionalSet(ConditionalSetKind, destination: Register, condition: Condition)
@@ -1635,6 +1671,7 @@ internal typealias VectorMatrixMultiplyKind = A64.VectorMatrixMultiplyKind
 internal typealias ConditionalSelectKind = A64.ConditionalSelectKind
 internal typealias ConditionalCompareKind = A64.ConditionalCompareKind
 internal typealias ConditionalCompareOperand = A64.ConditionalCompareOperand
+internal typealias DataProcessingOneSourceKind = A64.DataProcessingOneSourceKind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
 internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind

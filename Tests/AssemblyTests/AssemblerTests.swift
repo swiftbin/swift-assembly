@@ -151,6 +151,49 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sdiv x0, x1, x2"), 0x9ac20c20)
     }
 
+    func testDataProcessingOneSourceInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rbit w0, w1"), 0x5ac00020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rbit x2, x3"), 0xdac00062)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev16 w4, w5"), 0x5ac004a4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev16 x6, x7"), 0xdac004e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev32 x8, x9"), 0xdac00928)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev w10, w11"), 0x5ac0096a)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rev x12, x13"), 0xdac00dac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clz w14, w15"), 0x5ac011ee)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clz x16, x17"), 0xdac01230)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cls w18, w19"), 0x5ac01672)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cls x20, x21"), 0xdac016b4)
+    }
+
+    func testDisassembleDataProcessingOneSource() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ac00020), "rbit w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ac004a4), "rev16 w4, w5")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac00928), "rev32 x8, x9")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ac0096a), "rev w10, w11")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac00dac), "rev x12, x13")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ac011ee), "clz w14, w15")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac016b4), "cls x20, x21")
+    }
+
+    func testDataProcessingOneSourceRoundTrip() throws {
+        for source in [
+            "rbit w0, w1", "rbit x2, x3", "rev16 w4, w5", "rev16 x6, x7",
+            "rev32 x8, x9", "rev w10, w11", "rev x12, x13", "clz w14, w15",
+            "clz x16, x17", "cls w18, w19", "cls x20, x21",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testDataProcessingOneSourceInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rev32 w0, w1"))   // rev32 is 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rbit w0, x1"))    // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz w0"))         // missing source
+    }
+
     func testConditionalSelectInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("csel w0, w1, w2, eq"), 0x1a820020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("csel x0, x1, x2, ne"), 0x9a821020)
