@@ -188,6 +188,8 @@ internal enum A64InstructionEncoder {
             return try A64PointerAuthenticationEncoder.encode(kind, register: register, architecture: architecture)
         case .pointerAuthData(let kind, let destination, let source, let modifier):
             return try A64PointerAuthenticationEncoder.encodeData(kind, destination: destination, source: source, modifier: modifier)
+        case .pointerAuthBranch(let kind, let target, let modifier):
+            return try A64PointerAuthenticationEncoder.encodeBranch(kind, target: target, modifier: modifier)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
@@ -394,6 +396,26 @@ internal enum A64PointerAuthenticationEncoder {
             rn = source.encodedNumber
         }
         return 0xdac1_0000 | (kind.opcode << 10) | (rn << 5) | destination.encodedNumber
+    }
+
+    static func encodeBranch(_ kind: A64.PointerAuthBranchKind, target: IntegerRegister?, modifier: IntegerRegister?) throws -> UInt32 {
+        switch kind.form {
+        case .twoRegister:
+            guard let target, let modifier, target.is64Bit, modifier.is64Bit else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            return kind.baseWord | (target.encodedNumber << 5) | modifier.encodedNumber
+        case .oneRegister:
+            guard let target, target.is64Bit, modifier == nil else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            return kind.baseWord | (target.encodedNumber << 5)
+        case .noOperand:
+            guard target == nil, modifier == nil else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            return kind.baseWord
+        }
     }
 }
 

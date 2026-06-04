@@ -212,6 +212,11 @@ internal enum A64InstructionFormatter {
             if let source { operands.append(formatRegister(source)) }
             if let modifier { operands.append(formatRegister(modifier)) }
             return "\(kind.rawValue) \(operands.joined(separator: ", "))"
+        case .pointerAuthBranch(let kind, let target, let modifier):
+            var operands: [String] = []
+            if let target { operands.append(formatRegister(target)) }
+            if let modifier { operands.append(formatRegister(modifier)) }
+            return operands.isEmpty ? kind.rawValue : "\(kind.rawValue) \(operands.joined(separator: ", "))"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

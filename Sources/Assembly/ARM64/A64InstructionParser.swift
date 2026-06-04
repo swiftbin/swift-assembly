@@ -1429,6 +1429,31 @@ internal enum A64InstructionParser {
                     modifier: nil
                 )
             }
+        case "braa", "brab", "blraa", "blrab",
+             "braaz", "brabz", "blraaz", "blrabz",
+             "retaa", "retab", "eretaa", "eretab":
+            guard parts.count == 1 else { return nil }
+            try requireARM64E(architecture, instruction: mnemonic)
+            let kind = A64.PointerAuthBranchKind(rawValue: mnemonic)!
+            switch kind.form {
+            case .twoRegister:
+                try expectOperandCount(instruction, exactly: 2)
+                return .pointerAuthBranch(
+                    kind,
+                    target: try A64Parser.xRegister(instruction.operands[0]),
+                    modifier: try A64Parser.xRegister(instruction.operands[1])
+                )
+            case .oneRegister:
+                try expectOperandCount(instruction, exactly: 1)
+                return .pointerAuthBranch(
+                    kind,
+                    target: try A64Parser.xRegister(instruction.operands[0]),
+                    modifier: nil
+                )
+            case .noOperand:
+                try expectOperandCount(instruction, exactly: 0)
+                return .pointerAuthBranch(kind, target: nil, modifier: nil)
+            }
         case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
             guard parts.count == 1 else { return nil }
             if mnemonic != "fnmul", allOperandsAreVectorRegisters(instruction) {

@@ -11,6 +11,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodePointerAuthentication(word) { return instruction }
         if let instruction = decodePointerAuthData(word) { return instruction }
         if let instruction = decodeBranchRegister(word) { return instruction }
+        if let instruction = decodePointerAuthBranch(word) { return instruction }
         if let instruction = decodeUnconditionalBranch(word) { return instruction }
         if let instruction = decodeConditionalBranch(word) { return instruction }
         if let instruction = decodeCompareAndBranch(word) { return instruction }
@@ -135,6 +136,32 @@ internal enum A64InstructionDecoder {
         default:
             return nil
         }
+    }
+
+    private static func decodePointerAuthBranch(_ word: UInt32) -> Instruction? {
+        for kind in A64.PointerAuthBranchKind.allCases {
+            switch kind.form {
+            case .noOperand:
+                if word == kind.baseWord {
+                    return .pointerAuthBranch(kind, target: nil, modifier: nil)
+                }
+            case .oneRegister:
+                // Rn is variable (bits [9:5]); the rest of the word is fixed.
+                if word & ~UInt32(0x3e0) == kind.baseWord {
+                    return .pointerAuthBranch(kind, target: xRegister(number: (word >> 5) & 0x1f), modifier: nil)
+                }
+            case .twoRegister:
+                // Rn (bits [9:5]) and Rm (bits [4:0]) are variable.
+                if word & ~UInt32(0x3ff) == kind.baseWord {
+                    return .pointerAuthBranch(
+                        kind,
+                        target: xRegister(number: (word >> 5) & 0x1f),
+                        modifier: xRegister(number: word & 0x1f)
+                    )
+                }
+            }
+        }
+        return nil
     }
 
     private static func decodeUnconditionalBranch(_ word: UInt32) -> Instruction? {

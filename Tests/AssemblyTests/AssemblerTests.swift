@@ -772,6 +772,53 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("pacga x0, x1", architecture: arch))  // pacga needs 3 operands
     }
 
+    func testPointerAuthBranchInstructions() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertEqual(try ARM64Assembler.assembleWord("braa x0, x1", architecture: arch), 0xd71f0801)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("brab x0, x1", architecture: arch), 0xd71f0c01)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("blraa x0, x1", architecture: arch), 0xd73f0801)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("blrab x0, x1", architecture: arch), 0xd73f0c01)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("braaz x0", architecture: arch), 0xd61f081f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("brabz x0", architecture: arch), 0xd61f0c1f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("blraaz x0", architecture: arch), 0xd63f081f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("blrabz x0", architecture: arch), 0xd63f0c1f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("retaa", architecture: arch), 0xd65f0bff)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("retab", architecture: arch), 0xd65f0fff)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("eretaa", architecture: arch), 0xd69f0bff)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("eretab", architecture: arch), 0xd69f0fff)
+    }
+
+    func testDisassemblePointerAuthBranch() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd71f0801), "braa x0, x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd63f081f), "blraaz x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd65f0bff), "retaa")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd69f0fff), "eretab")
+    }
+
+    func testPointerAuthBranchRoundTrip() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        let sources = [
+            "braa x3, x5", "brab x3, x5", "blraa x3, x5", "blrab x3, x5",
+            "braaz x7", "brabz x7", "blraaz x7", "blrabz x7",
+            "retaa", "retab", "eretaa", "eretab",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source, architecture: arch)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text, architecture: arch), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testPointerAuthBranchInvalidInputsThrow() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("braa x0, x1"))      // requires arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("braa w0, w1", architecture: arch))  // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("braa x0", architecture: arch))      // needs modifier
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("braaz x0, x1", architecture: arch)) // z form takes one register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("retaa x0", architecture: arch))     // takes no operands
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

@@ -1038,6 +1038,44 @@ internal enum A64 {
         }
     }
 
+    /// Unconditional branch (register) forms with pointer authentication
+    /// (`BRAA`/`BLRAA`/`RETAA`/`ERETAA` and their B-key/Z variants).
+    enum PointerAuthBranchKind: String, Equatable, CaseIterable {
+        case braa, brab, blraa, blrab
+        case braaz, brabz, blraaz, blrabz
+        case retaa, retab, eretaa, eretab
+
+        enum Form { case twoRegister, oneRegister, noOperand }
+
+        var form: Form {
+            switch self {
+            case .braa, .brab, .blraa, .blrab: return .twoRegister
+            case .braaz, .brabz, .blraaz, .blrabz: return .oneRegister
+            case .retaa, .retab, .eretaa, .eretab: return .noOperand
+            }
+        }
+
+        /// The fully-assembled word for the two/one-register forms uses this as a
+        /// base (with `Rn`/`Rm` ORed in); for the no-operand forms it is the exact
+        /// encoding.
+        var baseWord: UInt32 {
+            switch self {
+            case .braa: return 0xd71f_0800
+            case .brab: return 0xd71f_0c00
+            case .blraa: return 0xd73f_0800
+            case .blrab: return 0xd73f_0c00
+            case .braaz: return 0xd61f_081f
+            case .brabz: return 0xd61f_0c1f
+            case .blraaz: return 0xd63f_081f
+            case .blrabz: return 0xd63f_0c1f
+            case .retaa: return 0xd65f_0bff
+            case .retab: return 0xd65f_0fff
+            case .eretaa: return 0xd69f_0bff
+            case .eretab: return 0xd69f_0fff
+            }
+        }
+    }
+
     enum FPDataProcessing2Kind: String, Equatable {
         case fmul, fdiv, fadd, fsub, fmax, fmin, fmaxnm, fminnm, fnmul
     }
@@ -2230,6 +2268,7 @@ internal enum A64 {
         case loadStoreReplicate(LoadStoreReplicateKind, registers: VectorRegisterList, address: VectorMemoryOperand)
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
         case pointerAuthData(PointerAuthDataKind, destination: Register, source: Register?, modifier: Register?)
+        case pointerAuthBranch(PointerAuthBranchKind, target: Register?, modifier: Register?)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
@@ -2368,6 +2407,7 @@ internal typealias PStateFlagKind = A64.PStateFlagKind
 internal typealias SystemInstructionAlias = A64.SystemInstructionAlias
 internal typealias RCpcUnscaledKind = A64.RCpcUnscaledKind
 internal typealias PointerAuthDataKind = A64.PointerAuthDataKind
+internal typealias PointerAuthBranchKind = A64.PointerAuthBranchKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
