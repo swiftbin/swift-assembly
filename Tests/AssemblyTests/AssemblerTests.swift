@@ -444,6 +444,43 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("casp w0, w1, x2, x3, [x4]"))  // pair widths must match
     }
 
+    func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapr w0, [x1]"), 0xb8bfc020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapr x0, [x1]"), 0xf8bfc020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clrex"), 0xd5033f5f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clrex #15"), 0xd5033f5f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clrex #0"), 0xd503305f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clrex #5"), 0xd503355f)
+    }
+
+    func testDisassembleLoadAcquireRCpcAndClearExclusive() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x38bfc020), "ldaprb w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8bfc020), "ldapr x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5033f5f), "clrex")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503305f), "clrex #0")
+    }
+
+    func testLoadAcquireRCpcAndClearExclusiveRoundTrip() throws {
+        for source in [
+            "ldaprb w0, [x1]", "ldaprh w0, [x1]", "ldapr w0, [x1]", "ldapr x0, [x1]",
+            "clrex", "clrex #0", "clrex #5", "clrex #14",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testLoadAcquireRCpcAndClearExclusiveInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldaprb x0, [x1]"))     // byte form requires W
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldapr w0, [x1, #8]"))  // no offset allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldapr w0, w1"))        // base must be a memory operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("clrex #16"))           // immediate out of range
+    }
+
     func testAtomicMemoryInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldadd w1, w0, [x2]"), 0xb8210040)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldadda w1, w0, [x2]"), 0xb8a10040)

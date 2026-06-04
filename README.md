@@ -34,6 +34,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - load / store exclusive and acquire/release ordered (ldxr / stxr / ldaxr / stlxr / ldar / stlr with byte/half/word/doubleword forms, plus the ldxp / stxp / ldaxp / stlxp pairs)
 - compare and swap (cas / casa / casl / casal with byte/half/word/doubleword forms, plus the casp / caspa / caspl / caspal register pairs)
 - atomic memory operations (ldadd / ldclr / ldeor / ldset / ldsmax / ldsmin / ldumax / ldumin and swp, with acquire/release and byte/half variants, plus the st* aliases)
+- load-acquire RCpc registers (ldapr / ldaprb / ldaprh) and clear-exclusive (clrex)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)

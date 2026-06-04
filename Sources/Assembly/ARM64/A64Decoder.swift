@@ -14,6 +14,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeAddress(word) { return instruction }
         if let instruction = decodeException(word) { return instruction }
         if let instruction = decodeBarrier(word) { return instruction }
+        if let instruction = decodeClearExclusive(word) { return instruction }
         if let instruction = decodeHint(word) { return instruction }
         if let instruction = decodeMoveWide(word) { return instruction }
         if let instruction = decodeAddSubImmediate(word) { return instruction }
@@ -35,6 +36,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeLoadStoreExclusive(word) { return instruction }
         if let instruction = decodeCompareAndSwap(word) { return instruction }
         if let instruction = decodeAtomicMemory(word) { return instruction }
+        if let instruction = decodeLoadAcquireRCpc(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -206,6 +208,12 @@ internal enum A64InstructionDecoder {
         default:
             return nil
         }
+    }
+
+    private static func decodeClearExclusive(_ word: UInt32) -> Instruction? {
+        // CLREX (CRn=0011, op2=010, Rt=11111); only the CRm immediate at [11:8] varies.
+        guard word & 0xffff_f0ff == 0xd503_305f else { return nil }
+        return .clearExclusive((word >> 8) & 0xf)
     }
 
     private static func decodeHint(_ word: UInt32) -> Instruction? {
@@ -704,6 +712,25 @@ internal enum A64InstructionDecoder {
             operation: operation, acquire: acquire, release: release, fixedSize: fixedSize, isStore: false
         )
         return .atomicMemory(kind, source: source, value: integerRegister(number: rtNum, width: width), base: base)
+    }
+
+    private static func decodeLoadAcquireRCpc(_ word: UInt32) -> Instruction? {
+        guard word & 0x3fff_fc00 == 0x38bf_c000 else { return nil }
+        let size = (word >> 30) & 3
+        let kind: A64.LoadAcquireRCpcKind
+        let width: Int
+        switch size {
+        case 0: kind = .ldaprb; width = 32
+        case 1: kind = .ldaprh; width = 32
+        case 2: kind = .ldapr; width = 32
+        case 3: kind = .ldapr; width = 64
+        default: return nil
+        }
+        return .loadAcquireRCpc(
+            kind,
+            value: integerRegister(number: word & 0x1f, width: width),
+            base: xRegister(number: (word >> 5) & 0x1f)
+        )
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

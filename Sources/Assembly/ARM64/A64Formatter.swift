@@ -115,6 +115,11 @@ internal enum A64InstructionFormatter {
             var regs = [formatRegister(source)]
             if let value { regs.append(formatRegister(value)) }
             return "\(kind.mnemonic) \((regs + mem).joined(separator: ", "))"
+        case .loadAcquireRCpc(let kind, let value, let base):
+            let mem = formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
+            return "\(kind.rawValue) \(([formatRegister(value)] + mem).joined(separator: ", "))"
+        case .clearExclusive(let immediate):
+            return immediate == 15 ? "clrex" : "clrex #\(immediate)"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

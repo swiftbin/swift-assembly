@@ -585,6 +585,21 @@ internal enum A64 {
         }
     }
 
+    /// Load-acquire RCpc register (`LDAPR` / `LDAPRB` / `LDAPRH`).
+    enum LoadAcquireRCpcKind: String, Equatable, CaseIterable {
+        case ldaprb, ldaprh, ldapr
+
+        /// Fixed `size` field for byte/half forms; `nil` selects the
+        /// width-dependent word/doubleword encoding.
+        var fixedSize: UInt32? {
+            switch self {
+            case .ldaprb: return 0b00
+            case .ldaprh: return 0b01
+            case .ldapr: return nil
+            }
+        }
+    }
+
     /// The base operation of an atomic memory instruction (LSE).
     enum AtomicMemoryOperation: String, Equatable, CaseIterable {
         case add, clr, eor, set, smax, smin, umax, umin, swp
@@ -1899,6 +1914,8 @@ internal enum A64 {
         case compareAndSwap(CompareAndSwapKind, compare: Register, value: Register, base: Register)
         case compareAndSwapPair(CompareAndSwapPairKind, compare: Register, value: Register, base: Register)
         case atomicMemory(AtomicMemoryKind, source: Register, value: Register?, base: Register)
+        case loadAcquireRCpc(LoadAcquireRCpcKind, value: Register, base: Register)
+        case clearExclusive(UInt32)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -2056,6 +2073,7 @@ internal typealias LoadStoreExclusiveKind = A64.LoadStoreExclusiveKind
 internal typealias CompareAndSwapKind = A64.CompareAndSwapKind
 internal typealias CompareAndSwapPairKind = A64.CompareAndSwapPairKind
 internal typealias AtomicMemoryKind = A64.AtomicMemoryKind
+internal typealias LoadAcquireRCpcKind = A64.LoadAcquireRCpcKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

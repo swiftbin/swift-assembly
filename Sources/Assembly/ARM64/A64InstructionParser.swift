@@ -1193,6 +1193,22 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidMemoryOperand(instruction.operands[index...].joined(separator: ", "))
             }
             return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
+        case "ldaprb", "ldaprh", "ldapr":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = A64.LoadAcquireRCpcKind(rawValue: mnemonic)!
+            let value = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            guard case .unsignedOffset(let base, 0) = memory else {
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[1...].joined(separator: ", "))
+            }
+            return .loadAcquireRCpc(kind, value: value, base: base)
+        case "clrex":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 0...1)
+            let immediate: Int64 = instruction.operands.isEmpty ? 15 : try A64Parser.immediate(instruction.operands[0])
+            try checkRange(immediate, 0...0xf, instruction: "clrex")
+            return .clearExclusive(UInt32(immediate))
         case "cas", "casa", "casl", "casal", "casb", "casab", "caslb", "casalb",
              "cash", "casah", "caslh", "casalh":
             guard parts.count == 1 else { return nil }

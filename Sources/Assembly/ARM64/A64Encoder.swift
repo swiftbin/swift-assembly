@@ -135,6 +135,11 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.compareAndSwapPair(kind, compare: compare, value: value, base: base)
         case .atomicMemory(let kind, let source, let value, let base):
             return try A64LoadStoreEncoder.atomicMemory(kind, source: source, value: value, base: base)
+        case .loadAcquireRCpc(let kind, let value, let base):
+            return try A64LoadStoreEncoder.loadAcquireRCpc(kind, value: value, base: base)
+        case .clearExclusive(let immediate):
+            try checkRange(Int64(immediate), 0...0xf, instruction: "clrex")
+            return 0xd503_305f | (immediate << 8)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -539,6 +544,18 @@ internal enum A64LoadStoreEncoder {
         let head = (size << 30) | 0x3820_0000 | (a << 23) | (r << 22)
             | (rs.encodedNumber << 16) | (kind.operation.o3 << 15) | (kind.operation.opc << 12)
         return head | (base.encodedNumber << 5) | rtNum
+    }
+
+    static func loadAcquireRCpc(_ kind: A64.LoadAcquireRCpcKind, value rt: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
+        guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let size: UInt32
+        if let fixed = kind.fixedSize {
+            guard !rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            size = fixed
+        } else {
+            size = rt.is64Bit ? 0b11 : 0b10
+        }
+        return (size << 30) | 0x38bf_c000 | (base.encodedNumber << 5) | rt.encodedNumber
     }
 
     static func single(_ kind: A64.LoadStoreSingleKind, target rt: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {
