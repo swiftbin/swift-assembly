@@ -190,6 +190,8 @@ internal enum A64InstructionEncoder {
             return base | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5) | rt
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
+        case .loadStoreUnprivileged(let kind, let target, let memory):
+            return try A64LoadStoreEncoder.unprivileged(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
             return try A64LoadStoreEncoder.pair(kind, first: first, second: second, memory: memory)
         case .loadStoreSingleFP(let kind, let target, let memory):
@@ -885,6 +887,23 @@ internal enum A64LoadStoreEncoder {
             guard shift == 0 || shift == naturalShift else { throw AssemblerError.unsupportedShift("lsl #\(shift)") }
             return descriptor.registerOffsetBase | (offset.encodedNumber << 16) | (option.rawValue << 13) | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
         }
+    }
+
+    static func unprivileged(_ kind: A64.LoadStoreUnprivilegedKind, target rt: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {
+        let mnemonic = kind.rawValue
+        let descriptor = SingleDescriptor(kind: kind.unscaledEquivalent, rt: rt)
+        let base: IntegerRegister
+        let offset: Int64
+        switch memory {
+        case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
+            base = b; offset = o
+        case .preIndexed, .postIndexed, .registerOffset:
+            // The unprivileged form only supports the unscaled signed-offset shape.
+            throw AssemblerError.unsupportedOperand(mnemonic)
+        }
+        try checkRange(offset, -256...255, instruction: mnemonic)
+        // Unscaled base with bits[11:10]=10 selecting the unprivileged variant.
+        return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (0b10 << 10) | (base.encodedNumber << 5) | rt.encodedNumber
     }
 
     static func pair(_ kind: A64.LoadStorePairKind, first rt: IntegerRegister, second rt2: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {

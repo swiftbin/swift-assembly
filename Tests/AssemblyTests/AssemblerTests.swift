@@ -1856,6 +1856,54 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sturh w0, [x1, #2]"), 0x78002020)
     }
 
+    func testLoadStoreUnprivilegedInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1]"), 0xb8400820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr x0, [x1]"), 0xf8400820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1, #4]"), 0xb8404820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sttr w0, [x1]"), 0xb8000820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sttr x0, [x1, #8]"), 0xf8008820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrb w0, [x1]"), 0x38400820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrh w0, [x1]"), 0x78400820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sttrb w0, [x1]"), 0x38000820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sttrh w0, [x1]"), 0x78000820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrsb w0, [x1]"), 0x38c00820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrsb x0, [x1]"), 0x38800820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrsh w0, [x1]"), 0x78c00820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrsh x0, [x1]"), 0x78800820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtrsw x0, [x1]"), 0xb8800820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1, #-256]"), 0xb8500820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1, #255]"), 0xb84ff820)
+    }
+
+    func testDisassembleLoadStoreUnprivileged() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb8400820), "ldtr w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8008820), "sttr x0, [x1, #8]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x38800820), "ldtrsb x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb8800820), "ldtrsw x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb8500820), "ldtr w0, [x1, #-256]")
+    }
+
+    func testLoadStoreUnprivilegedRoundTrip() throws {
+        let sources = [
+            "ldtr w0, [x1]", "ldtr x2, [x3, #16]", "sttr w4, [x5, #-8]",
+            "ldtrb w6, [x7]", "ldtrh w8, [x9, #2]", "sttrb w10, [x11, #1]",
+            "ldtrsb x12, [x13]", "ldtrsh w14, [x15]", "ldtrsw x16, [x17, #-4]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testLoadStoreUnprivilegedInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldtr w0, [x1, #256]"))   // offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldtr w0, [x1, #-257]"))  // offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldtr w0, [x1, #4]!"))    // no writeback form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldtr w0, [x1], #4"))     // no post-index form
+    }
+
     func testLoadStoreRegisterOffsetInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldr x0, [x1, x2]"), 0xf8626820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldr x0, [x1, x2, lsl #3]"), 0xf8627820)

@@ -1241,6 +1241,14 @@ internal enum A64InstructionParser {
                 target: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
                 memory: try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
             )
+        case "ldtr", "ldtrb", "ldtrh", "ldtrsb", "ldtrsh", "ldtrsw", "sttr", "sttrb", "sttrh":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            return .loadStoreUnprivileged(
+                A64.LoadStoreUnprivilegedKind(rawValue: mnemonic)!,
+                target: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                memory: try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            )
         case "ldxrb", "ldxrh", "ldxr", "stxrb", "stxrh", "stxr",
              "ldaxrb", "ldaxrh", "ldaxr", "stlxrb", "stlxrh", "stlxr",
              "ldarb", "ldarh", "ldar", "stlrb", "stlrh", "stlr",

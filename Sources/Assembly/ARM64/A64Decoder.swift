@@ -58,6 +58,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodePointerAuthLoad(word) { return instruction }
         if let instruction = decodeMTEMemoryTag(word) { return instruction }
         if let instruction = decodeMTEStoreTagPair(word) { return instruction }
+        if let instruction = decodeLoadStoreUnprivileged(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -1059,6 +1060,19 @@ internal enum A64InstructionDecoder {
             ? .preIndexed(base: base, offset: offset)
             : .unsignedOffset(base: base, offset: offset)
         return .pointerAuthLoad(kind, target: target, memory: memory)
+    }
+
+    private static func decodeLoadStoreUnprivileged(_ word: UInt32) -> Instruction? {
+        // size 111 0 00 opc 0 imm9 10 Rn Rt (V=0, bit21=0, bits[11:10]=10).
+        guard word & 0x3f20_0c00 == 0x3800_0800 else { return nil }
+        let size = (word >> 30) & 3
+        let opc = (word >> 22) & 3
+        guard let info = A64.LoadStoreUnprivilegedKind.decode(size: size, opc: opc) else { return nil }
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rt = integerRegister(number: word & 0x1f, width: info.width)
+        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
+        return .loadStoreUnprivileged(info.kind, target: rt, memory: mem)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

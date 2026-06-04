@@ -497,6 +497,50 @@ internal enum A64 {
         case stur, sturb, sturh
     }
 
+    /// Load/store register (unprivileged): `LDTR`/`STTR` and their sized and
+    /// sign-extending variants. These use the unscaled signed-immediate form
+    /// only, with bits[11:10]=10 distinguishing them from `LDUR`/`STUR`.
+    enum LoadStoreUnprivilegedKind: String, Equatable, CaseIterable {
+        case ldtr, ldtrb, ldtrh, ldtrsb, ldtrsh, ldtrsw
+        case sttr, sttrb, sttrh
+
+        /// The corresponding unscaled (`LDUR`-family) kind, which carries the
+        /// shared size/opc field layout.
+        var unscaledEquivalent: LoadStoreSingleKind {
+            switch self {
+            case .ldtr: return .ldur
+            case .ldtrb: return .ldurb
+            case .ldtrh: return .ldurh
+            case .ldtrsb: return .ldursb
+            case .ldtrsh: return .ldursh
+            case .ldtrsw: return .ldursw
+            case .sttr: return .stur
+            case .sttrb: return .sturb
+            case .sttrh: return .sturh
+            }
+        }
+
+        /// Decode `(kind, destinationWidth)` from the `size` and `opc` fields.
+        static func decode(size: UInt32, opc: UInt32) -> (kind: LoadStoreUnprivilegedKind, width: Int)? {
+            switch (size, opc) {
+            case (0, 0): return (.sttrb, 32)
+            case (0, 1): return (.ldtrb, 32)
+            case (0, 2): return (.ldtrsb, 64)
+            case (0, 3): return (.ldtrsb, 32)
+            case (1, 0): return (.sttrh, 32)
+            case (1, 1): return (.ldtrh, 32)
+            case (1, 2): return (.ldtrsh, 64)
+            case (1, 3): return (.ldtrsh, 32)
+            case (2, 0): return (.sttr, 32)
+            case (2, 1): return (.ldtr, 32)
+            case (2, 2): return (.ldtrsw, 64)
+            case (3, 0): return (.sttr, 64)
+            case (3, 1): return (.ldtr, 64)
+            default: return nil
+            }
+        }
+    }
+
     enum LoadStorePairKind: String, Equatable {
         case ldp, stp, ldnp, stnp
 
@@ -2438,6 +2482,7 @@ internal enum A64 {
         case conditionalSet(ConditionalSetKind, destination: Register, condition: Condition)
         case conditionalSelectAlias(ConditionalSelectAliasKind, destination: Register, source: Register, condition: Condition)
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
+        case loadStoreUnprivileged(LoadStoreUnprivilegedKind, target: Register, memory: MemoryOperand)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
         case loadStorePairFP(LoadStorePairKind, first: FPRegister, second: FPRegister, memory: MemoryOperand)
