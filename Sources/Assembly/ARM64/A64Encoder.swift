@@ -108,6 +108,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
         case .conditionalSelect(let kind, let destination, let first, let second, let condition):
             return try A64DataProcessingEncoder.conditionalSelect(kind, destination: destination, first: first, second: second, condition: condition)
+        case .conditionalCompare(let kind, let first, let second, let nzcv, let condition):
+            return try A64DataProcessingEncoder.conditionalCompare(kind, first: first, second: second, nzcv: nzcv, condition: condition)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -844,5 +846,20 @@ internal enum A64DataProcessingEncoder {
         let sf: UInt32 = rd.is64Bit ? 1 : 0
         let head = (sf << 31) | (kind.op << 30) | 0x1a80_0000
         return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (kind.o2 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func conditionalCompare(_ kind: A64.ConditionalCompareKind, first rn: IntegerRegister, second: A64.ConditionalCompareOperand, nzcv: UInt32, condition: A64.Condition) throws -> UInt32 {
+        guard nzcv <= 0xf else { throw AssemblerError.invalidImmediate("#\(nzcv)") }
+        let sf: UInt32 = rn.is64Bit ? 1 : 0
+        var word = (sf << 31) | (kind.op << 30) | 0x3a40_0000
+        switch second {
+        case .register(let rm):
+            guard rm.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            word |= (rm.encodedNumber << 16)
+        case .immediate(let imm5):
+            guard imm5 <= 31 else { throw AssemblerError.invalidImmediate("#\(imm5)") }
+            word |= (1 << 11) | (imm5 << 16)
+        }
+        return word | (condition.rawValue << 12) | (rn.encodedNumber << 5) | nzcv
     }
 }

@@ -193,6 +193,47 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("csel w0, w1, w2"))      // missing condition
     }
 
+    func testConditionalCompareInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmp w0, w1, #0, eq"), 0x7a410000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmp x0, x1, #15, ne"), 0xfa41100f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmn w0, w1, #5, ge"), 0x3a41a005)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmn x0, x1, #10, lt"), 0xba41b00a)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmp w2, #3, #6, gt"), 0x7a43c846)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmp x3, #31, #9, le"), 0xfa5fd869)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmn w4, #0, #12, mi"), 0x3a40488c)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ccmn x5, #15, #1, pl"), 0xba4f58a1)
+    }
+
+    func testDisassembleConditionalCompare() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7a410000), "ccmp w0, w1, #0, eq")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xfa41100f), "ccmp x0, x1, #15, ne")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3a41a005), "ccmn w0, w1, #5, ge")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7a43c846), "ccmp w2, #3, #6, gt")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xba4f58a1), "ccmn x5, #15, #1, pl")
+    }
+
+    func testConditionalCompareRoundTrip() throws {
+        let sources = [
+            "ccmp w0, w1, #0, eq", "ccmp x2, x3, #15, ne",
+            "ccmn w4, w5, #5, ge", "ccmn x6, x7, #10, lt",
+            "ccmp w8, #3, #6, gt", "ccmp x9, #31, #9, le",
+            "ccmn w10, #0, #12, mi", "ccmn x11, #15, #1, pl",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testConditionalCompareInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ccmp w0, w1, #16, eq"))  // nzcv out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ccmp w0, #32, #0, eq"))  // imm5 out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ccmp w0, x1, #0, eq"))   // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ccmp w0, w1, #0, zz"))   // bad condition
+    }
+
     func testAdrAndAdrp() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("adr x0, #0"), 0x10000000)
         XCTAssertEqual(try ARM64Assembler.assembleWord("adr x0, #4"), 0x10000020)

@@ -934,6 +934,31 @@ internal enum A64InstructionParser {
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false),
                 condition: try A64Parser.condition(instruction.operands[3])
             )
+        case "ccmp", "ccmn":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let first = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let nzcvValue = try A64Parser.immediate(instruction.operands[2])
+            guard nzcvValue >= 0, nzcvValue <= 15 else {
+                throw AssemblerError.invalidImmediate(instruction.operands[2])
+            }
+            let second: A64.ConditionalCompareOperand
+            if instruction.operands[1].hasPrefix("#") {
+                let imm = try A64Parser.immediate(instruction.operands[1])
+                guard imm >= 0, imm <= 31 else {
+                    throw AssemblerError.invalidImmediate(instruction.operands[1])
+                }
+                second = .immediate(UInt32(imm))
+            } else {
+                second = .register(try A64Parser.integerRegister(instruction.operands[1], allowSP: false))
+            }
+            return .conditionalCompare(
+                A64.ConditionalCompareKind(rawValue: mnemonic)!,
+                first: first,
+                second: second,
+                nzcv: UInt32(nzcvValue),
+                condition: try A64Parser.condition(instruction.operands[3])
+            )
         case "ldr", "ldrb", "ldrh", "ldrsb", "ldrsh", "ldrsw", "str", "strb", "strh", "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw", "stur", "sturb", "sturh":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)

@@ -24,6 +24,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMultiply(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
         if let instruction = decodeConditionalSelect(word) { return instruction }
+        if let instruction = decodeConditionalCompare(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -413,6 +414,22 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         let rd = integerRegister(number: word & 0x1f, width: width)
         return .conditionalSelect(kind, destination: rd, first: rn, second: rm, condition: condition)
+    }
+
+    private static func decodeConditionalCompare(_ word: UInt32) -> Instruction? {
+        guard word & 0x3fe0_0410 == 0x3a40_0000 else { return nil }
+        let kind: A64.ConditionalCompareKind = ((word >> 30) & 1) == 1 ? .ccmp : .ccmn
+        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
+        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        let nzcv = word & 0xf
+        let second: A64.ConditionalCompareOperand
+        if (word >> 11) & 1 == 1 {
+            second = .immediate((word >> 16) & 0x1f)
+        } else {
+            second = .register(integerRegister(number: (word >> 16) & 0x1f, width: width))
+        }
+        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        return .conditionalCompare(kind, first: rn, second: second, nzcv: nzcv, condition: condition)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {
