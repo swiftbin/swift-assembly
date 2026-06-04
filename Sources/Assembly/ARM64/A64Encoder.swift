@@ -246,6 +246,16 @@ internal enum A64InstructionEncoder {
             return A64VectorEncoder.cryptoSHA3(kind, d: d, n: n, m: m)
         case .cryptoSHA2(let kind, let d, let n):
             return A64VectorEncoder.cryptoSHA2(kind, d: d, n: n)
+        case .cryptoSHA512(let kind, let d, let n, let m):
+            return A64VectorEncoder.cryptoSHA512(kind, d: d, n: n, m: m)
+        case .cryptoTwoReg(let kind, let d, let n):
+            return A64VectorEncoder.cryptoTwoReg(kind, d: d, n: n)
+        case .cryptoSM3(let kind, let d, let n, let m):
+            return A64VectorEncoder.cryptoSM3(kind, d: d, n: n, m: m)
+        case .cryptoSM3Indexed(let kind, let d, let n, let m, let index):
+            return A64VectorEncoder.cryptoSM3Indexed(kind, d: d, n: n, m: m, index: index)
+        case .cryptoSM3SS1(let d, let n, let m, let a):
+            return A64VectorEncoder.cryptoSM3SS1(d: d, n: n, m: m, a: a)
         }
     }
 }

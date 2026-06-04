@@ -520,6 +520,7 @@ internal enum A64 {
         case scalarS   // 32-bit `Sn`
         case scalarQ   // 128-bit `Qn`
         case vector4s  // `Vn.4s`
+        case vector2d  // `Vn.2d`
     }
 
     /// Cryptographic three-register SHA1/SHA256 instructions. Operand register
@@ -576,6 +577,95 @@ internal enum A64 {
         }
 
         static func decode(opcode: UInt32) -> CryptoSHA2Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Cryptographic three-register SHA512 instructions (FEAT_SHA512).
+    enum CryptoSHA512Kind: String, Equatable, CaseIterable {
+        case sha512h, sha512h2, sha512su1
+
+        /// The 2-bit `opcode` at [11:10] (the `O` bit at [14] is always 0).
+        var opcode: UInt32 {
+            switch self {
+            case .sha512h:   return 0b00
+            case .sha512h2:  return 0b01
+            case .sha512su1: return 0b10
+            }
+        }
+
+        /// Register shapes for the destination and two source operands.
+        var shape: (d: CryptoSHAOperand, n: CryptoSHAOperand, m: CryptoSHAOperand) {
+            switch self {
+            case .sha512h, .sha512h2: return (.scalarQ, .scalarQ, .vector2d)
+            case .sha512su1:          return (.vector2d, .vector2d, .vector2d)
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoSHA512Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Cryptographic two-register SHA512 / SM4 instructions (FEAT_SHA512 / FEAT_SM4).
+    enum CryptoTwoRegKind: String, Equatable, CaseIterable {
+        case sha512su0, sm4e
+
+        /// The 2-bit `opcode` at [11:10].
+        var opcode: UInt32 {
+            switch self {
+            case .sha512su0: return 0b00
+            case .sm4e:      return 0b01
+            }
+        }
+
+        /// Register shapes for the destination and source operands.
+        var shape: (d: CryptoSHAOperand, n: CryptoSHAOperand) {
+            switch self {
+            case .sha512su0: return (.vector2d, .vector2d)
+            case .sm4e:      return (.vector4s, .vector4s)
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoTwoRegKind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Cryptographic three-register SM3 / SM4 instructions (`Vd.4s, Vn.4s, Vm.4s`).
+    enum CryptoSM3Kind: String, Equatable, CaseIterable {
+        case sm3partw1, sm3partw2, sm4ekey
+
+        /// The 2-bit `opcode` at [11:10].
+        var opcode: UInt32 {
+            switch self {
+            case .sm3partw1: return 0b00
+            case .sm3partw2: return 0b01
+            case .sm4ekey:   return 0b10
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoSM3Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Cryptographic three-register SM3 "imm2" indexed instructions
+    /// (`Vd.4s, Vn.4s, Vm.s[index]`).
+    enum CryptoSM3IndexedKind: String, Equatable, CaseIterable {
+        case sm3tt1a, sm3tt1b, sm3tt2a, sm3tt2b
+
+        /// The 2-bit `opcode` at [11:10].
+        var opcode: UInt32 {
+            switch self {
+            case .sm3tt1a: return 0b00
+            case .sm3tt1b: return 0b01
+            case .sm3tt2a: return 0b10
+            case .sm3tt2b: return 0b11
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CryptoSM3IndexedKind? {
             allCases.first { $0.opcode == opcode }
         }
     }
@@ -1333,6 +1423,11 @@ internal enum A64 {
         case cryptoAES(CryptoAESKind, destination: VectorRegister, source: VectorRegister)
         case cryptoSHA3(CryptoSHA3Kind, d: UInt32, n: UInt32, m: UInt32)
         case cryptoSHA2(CryptoSHA2Kind, d: UInt32, n: UInt32)
+        case cryptoSHA512(CryptoSHA512Kind, d: UInt32, n: UInt32, m: UInt32)
+        case cryptoTwoReg(CryptoTwoRegKind, d: UInt32, n: UInt32)
+        case cryptoSM3(CryptoSM3Kind, d: UInt32, n: UInt32, m: UInt32)
+        case cryptoSM3Indexed(CryptoSM3IndexedKind, d: UInt32, n: UInt32, m: UInt32, index: UInt32)
+        case cryptoSM3SS1(d: UInt32, n: UInt32, m: UInt32, a: UInt32)
     }
 }
 
@@ -1382,3 +1477,7 @@ internal typealias VectorFPConvertPrecisionKind = A64.VectorFPConvertPrecisionKi
 internal typealias CryptoAESKind = A64.CryptoAESKind
 internal typealias CryptoSHA3Kind = A64.CryptoSHA3Kind
 internal typealias CryptoSHA2Kind = A64.CryptoSHA2Kind
+internal typealias CryptoSHA512Kind = A64.CryptoSHA512Kind
+internal typealias CryptoTwoRegKind = A64.CryptoTwoRegKind
+internal typealias CryptoSM3Kind = A64.CryptoSM3Kind
+internal typealias CryptoSM3IndexedKind = A64.CryptoSM3IndexedKind

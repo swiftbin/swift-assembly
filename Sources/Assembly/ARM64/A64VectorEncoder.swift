@@ -1116,6 +1116,31 @@ internal enum A64VectorEncoder {
         0x5e28_0800 | (kind.opcode << 12) | (n << 5) | d
     }
 
+    static func cryptoSHA512(_ kind: A64.CryptoSHA512Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
+        // Three-register SHA512: 11001110 011 Rm 1 0 00 opcode Rn Rd.
+        0xce60_8000 | (m << 16) | (kind.opcode << 10) | (n << 5) | d
+    }
+
+    static func cryptoTwoReg(_ kind: A64.CryptoTwoRegKind, d: UInt32, n: UInt32) -> UInt32 {
+        // Two-register SHA512/SM4: 11001110 110 00000 10 00 opcode Rn Rd.
+        0xcec0_8000 | (kind.opcode << 10) | (n << 5) | d
+    }
+
+    static func cryptoSM3(_ kind: A64.CryptoSM3Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
+        // Three-register SM3/SM4: 11001110 011 Rm 1 1 00 opcode Rn Rd.
+        0xce60_c000 | (m << 16) | (kind.opcode << 10) | (n << 5) | d
+    }
+
+    static func cryptoSM3Indexed(_ kind: A64.CryptoSM3IndexedKind, d: UInt32, n: UInt32, m: UInt32, index: UInt32) -> UInt32 {
+        // Three-register SM3 "imm2": 11001110 010 Rm 1 0 imm2 opcode Rn Rd.
+        0xce40_8000 | (m << 16) | (index << 12) | (kind.opcode << 10) | (n << 5) | d
+    }
+
+    static func cryptoSM3SS1(d: UInt32, n: UInt32, m: UInt32, a: UInt32) -> UInt32 {
+        // Four-register SM3: 11001110 010 Rm 0 Ra Rn Rd.
+        0xce40_0000 | (m << 16) | (a << 10) | (n << 5) | d
+    }
+
     static func cryptoAES(_ kind: A64.CryptoAESKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         // Both operands are fixed `16b`.
         guard rd.arrangement == .b16, rn.arrangement == .b16 else { throw AssemblerError.invalidRegister(kind.rawValue) }

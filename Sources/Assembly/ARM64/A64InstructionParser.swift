@@ -125,6 +125,10 @@ internal enum A64Parser {
             let register = try vectorRegister(text)
             guard register.arrangement == .s4 else { throw AssemblerError.invalidRegister(text) }
             return register.number
+        case .vector2d:
+            let register = try vectorRegister(text)
+            guard register.arrangement == .d2 else { throw AssemblerError.invalidRegister(text) }
+            return register.number
         }
     }
 
@@ -1263,6 +1267,61 @@ internal enum A64InstructionParser {
                 kind,
                 d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: shape.d),
                 n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: shape.n)
+            )
+        case "sha512h", "sha512h2", "sha512su1":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.CryptoSHA512Kind(rawValue: mnemonic)!
+            let shape = kind.shape
+            return .cryptoSHA512(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: shape.d),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: shape.n),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: shape.m)
+            )
+        case "sha512su0", "sm4e":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = A64.CryptoTwoRegKind(rawValue: mnemonic)!
+            let shape = kind.shape
+            return .cryptoTwoReg(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: shape.d),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: shape.n)
+            )
+        case "sm3partw1", "sm3partw2", "sm4ekey":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.CryptoSM3Kind(rawValue: mnemonic)!
+            return .cryptoSM3(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: .vector4s),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector4s),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: .vector4s)
+            )
+        case "sm3tt1a", "sm3tt1b", "sm3tt2a", "sm3tt2b":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.CryptoSM3IndexedKind(rawValue: mnemonic)!
+            let element = try A64Parser.vectorElement(instruction.operands[2])
+            guard element.width == .s, element.index >= 0, element.index <= 3 else {
+                throw AssemblerError.invalidRegister(instruction.operands[2])
+            }
+            return .cryptoSM3Indexed(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: .vector4s),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector4s),
+                m: element.number,
+                index: UInt32(element.index)
+            )
+        case "sm3ss1":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            return .cryptoSM3SS1(
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: .vector4s),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector4s),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: .vector4s),
+                a: try A64Parser.cryptoSHAOperandNumber(instruction.operands[3], shape: .vector4s)
             )
         case "zip1", "zip2", "uzp1", "uzp2", "trn1", "trn2":
             guard parts.count == 1 else { return nil }

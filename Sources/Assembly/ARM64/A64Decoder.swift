@@ -40,6 +40,11 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCryptoAES(word) { return instruction }
         if let instruction = decodeCryptoSHA3(word) { return instruction }
         if let instruction = decodeCryptoSHA2(word) { return instruction }
+        if let instruction = decodeCryptoSHA512(word) { return instruction }
+        if let instruction = decodeCryptoTwoReg(word) { return instruction }
+        if let instruction = decodeCryptoSM3(word) { return instruction }
+        if let instruction = decodeCryptoSM3Indexed(word) { return instruction }
+        if let instruction = decodeCryptoSM3SS1(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -878,6 +883,45 @@ internal enum A64InstructionDecoder {
         let dNum = word & 0x1f
         guard let kind = A64.CryptoSHA2Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSHA2(kind, d: dNum, n: nNum)
+    }
+
+    private static func decodeCryptoSHA512(_ word: UInt32) -> Instruction? {
+        // Three-register SHA512: 11001110 011 Rm 1 0 00 opcode Rn Rd.
+        guard word & 0xffe0_f000 == 0xce60_8000 else { return nil }
+        let opcode = (word >> 10) & 0x3
+        guard let kind = A64.CryptoSHA512Kind.decode(opcode: opcode) else { return nil }
+        return .cryptoSHA512(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
+    }
+
+    private static func decodeCryptoTwoReg(_ word: UInt32) -> Instruction? {
+        // Two-register SHA512/SM4: 11001110 110 00000 10 00 opcode Rn Rd.
+        guard word & 0xffff_f000 == 0xcec0_8000 else { return nil }
+        let opcode = (word >> 10) & 0x3
+        guard let kind = A64.CryptoTwoRegKind.decode(opcode: opcode) else { return nil }
+        return .cryptoTwoReg(kind, d: word & 0x1f, n: (word >> 5) & 0x1f)
+    }
+
+    private static func decodeCryptoSM3(_ word: UInt32) -> Instruction? {
+        // Three-register SM3/SM4: 11001110 011 Rm 1 1 00 opcode Rn Rd.
+        guard word & 0xffe0_f000 == 0xce60_c000 else { return nil }
+        let opcode = (word >> 10) & 0x3
+        guard let kind = A64.CryptoSM3Kind.decode(opcode: opcode) else { return nil }
+        return .cryptoSM3(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
+    }
+
+    private static func decodeCryptoSM3Indexed(_ word: UInt32) -> Instruction? {
+        // Three-register SM3 "imm2": 11001110 010 Rm 1 0 imm2 opcode Rn Rd.
+        guard word & 0xffe0_c000 == 0xce40_8000 else { return nil }
+        let opcode = (word >> 10) & 0x3
+        guard let kind = A64.CryptoSM3IndexedKind.decode(opcode: opcode) else { return nil }
+        let index = (word >> 12) & 0x3
+        return .cryptoSM3Indexed(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, index: index)
+    }
+
+    private static func decodeCryptoSM3SS1(_ word: UInt32) -> Instruction? {
+        // Four-register SM3: 11001110 010 Rm 0 Ra Rn Rd.
+        guard word & 0xffe0_8000 == 0xce40_0000 else { return nil }
+        return .cryptoSM3SS1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {

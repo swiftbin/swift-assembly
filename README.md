@@ -65,6 +65,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD two-register-misc floating-point precision converts (fcvtn(2) / fcvtl(2) / fcvtxn(2))
 - Cryptographic AES single-round instructions (aese / aesd / aesmc / aesimc)
 - Cryptographic SHA1/SHA256 instructions (sha1c / sha1p / sha1m / sha1su0 / sha256h / sha256h2 / sha256su1 / sha1h / sha1su1 / sha256su0)
+- Cryptographic SHA512 / SM3 / SM4 instructions (sha512h / sha512h2 / sha512su0 / sha512su1 / sm3ss1 / sm3tt1a / sm3tt1b / sm3tt2a / sm3tt2b / sm3partw1 / sm3partw2 / sm4e / sm4ekey)
 - ...
 
 ## Usage

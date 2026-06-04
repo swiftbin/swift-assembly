@@ -98,6 +98,18 @@ internal enum A64InstructionFormatter {
         case .cryptoSHA2(let kind, let d, let n):
             let shape = kind.shape
             return "\(kind.rawValue) \(formatCryptoSHAOperand(d, shape: shape.d)), \(formatCryptoSHAOperand(n, shape: shape.n))"
+        case .cryptoSHA512(let kind, let d, let n, let m):
+            let shape = kind.shape
+            return "\(kind.rawValue) \(formatCryptoSHAOperand(d, shape: shape.d)), \(formatCryptoSHAOperand(n, shape: shape.n)), \(formatCryptoSHAOperand(m, shape: shape.m))"
+        case .cryptoTwoReg(let kind, let d, let n):
+            let shape = kind.shape
+            return "\(kind.rawValue) \(formatCryptoSHAOperand(d, shape: shape.d)), \(formatCryptoSHAOperand(n, shape: shape.n))"
+        case .cryptoSM3(let kind, let d, let n, let m):
+            return "\(kind.rawValue) v\(d).4s, v\(n).4s, v\(m).4s"
+        case .cryptoSM3Indexed(let kind, let d, let n, let m, let index):
+            return "\(kind.rawValue) v\(d).4s, v\(n).4s, v\(m).s[\(index)]"
+        case .cryptoSM3SS1(let d, let n, let m, let a):
+            return "sm3ss1 v\(d).4s, v\(n).4s, v\(m).4s, v\(a).4s"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
@@ -296,6 +308,7 @@ internal enum A64InstructionFormatter {
         case .scalarS:  return "s\(number)"
         case .scalarQ:  return "q\(number)"
         case .vector4s: return "v\(number).4s"
+        case .vector2d: return "v\(number).2d"
         }
     }
 

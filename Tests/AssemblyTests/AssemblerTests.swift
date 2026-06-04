@@ -2699,6 +2699,62 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha1su1 v0.2s, v1.2s"))    // must be .4s
     }
 
+    func testCryptoSHA512SM3SM4Instructions() throws {
+        // SHA512 three-register and two-register.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha512h q0, q1, v2.2d"), 0xce628020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha512h2 q0, q1, v2.2d"), 0xce628420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha512su1 v0.2d, v1.2d, v2.2d"), 0xce628820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sha512su0 v0.2d, v1.2d"), 0xcec08020)
+        // SM4.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm4e v0.4s, v1.4s"), 0xcec08420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm4ekey v0.4s, v1.4s, v2.4s"), 0xce62c820)
+        // SM3 three-register and four-register.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3partw1 v0.4s, v1.4s, v2.4s"), 0xce62c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3partw2 v0.4s, v1.4s, v2.4s"), 0xce62c420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3ss1 v0.4s, v1.4s, v2.4s, v3.4s"), 0xce420c20)
+        // SM3 imm2-indexed.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3tt1a v0.4s, v1.4s, v2.s[3]"), 0xce42b020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3tt1b v0.4s, v1.4s, v2.s[3]"), 0xce42b420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3tt2a v0.4s, v1.4s, v2.s[3]"), 0xce42b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3tt2b v0.4s, v1.4s, v2.s[3]"), 0xce42bc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sm3tt1a v0.4s, v1.4s, v2.s[0]"), 0xce428020)
+    }
+
+    func testDisassembleCryptoSHA512SM3SM4() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce628020), "sha512h q0, q1, v2.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce628820), "sha512su1 v0.2d, v1.2d, v2.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xcec08420), "sm4e v0.4s, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce420c20), "sm3ss1 v0.4s, v1.4s, v2.4s, v3.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce42bc20), "sm3tt2b v0.4s, v1.4s, v2.s[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce62c820), "sm4ekey v0.4s, v1.4s, v2.4s")
+    }
+
+    func testCryptoSHA512SM3SM4RoundTrip() throws {
+        let sources = [
+            "sha512h q5, q6, v7.2d", "sha512h2 q8, q9, v10.2d",
+            "sha512su1 v11.2d, v12.2d, v13.2d", "sha512su0 v14.2d, v15.2d",
+            "sm4e v16.4s, v17.4s", "sm4ekey v18.4s, v19.4s, v20.4s",
+            "sm3partw1 v21.4s, v22.4s, v23.4s", "sm3partw2 v24.4s, v25.4s, v26.4s",
+            "sm3ss1 v27.4s, v28.4s, v29.4s, v30.4s",
+            "sm3tt1a v0.4s, v1.4s, v2.s[1]", "sm3tt1b v3.4s, v4.4s, v5.s[2]",
+            "sm3tt2a v6.4s, v7.4s, v8.s[0]", "sm3tt2b v9.4s, v10.4s, v11.s[3]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testCryptoSHA512SM3SM4InvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha512h v0.2d, q1, v2.2d"))   // dest must be Q
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sha512su0 v0.4s, v1.4s"))     // must be .2d
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sm4e v0.2d, v1.2d"))          // must be .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sm3tt1a v0.4s, v1.4s, v2.s[4]"))  // index 0-3
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sm3tt1a v0.4s, v1.4s, v2.h[1]"))  // element must be .s
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)
