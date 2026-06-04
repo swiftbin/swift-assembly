@@ -1512,6 +1512,41 @@ internal enum A64InstructionParser {
                 offset: UInt32(truncatingIfNeeded: offset),
                 tag: UInt32(truncatingIfNeeded: tag)
             )
+        case "stg", "stzg", "st2g", "stz2g":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            let kind = A64.MTEStoreTagKind(rawValue: mnemonic)!
+            let source = try A64Parser.xRegisterAllowingSP(instruction.operands[0])
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            return .mteStoreTag(kind, source: source, memory: memory)
+        case "ldg":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let target = try A64Parser.xRegister(instruction.operands[0])
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            switch memory {
+            case .unsignedOffset, .signedUnscaled:
+                return .mteLoadTag(target: target, memory: memory)
+            default:
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[1...].joined(separator: ", "))
+            }
+        case "stzgm", "stgm", "ldgm":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = A64.MTETagMultipleKind(rawValue: mnemonic)!
+            let target = try A64Parser.xRegister(instruction.operands[0])
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            guard case .unsignedOffset(let base, 0) = memory else {
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[1...].joined(separator: ", "))
+            }
+            return .mteTagMultiple(kind, target: target, base: base)
+        case "stgp":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 3...4)
+            let first = try A64Parser.xRegister(instruction.operands[0])
+            let second = try A64Parser.xRegister(instruction.operands[1])
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 2)
+            return .mteStoreTagPair(first: first, second: second, memory: memory)
         case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
             guard parts.count == 1 else { return nil }
             if mnemonic != "fnmul", allOperandsAreVectorRegisters(instruction) {

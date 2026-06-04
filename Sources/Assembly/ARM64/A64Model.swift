@@ -1108,6 +1108,46 @@ internal enum A64 {
         }
     }
 
+    /// Store-allocation-tag operations that accept an addressing mode
+    /// (signed offset, pre-index or post-index): `STG`, `STZG`, `ST2G`, `STZ2G`.
+    /// The `opc` field occupies bits [23:22] of the "Load/store memory tags" class.
+    enum MTEStoreTagKind: String, Equatable, CaseIterable {
+        case stg, stzg, st2g, stz2g
+
+        var opc: UInt32 {
+            switch self {
+            case .stg: return 0
+            case .stzg: return 1
+            case .st2g: return 2
+            case .stz2g: return 3
+            }
+        }
+    }
+
+    /// Tag-multiple operations addressing only `[Xn|SP]` (the `op2 == 00` forms
+    /// of the "Load/store memory tags" class): `STZGM`, `STGM`, `LDGM`.
+    enum MTETagMultipleKind: String, Equatable, CaseIterable {
+        case stzgm, stgm, ldgm
+
+        /// The `opc` field at bits [23:22].
+        var opc: UInt32 {
+            switch self {
+            case .stzgm: return 0
+            case .stgm: return 2
+            case .ldgm: return 3
+            }
+        }
+
+        static func decode(opc: UInt32) -> MTETagMultipleKind? {
+            switch opc {
+            case 0: return .stzgm
+            case 2: return .stgm
+            case 3: return .ldgm
+            default: return nil
+            }
+        }
+    }
+
     /// Load register with pointer authentication (`LDRAA`/`LDRAB`). The signed
     /// 10-bit offset is scaled by 8 and an optional `!` selects writeback.
     enum PointerAuthLoadKind: String, Equatable, CaseIterable {
@@ -2312,6 +2352,10 @@ internal enum A64 {
         case pointerAuthLoad(PointerAuthLoadKind, target: Register, memory: MemoryOperand)
         case mteTag(MTETagKind, destination: Register, first: Register, second: Register)
         case mteAddSubTag(subtract: Bool, destination: Register, source: Register, offset: UInt32, tag: UInt32)
+        case mteStoreTag(MTEStoreTagKind, source: Register, memory: MemoryOperand)
+        case mteLoadTag(target: Register, memory: MemoryOperand)
+        case mteTagMultiple(MTETagMultipleKind, target: Register, base: Register)
+        case mteStoreTagPair(first: Register, second: Register, memory: MemoryOperand)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
@@ -2453,6 +2497,8 @@ internal typealias PointerAuthDataKind = A64.PointerAuthDataKind
 internal typealias PointerAuthBranchKind = A64.PointerAuthBranchKind
 internal typealias PointerAuthLoadKind = A64.PointerAuthLoadKind
 internal typealias MTETagKind = A64.MTETagKind
+internal typealias MTEStoreTagKind = A64.MTEStoreTagKind
+internal typealias MTETagMultipleKind = A64.MTETagMultipleKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

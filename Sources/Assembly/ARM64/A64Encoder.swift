@@ -196,6 +196,14 @@ internal enum A64InstructionEncoder {
             return try A64MTEEncoder.tag(kind, destination: destination, first: first, second: second)
         case .mteAddSubTag(let subtract, let destination, let source, let offset, let tag):
             return try A64MTEEncoder.addSubTag(subtract: subtract, destination: destination, source: source, offset: offset, tag: tag)
+        case .mteStoreTag(let kind, let source, let memory):
+            return try A64MTEEncoder.storeTag(kind, source: source, memory: memory)
+        case .mteLoadTag(let target, let memory):
+            return try A64MTEEncoder.loadTag(target: target, memory: memory)
+        case .mteTagMultiple(let kind, let target, let base):
+            return try A64MTEEncoder.tagMultiple(kind, target: target, base: base)
+        case .mteStoreTagPair(let first, let second, let memory):
+            return try A64MTEEncoder.storeTagPair(first: first, second: second, memory: memory)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
@@ -466,6 +474,89 @@ internal enum A64MTEEncoder {
         try checkRange(Int64(tag), 0...15, instruction: mnemonic)
         let base: UInt32 = subtract ? 0xd180_0000 : 0x9180_0000
         return base | (uimm6 << 16) | (tag << 10) | (source.encodedNumber << 5) | destination.encodedNumber
+    }
+
+    /// Base of the "Load/store memory tags" single class (bit21 set, opc/op2 zero).
+    private static let memoryTagsBase: UInt32 = 0xd920_0000
+
+    /// Decode a memory operand for the tag-store group into a base register, a
+    /// signed offset (scaled by 16) and an `op2` addressing field.
+    /// `op2`: signed offset = 0b10, post-index = 0b01, pre-index = 0b11.
+    private static func tagAddress(_ memory: A64.MemoryOperand, instruction: String) throws -> (base: IntegerRegister, imm9: UInt32, op2: UInt32) {
+        let base: IntegerRegister
+        let offset: Int64
+        let op2: UInt32
+        switch memory {
+        case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
+            base = b; offset = o; op2 = 0b10
+        case .preIndexed(let b, let o):
+            base = b; offset = o; op2 = 0b11
+        case .postIndexed(let b, let o):
+            base = b; offset = o; op2 = 0b01
+        default:
+            throw AssemblerError.invalidMemoryOperand(instruction)
+        }
+        guard base.is64Bit else { throw AssemblerError.invalidRegister(instruction) }
+        guard offset % 16 == 0 else { throw AssemblerError.immediateAlignment(instruction: instruction, value: offset, alignment: 16) }
+        let scaled = offset / 16
+        try checkRange(scaled, -256...255, instruction: instruction)
+        let imm9 = UInt32(bitPattern: Int32(scaled)) & 0x1ff
+        return (base, imm9, op2)
+    }
+
+    static func storeTag(_ kind: A64.MTEStoreTagKind, source: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
+        guard source.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let address = try tagAddress(memory, instruction: kind.rawValue)
+        return memoryTagsBase | (kind.opc << 22) | (address.imm9 << 12) | (address.op2 << 10)
+            | (address.base.encodedNumber << 5) | source.encodedNumber
+    }
+
+    static func loadTag(target: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
+        guard target.is64Bit else { throw AssemblerError.invalidRegister("ldg") }
+        let base: IntegerRegister
+        let offset: Int64
+        switch memory {
+        case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
+            base = b; offset = o
+        default:
+            throw AssemblerError.invalidMemoryOperand("ldg")
+        }
+        guard base.is64Bit else { throw AssemblerError.invalidRegister("ldg") }
+        guard offset % 16 == 0 else { throw AssemblerError.immediateAlignment(instruction: "ldg", value: offset, alignment: 16) }
+        let scaled = offset / 16
+        try checkRange(scaled, -256...255, instruction: "ldg")
+        let imm9 = UInt32(bitPattern: Int32(scaled)) & 0x1ff
+        // opc = 01, op2 = 00.
+        return memoryTagsBase | (1 << 22) | (imm9 << 12) | (base.encodedNumber << 5) | target.encodedNumber
+    }
+
+    static func tagMultiple(_ kind: A64.MTETagMultipleKind, target: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
+        guard target.is64Bit, base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        // op2 = 00, imm9 = 0.
+        return memoryTagsBase | (kind.opc << 22) | (base.encodedNumber << 5) | target.encodedNumber
+    }
+
+    static func storeTagPair(first: IntegerRegister, second: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
+        guard first.is64Bit, second.is64Bit else { throw AssemblerError.invalidRegister("stgp") }
+        let base: IntegerRegister
+        let offset: Int64
+        let modeBase: UInt32
+        switch memory {
+        case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
+            base = b; offset = o; modeBase = 0x6900_0000
+        case .preIndexed(let b, let o):
+            base = b; offset = o; modeBase = 0x6980_0000
+        case .postIndexed(let b, let o):
+            base = b; offset = o; modeBase = 0x6880_0000
+        default:
+            throw AssemblerError.invalidMemoryOperand("stgp")
+        }
+        guard base.is64Bit else { throw AssemblerError.invalidRegister("stgp") }
+        guard offset % 16 == 0 else { throw AssemblerError.immediateAlignment(instruction: "stgp", value: offset, alignment: 16) }
+        let scaled = offset / 16
+        try checkRange(scaled, -64...63, instruction: "stgp")
+        let imm7 = UInt32(bitPattern: Int32(scaled)) & 0x7f
+        return modeBase | (imm7 << 15) | (second.encodedNumber << 10) | (base.encodedNumber << 5) | first.encodedNumber
     }
 }
 

@@ -227,6 +227,14 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
         case .mteAddSubTag(let subtract, let destination, let source, let offset, let tag):
             return "\(subtract ? "subg" : "addg") \(formatRegister(destination)), \(formatRegister(source)), #\(offset), #\(tag)"
+        case .mteStoreTag(let kind, let source, let memory):
+            return "\(kind.rawValue) \(([formatRegister(source)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .mteLoadTag(let target, let memory):
+            return "ldg \(([formatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .mteTagMultiple(let kind, let target, let base):
+            return "\(kind.rawValue) \(formatRegister(target)), [\(formatRegister(base))]"
+        case .mteStoreTagPair(let first, let second, let memory):
+            return "stgp \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

@@ -50,6 +50,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodePrefetch(word) { return instruction }
         if let instruction = decodeRCpcUnscaled(word) { return instruction }
         if let instruction = decodePointerAuthLoad(word) { return instruction }
+        if let instruction = decodeMTEMemoryTag(word) { return instruction }
+        if let instruction = decodeMTEStoreTagPair(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -906,6 +908,62 @@ internal enum A64InstructionDecoder {
         let target = integerRegister(number: word & 0x1f, width: info.width)
         let offset = signExtend((word >> 12) & 0x1ff, bitCount: 9)
         return .rcpcUnscaled(info.kind, target: target, base: base, offset: offset)
+    }
+
+    private static func decodeMTEMemoryTag(_ word: UInt32) -> Instruction? {
+        // Load/store memory tags (single): bits[31:24]=11011001, bit21=1.
+        guard word & 0xff20_0000 == 0xd920_0000 else { return nil }
+        let opc = (word >> 22) & 3
+        let op2 = (word >> 10) & 3
+        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9) * 16
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rt = integerRegister(number: word & 0x1f, width: 64)
+
+        if op2 != 0 {
+            // STG/STZG/ST2G/STZ2G with an addressing mode.
+            let kind: A64.MTEStoreTagKind
+            switch opc {
+            case 0: kind = .stg
+            case 1: kind = .stzg
+            case 2: kind = .st2g
+            case 3: kind = .stz2g
+            default: return nil
+            }
+            let memory: MemoryOperand
+            switch op2 {
+            case 0b10: memory = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
+            case 0b01: memory = .postIndexed(base: base, offset: imm9)
+            case 0b11: memory = .preIndexed(base: base, offset: imm9)
+            default: return nil
+            }
+            return .mteStoreTag(kind, source: rt, memory: memory)
+        }
+
+        // op2 == 00.
+        if opc == 1 {
+            // LDG: signed-offset only.
+            let memory: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
+            return .mteLoadTag(target: rt, memory: memory)
+        }
+        guard let kind = A64.MTETagMultipleKind.decode(opc: opc) else { return nil }
+        return .mteTagMultiple(kind, target: rt, base: base)
+    }
+
+    private static func decodeMTEStoreTagPair(_ word: UInt32) -> Instruction? {
+        // STGP: bits[31:25]=0110100, L(bit22)=0.
+        guard word & 0xfe40_0000 == 0x6800_0000 else { return nil }
+        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * 16
+        let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: 64)
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rt = integerRegister(number: word & 0x1f, width: 64)
+        let memory: MemoryOperand
+        switch (word >> 23) & 3 {
+        case 1: memory = .postIndexed(base: base, offset: offset)
+        case 2: memory = offset >= 0 ? .unsignedOffset(base: base, offset: offset) : .signedUnscaled(base: base, offset: offset)
+        case 3: memory = .preIndexed(base: base, offset: offset)
+        default: return nil
+        }
+        return .mteStoreTagPair(first: rt, second: rt2, memory: memory)
     }
 
     private static func decodePointerAuthLoad(_ word: UInt32) -> Instruction? {

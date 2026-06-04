@@ -913,6 +913,77 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addg x0, x1, #16, #16")) // tag out of range
     }
 
+    func testMTELoadStoreTagInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stg x0, [x1]"), 0xd9200820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stg x0, [x1, #16]"), 0xd9201820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stg x0, [x1, #-16]"), 0xd93ff820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stg x0, [x1, #16]!"), 0xd9201c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stg x0, [x1], #16"), 0xd9201420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stzg x0, [x1]"), 0xd9600820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st2g x0, [x1]"), 0xd9a00820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("st2g x0, [x1, #32]"), 0xd9a02820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stz2g x0, [x1]"), 0xd9e00820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldg x0, [x1]"), 0xd9600020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldg x0, [x1, #16]"), 0xd9601020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldg x0, [x1, #-4096]"), 0xd9700020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stgp x0, x1, [x2]"), 0x69000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stgp x0, x1, [x2, #16]"), 0x69008440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stgp x0, x1, [x2, #16]!"), 0x69808440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stgp x0, x1, [x2], #16"), 0x68808440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldgm x0, [x1]"), 0xd9e00020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stgm x0, [x1]"), 0xd9a00020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stzgm x0, [x1]"), 0xd9200020)
+        // SP base.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stg x0, [sp, #16]"), 0xd9201be0)
+    }
+
+    func testDisassembleMTELoadStoreTag() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9201820), "stg x0, [x1, #16]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd93ff820), "stg x0, [x1, #-16]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9201c20), "stg x0, [x1, #16]!")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9201420), "stg x0, [x1], #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9e00820), "stz2g x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9700020), "ldg x0, [x1, #-4096]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x68808440), "stgp x0, x1, [x2], #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9200020), "stzgm x0, [x1]")
+    }
+
+    func testMTELoadStoreTagRoundTrip() throws {
+        var sources = [
+            "ldg x0, [x1]", "ldgm x0, [x1]", "stgm x0, [x1]", "stzgm x0, [x1]",
+        ]
+        for mnemonic in ["stg", "stzg", "st2g", "stz2g"] {
+            sources.append("\(mnemonic) x3, [x5]")
+            sources.append("\(mnemonic) x3, [x5, #32]")
+            sources.append("\(mnemonic) x3, [x5, #-48]")
+            sources.append("\(mnemonic) x3, [x5, #16]!")
+            sources.append("\(mnemonic) x3, [x5], #16")
+        }
+        for offset in [16, -16, 1008, -1024] {
+            sources.append("ldg x7, [x9, #\(offset)]")
+        }
+        for mode in ["[x2]", "[x2, #32]", "[x2, #-48]", "[x2, #16]!", "[x2], #16"] {
+            sources.append("stgp x0, x1, \(mode)")
+        }
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testMTELoadStoreTagInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stg w0, [x1]"))           // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stg x0, [x1, #8]"))       // offset not multiple of 16
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stg x0, [x1, #4096]"))    // offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldg x0, [x1, #16]!"))     // ldg has no writeback form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldg x0, [x1], #16"))      // ldg has no post-index form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stzgm x0, [x1, #16]"))    // tag-multiple is base only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stgp w0, w1, [x2]"))      // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stgp x0, x1, [x2, #8]"))  // pair offset not multiple of 16
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)
