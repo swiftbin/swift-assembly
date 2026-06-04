@@ -387,6 +387,63 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldxr w0, w1, [x1]"))   // single form takes one value
     }
 
+    func testCompareAndSwapInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cas w0, w1, [x2]"), 0x88a07c41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casa w0, w1, [x2]"), 0x88e07c41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casl w0, w1, [x2]"), 0x88a0fc41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casal w0, w1, [x2]"), 0x88e0fc41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cas x0, x1, [x2]"), 0xc8a07c41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casal x0, x1, [x2]"), 0xc8e0fc41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casb w0, w1, [x2]"), 0x08a07c41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casalb w0, w1, [x2]"), 0x08e0fc41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cash w0, w1, [x2]"), 0x48a07c41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casalh w0, w1, [x2]"), 0x48e0fc41)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casp w0, w1, w2, w3, [x4]"), 0x08207c82)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("caspa w0, w1, w2, w3, [x4]"), 0x08607c82)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("caspl w0, w1, w2, w3, [x4]"), 0x0820fc82)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("caspal w0, w1, w2, w3, [x4]"), 0x0860fc82)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("casp x0, x1, x2, x3, [x4]"), 0x48207c82)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("caspal x0, x1, x2, x3, [x4]"), 0x4860fc82)
+    }
+
+    func testDisassembleCompareAndSwap() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x88a07c41), "cas w0, w1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xc8e0fc41), "casal x0, x1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x08a07c41), "casb w0, w1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x48e0fc41), "casalh w0, w1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x08207c82), "casp w0, w1, w2, w3, [x4]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4860fc82), "caspal x0, x1, x2, x3, [x4]")
+        // The exclusive pair forms must still decode (no collision with CAS).
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x887f0440), "ldxp w0, w1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xc87f0440), "ldxp x0, x1, [x2]")
+    }
+
+    func testCompareAndSwapRoundTrip() throws {
+        for source in [
+            "cas w0, w1, [x2]", "casa w0, w1, [x2]", "casl w0, w1, [x2]", "casal w0, w1, [x2]",
+            "cas x0, x1, [x2]", "casa x0, x1, [x2]", "casl x0, x1, [x2]", "casal x0, x1, [x2]",
+            "casb w0, w1, [x2]", "casab w0, w1, [x2]", "caslb w0, w1, [x2]", "casalb w0, w1, [x2]",
+            "cash w0, w1, [x2]", "casah w0, w1, [x2]", "caslh w0, w1, [x2]", "casalh w0, w1, [x2]",
+            "casp w0, w1, w2, w3, [x4]", "caspa w0, w1, w2, w3, [x4]",
+            "caspl w0, w1, w2, w3, [x4]", "caspal w0, w1, w2, w3, [x4]",
+            "casp x0, x1, x2, x3, [x4]", "caspal x0, x1, x2, x3, [x4]",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testCompareAndSwapInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("casb x0, x1, [x2]"))     // byte form requires W
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cas w0, x1, [x2]"))      // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cas w0, w1, [x2, #8]"))  // no offset allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("casp w1, w2, w3, w4, [x5]"))  // pair must start even
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("casp w0, w2, w4, w5, [x6]"))  // pair must be consecutive
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("casp w0, w1, x2, x3, [x4]"))  // pair widths must match
+    }
+
     func testAddSubExtendedRegisterInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb"), 0x0b220020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxth"), 0x0b222020)

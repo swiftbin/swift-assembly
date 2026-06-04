@@ -33,6 +33,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeConditionalSelect(word) { return instruction }
         if let instruction = decodeConditionalCompare(word) { return instruction }
         if let instruction = decodeLoadStoreExclusive(word) { return instruction }
+        if let instruction = decodeCompareAndSwap(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -602,6 +603,58 @@ internal enum A64InstructionDecoder {
             ? integerRegister(number: (word >> 10) & 0x1f, width: valueWidth) : nil
         let base = xRegister(number: (word >> 5) & 0x1f)
         return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
+    }
+
+    private static func decodeCompareAndSwap(_ word: UInt32) -> Instruction? {
+        guard word & 0x3f00_0000 == 0x0800_0000 else { return nil }
+        let o2 = (word >> 23) & 1
+        let o1 = (word >> 21) & 1
+        guard o1 == 1 else { return nil }
+        let size = (word >> 30) & 3
+        let acquire = (word >> 22) & 1
+        let release = (word >> 15) & 1
+        let rsNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rtNum = word & 0x1f
+
+        if o2 == 1 {
+            // Compare and swap (single register).
+            let fixedSize: UInt32?
+            let width: Int
+            switch size {
+            case 0: fixedSize = 0; width = 32
+            case 1: fixedSize = 1; width = 32
+            case 2: fixedSize = nil; width = 32
+            case 3: fixedSize = nil; width = 64
+            default: return nil
+            }
+            guard let kind = A64.CompareAndSwapKind.decode(acquire: acquire, release: release, fixedSize: fixedSize) else {
+                return nil
+            }
+            return .compareAndSwap(
+                kind,
+                compare: integerRegister(number: rsNum, width: width),
+                value: integerRegister(number: rtNum, width: width),
+                base: xRegister(number: rnNum)
+            )
+        }
+
+        // Compare and swap pair: size 00 (32-bit) or 01 (64-bit) only.
+        let width: Int
+        switch size {
+        case 0: width = 32
+        case 1: width = 64
+        default: return nil
+        }
+        guard let kind = A64.CompareAndSwapPairKind.decode(acquire: acquire, release: release) else {
+            return nil
+        }
+        return .compareAndSwapPair(
+            kind,
+            compare: integerRegister(number: rsNum, width: width),
+            value: integerRegister(number: rtNum, width: width),
+            base: xRegister(number: rnNum)
+        )
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

@@ -101,6 +101,15 @@ internal enum A64InstructionFormatter {
             if let value2 { operands.append(formatRegister(value2)) }
             operands += formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
             return "\(kind.rawValue) \(operands.joined(separator: ", "))"
+        case .compareAndSwap(let kind, let compare, let value, let base):
+            let mem = formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
+            return "\(kind.rawValue) \(([formatRegister(compare), formatRegister(value)] + mem).joined(separator: ", "))"
+        case .compareAndSwapPair(let kind, let compare, let value, let base):
+            let compareHigh = IntegerRegister(number: compare.number + 1, width: compare.width, kind: compare.kind)
+            let valueHigh = IntegerRegister(number: value.number + 1, width: value.width, kind: value.kind)
+            let mem = formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
+            let regs = [formatRegister(compare), formatRegister(compareHigh), formatRegister(value), formatRegister(valueHigh)]
+            return "\(kind.rawValue) \((regs + mem).joined(separator: ", "))"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

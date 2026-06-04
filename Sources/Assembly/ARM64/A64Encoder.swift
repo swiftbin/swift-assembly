@@ -129,6 +129,10 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.conditionalSelectAlias(kind, destination: destination, source: source, condition: condition)
         case .loadStoreExclusive(let kind, let status, let value, let value2, let base):
             return try A64LoadStoreEncoder.exclusive(kind, status: status, value: value, value2: value2, base: base)
+        case .compareAndSwap(let kind, let compare, let value, let base):
+            return try A64LoadStoreEncoder.compareAndSwap(kind, compare: compare, value: value, base: base)
+        case .compareAndSwapPair(let kind, let compare, let value, let base):
+            return try A64LoadStoreEncoder.compareAndSwapPair(kind, compare: compare, value: value, base: base)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -475,6 +479,34 @@ internal enum A64LoadStoreEncoder {
 
         let head = (size << 30) | 0x0800_0000 | (kind.o2 << 23) | (kind.l << 22)
             | ((kind.isPair ? 1 : 0) << 21) | (rsNum << 16) | (kind.o0 << 15) | (rt2Num << 10)
+        return head | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    static func compareAndSwap(_ kind: A64.CompareAndSwapKind, compare rs: IntegerRegister, value rt: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
+        guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let size: UInt32
+        if let fixed = kind.fixedSize {
+            guard !rs.is64Bit, !rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            size = fixed
+        } else {
+            guard rs.is64Bit == rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            size = rt.is64Bit ? 0b11 : 0b10
+        }
+        let head = (size << 30) | 0x0800_0000 | (1 << 23) | (kind.acquire << 22) | (1 << 21)
+            | (rs.encodedNumber << 16) | (kind.release << 15) | (0b11111 << 10)
+        return head | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    static func compareAndSwapPair(_ kind: A64.CompareAndSwapPairKind, compare rs: IntegerRegister, value rt: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
+        guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        guard rs.is64Bit == rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        // The pair registers must be even-numbered (the high register is implied).
+        guard rs.encodedNumber % 2 == 0, rt.encodedNumber % 2 == 0 else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        let size: UInt32 = rt.is64Bit ? 0b01 : 0b00
+        let head = (size << 30) | 0x0800_0000 | (kind.acquire << 22) | (1 << 21)
+            | (rs.encodedNumber << 16) | (kind.release << 15) | (0b11111 << 10)
         return head | (base.encodedNumber << 5) | rt.encodedNumber
     }
 

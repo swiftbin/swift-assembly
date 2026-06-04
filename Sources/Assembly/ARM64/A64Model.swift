@@ -523,6 +523,68 @@ internal enum A64 {
         }
     }
 
+    /// Compare and swap (`CAS` and its acquire/release/byte/half variants).
+    enum CompareAndSwapKind: String, Equatable, CaseIterable {
+        case cas, casa, casl, casal
+        case casb, casab, caslb, casalb
+        case cash, casah, caslh, casalh
+
+        /// The `A` (acquire) field at bit 22.
+        var acquire: UInt32 {
+            switch self {
+            case .casa, .casal, .casab, .casalb, .casah, .casalh: return 1
+            default: return 0
+            }
+        }
+
+        /// The `R` (release) field at bit 15.
+        var release: UInt32 {
+            switch self {
+            case .casl, .casal, .caslb, .casalb, .caslh, .casalh: return 1
+            default: return 0
+            }
+        }
+
+        /// Fixed `size` field for byte/half forms; `nil` selects the
+        /// width-dependent word/doubleword encoding.
+        var fixedSize: UInt32? {
+            switch self {
+            case .casb, .casab, .caslb, .casalb: return 0b00
+            case .cash, .casah, .caslh, .casalh: return 0b01
+            default: return nil
+            }
+        }
+
+        static func decode(acquire: UInt32, release: UInt32, fixedSize: UInt32?) -> CompareAndSwapKind? {
+            allCases.first { $0.acquire == acquire && $0.release == release && $0.fixedSize == fixedSize }
+        }
+    }
+
+    /// Compare and swap pair (`CASP` and its acquire/release variants).
+    enum CompareAndSwapPairKind: String, Equatable, CaseIterable {
+        case casp, caspa, caspl, caspal
+
+        /// The `A` (acquire) field at bit 22.
+        var acquire: UInt32 {
+            switch self {
+            case .caspa, .caspal: return 1
+            default: return 0
+            }
+        }
+
+        /// The `R` (release) field at bit 15.
+        var release: UInt32 {
+            switch self {
+            case .caspl, .caspal: return 1
+            default: return 0
+            }
+        }
+
+        static func decode(acquire: UInt32, release: UInt32) -> CompareAndSwapPairKind? {
+            allCases.first { $0.acquire == acquire && $0.release == release }
+        }
+    }
+
     /// Advanced SIMD load/store multiple structures (`LD1`–`LD4` / `ST1`–`ST4`).
     enum LoadStoreMultipleKind: String, Equatable, CaseIterable {
         case st1, ld1, st2, ld2, st3, ld3, st4, ld4
@@ -1750,6 +1812,8 @@ internal enum A64 {
         case barrier(BarrierKind, option: UInt32)
         case hint(UInt32)
         case loadStoreExclusive(LoadStoreExclusiveKind, status: Register?, value: Register, value2: Register?, base: Register)
+        case compareAndSwap(CompareAndSwapKind, compare: Register, value: Register, base: Register)
+        case compareAndSwapPair(CompareAndSwapPairKind, compare: Register, value: Register, base: Register)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -1904,6 +1968,8 @@ internal typealias BitfieldKind = A64.BitfieldKind
 internal typealias AddSubCarryKind = A64.AddSubCarryKind
 internal typealias HintKind = A64.HintKind
 internal typealias LoadStoreExclusiveKind = A64.LoadStoreExclusiveKind
+internal typealias CompareAndSwapKind = A64.CompareAndSwapKind
+internal typealias CompareAndSwapPairKind = A64.CompareAndSwapPairKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

@@ -1193,6 +1193,36 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidMemoryOperand(instruction.operands[index...].joined(separator: ", "))
             }
             return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
+        case "cas", "casa", "casl", "casal", "casb", "casab", "caslb", "casalb",
+             "cash", "casah", "caslh", "casalh":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.CompareAndSwapKind(rawValue: mnemonic)!
+            let compare = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let value = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 2)
+            guard case .unsignedOffset(let base, 0) = memory else {
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[2...].joined(separator: ", "))
+            }
+            return .compareAndSwap(kind, compare: compare, value: value, base: base)
+        case "casp", "caspa", "caspl", "caspal":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 5)
+            let kind = A64.CompareAndSwapPairKind(rawValue: mnemonic)!
+            let compare = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let compareHigh = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            let value = try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
+            let valueHigh = try A64Parser.integerRegister(instruction.operands[3], allowSP: false)
+            // The high registers of each pair are implied and must be consecutive.
+            guard compareHigh.number == compare.number + 1, compareHigh.width == compare.width,
+                  valueHigh.number == value.number + 1, valueHigh.width == value.width else {
+                throw AssemblerError.invalidRegister(mnemonic)
+            }
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 4)
+            guard case .unsignedOffset(let base, 0) = memory else {
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[4...].joined(separator: ", "))
+            }
+            return .compareAndSwapPair(kind, compare: compare, value: value, base: base)
         case "ldp", "stp":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 3...4)
