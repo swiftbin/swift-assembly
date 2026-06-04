@@ -274,6 +274,36 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz w0"))         // missing source
     }
 
+    func testCSSCScalarBitOpInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("abs w0, w1"), 0x5ac02020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("abs x0, x1"), 0xdac02020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cnt w0, w1"), 0x5ac01c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cnt x0, x1"), 0xdac01c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ctz w0, w1"), 0x5ac01820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ctz x0, x1"), 0xdac01820)
+    }
+
+    func testDisassembleCSSCScalarBitOp() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ac02020), "abs w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac01c20), "cnt x0, x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ac01820), "ctz w0, w1")
+    }
+
+    func testCSSCScalarBitOpRoundTrip() throws {
+        for source in ["abs w0, w1", "abs x2, x3", "cnt w4, w5", "cnt x6, x7", "ctz w8, w9", "ctz x10, x11"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testCSSCScalarBitOpInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("abs w0, x1"))   // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ctz w0"))       // missing source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cnt w0, w1, w2"))  // too many operands
+    }
+
     func testHintInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("yield"), 0xd503203f)
         XCTAssertEqual(try ARM64Assembler.assembleWord("wfe"), 0xd503205f)

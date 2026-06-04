@@ -395,6 +395,8 @@ internal enum A64 {
     /// Data-processing (1 source): bit/byte reversals and count operations.
     enum DataProcessingOneSourceKind: String, Equatable, CaseIterable {
         case rbit, rev16, rev32, rev, clz, cls
+        // FEAT_CSSC scalar integer count/absolute (`ctz`/`cnt`/`abs`).
+        case ctz, cnt, abs
 
         /// Whether the operation is only defined on 64-bit registers.
         var is64BitOnly: Bool { self == .rev32 }
@@ -410,6 +412,9 @@ internal enum A64 {
             case .rev: return is64Bit ? 0b000011 : 0b000010
             case .clz: return 0b000100
             case .cls: return 0b000101
+            case .ctz: return 0b000110
+            case .cnt: return 0b000111
+            case .abs: return 0b001000
             }
         }
 
@@ -422,6 +427,9 @@ internal enum A64 {
             case 0b000011: return is64Bit ? .rev : nil
             case 0b000100: return .clz
             case 0b000101: return .cls
+            case 0b000110: return .ctz
+            case 0b000111: return .cnt
+            case 0b001000: return .abs
             default: return nil
             }
         }

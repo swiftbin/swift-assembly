@@ -64,6 +64,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - scalar floating-point ↔ fixed-point convert (scvtf / ucvtf / fcvtzs / fcvtzu between a general register and `s`/`d`/`h` with a `#fbits` scale)
 - scalar floating-point to general-register convert with directed rounding (fcvtns / fcvtnu / fcvtas / fcvtau / fcvtps / fcvtpu / fcvtms / fcvtmu, `s`/`d`/`h` source to a `w`/`x` integer register)
 - FEAT_CSSC integer minimum/maximum on general registers (smax / umax / smin / umin, register `Rd, Rn, Rm` and immediate `Rd, Rn, #imm` forms)
+- FEAT_CSSC scalar bit operations on general registers (abs / cnt / ctz)
 - floating-point move between a general register and the high 64 bits of a vector register (fmov `x<d>, v<n>.d[1]` and `v<d>.d[1], x<n>`)
 - Advanced SIMD across-lanes reductions (addv / saddlv / uaddlv / smaxv / umaxv / sminv / uminv, and fmaxv / fminv / fmaxnmv / fminnmv in both the single-precision `.4s` and half-precision `.4h`/`.8h` forms)
 - Advanced SIMD two-register misc (rev64 / rev32 / rev16 / abs / neg / mvn / rbit / cnt / cls / clz / sqabs / sqneg / suqadd / usqadd / fabs / fneg / fsqrt)

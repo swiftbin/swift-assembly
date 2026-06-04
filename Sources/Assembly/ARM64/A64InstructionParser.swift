@@ -1981,11 +1981,28 @@ internal enum A64InstructionParser {
         case "rev64", "abs", "neg", "not", "cnt", "sqabs", "sqneg", "suqadd", "usqadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
+            // FEAT_CSSC scalar `abs`/`cnt` on general registers (vector forms take
+            // vector operands and fall through to the two-register-misc encoding).
+            if (mnemonic == "abs" || mnemonic == "cnt"), !operandsAreVectorRegisters(instruction) {
+                return .dataProcessingOneSource(
+                    A64.DataProcessingOneSourceKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                    source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+                )
+            }
             let kind = mnemonic == "not" ? A64.VectorTwoRegisterMiscKind.mvn : A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!
             return .vectorTwoRegisterMisc(
                 kind,
                 destination: try A64Parser.vectorRegister(instruction.operands[0]),
                 source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
+        case "ctz":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .dataProcessingOneSource(
+                .ctz,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
             )
         case "aese", "aesd", "aesmc", "aesimc":
             guard parts.count == 1 else { return nil }
