@@ -110,6 +110,11 @@ internal enum A64InstructionFormatter {
             let mem = formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
             let regs = [formatRegister(compare), formatRegister(compareHigh), formatRegister(value), formatRegister(valueHigh)]
             return "\(kind.rawValue) \((regs + mem).joined(separator: ", "))"
+        case .atomicMemory(let kind, let source, let value, let base):
+            let mem = formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
+            var regs = [formatRegister(source)]
+            if let value { regs.append(formatRegister(value)) }
+            return "\(kind.mnemonic) \((regs + mem).joined(separator: ", "))"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

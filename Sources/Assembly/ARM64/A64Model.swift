@@ -585,6 +585,90 @@ internal enum A64 {
         }
     }
 
+    /// The base operation of an atomic memory instruction (LSE).
+    enum AtomicMemoryOperation: String, Equatable, CaseIterable {
+        case add, clr, eor, set, smax, smin, umax, umin, swp
+
+        /// The `opc` field at bits [14:12].
+        var opc: UInt32 {
+            switch self {
+            case .add: return 0b000
+            case .clr: return 0b001
+            case .eor: return 0b010
+            case .set: return 0b011
+            case .smax: return 0b100
+            case .smin: return 0b101
+            case .umax: return 0b110
+            case .umin: return 0b111
+            case .swp: return 0b000
+            }
+        }
+
+        /// The `o3` field at bit 15 (set for `swp`).
+        var o3: UInt32 { self == .swp ? 1 : 0 }
+
+        /// Whether a store-form alias (`st<op>`) exists for this operation.
+        var hasStoreAlias: Bool { self != .swp }
+    }
+
+    /// An atomic memory operation (`LDADD`, `SWP`, the `ST<op>` aliases, …).
+    struct AtomicMemoryKind: Equatable {
+        var operation: AtomicMemoryOperation
+        var acquire: Bool
+        var release: Bool
+        /// Fixed `size` field for byte/half forms; `nil` selects the
+        /// width-dependent word/doubleword encoding.
+        var fixedSize: UInt32?
+        /// `true` for the `ST<op>` aliases (`Rt` is `wzr`/`xzr` and never acquires).
+        var isStore: Bool
+
+        var mnemonic: String {
+            let order = (acquire ? "a" : "") + (release ? "l" : "")
+            let suffix = fixedSize == nil ? "" : (fixedSize == 0 ? "b" : "h")
+            if operation == .swp { return "swp" + order + suffix }
+            return (isStore ? "st" : "ld") + operation.rawValue + order + suffix
+        }
+
+        static func parse(_ mnemonic: String) -> AtomicMemoryKind? {
+            var rest: Substring
+            var isStore = false
+            var operation: AtomicMemoryOperation
+            if mnemonic.hasPrefix("swp") {
+                operation = .swp
+                rest = mnemonic.dropFirst(3)
+            } else if mnemonic.hasPrefix("ld") || mnemonic.hasPrefix("st") {
+                isStore = mnemonic.hasPrefix("st")
+                let afterPrefix = mnemonic.dropFirst(2)
+                guard let op = AtomicMemoryOperation.allCases.first(where: {
+                    $0 != .swp && afterPrefix.hasPrefix($0.rawValue)
+                }) else { return nil }
+                operation = op
+                rest = afterPrefix.dropFirst(op.rawValue.count)
+            } else {
+                return nil
+            }
+
+            var acquire = false
+            var release = false
+            if rest.hasPrefix("a") { acquire = true; rest = rest.dropFirst() }
+            if rest.hasPrefix("l") { release = true; rest = rest.dropFirst() }
+
+            var fixedSize: UInt32?
+            if rest == "b" { fixedSize = 0; rest = "" }
+            else if rest == "h" { fixedSize = 1; rest = "" }
+            guard rest.isEmpty else { return nil }
+
+            // `swp` has no store form, and store aliases never acquire.
+            if operation == .swp && isStore { return nil }
+            if isStore && acquire { return nil }
+
+            return AtomicMemoryKind(
+                operation: operation, acquire: acquire, release: release,
+                fixedSize: fixedSize, isStore: isStore
+            )
+        }
+    }
+
     /// Advanced SIMD load/store multiple structures (`LD1`–`LD4` / `ST1`–`ST4`).
     enum LoadStoreMultipleKind: String, Equatable, CaseIterable {
         case st1, ld1, st2, ld2, st3, ld3, st4, ld4
@@ -1814,6 +1898,7 @@ internal enum A64 {
         case loadStoreExclusive(LoadStoreExclusiveKind, status: Register?, value: Register, value2: Register?, base: Register)
         case compareAndSwap(CompareAndSwapKind, compare: Register, value: Register, base: Register)
         case compareAndSwapPair(CompareAndSwapPairKind, compare: Register, value: Register, base: Register)
+        case atomicMemory(AtomicMemoryKind, source: Register, value: Register?, base: Register)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -1970,6 +2055,7 @@ internal typealias HintKind = A64.HintKind
 internal typealias LoadStoreExclusiveKind = A64.LoadStoreExclusiveKind
 internal typealias CompareAndSwapKind = A64.CompareAndSwapKind
 internal typealias CompareAndSwapPairKind = A64.CompareAndSwapPairKind
+internal typealias AtomicMemoryKind = A64.AtomicMemoryKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

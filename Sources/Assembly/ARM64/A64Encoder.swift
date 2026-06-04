@@ -133,6 +133,8 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.compareAndSwap(kind, compare: compare, value: value, base: base)
         case .compareAndSwapPair(let kind, let compare, let value, let base):
             return try A64LoadStoreEncoder.compareAndSwapPair(kind, compare: compare, value: value, base: base)
+        case .atomicMemory(let kind, let source, let value, let base):
+            return try A64LoadStoreEncoder.atomicMemory(kind, source: source, value: value, base: base)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -508,6 +510,35 @@ internal enum A64LoadStoreEncoder {
         let head = (size << 30) | 0x0800_0000 | (kind.acquire << 22) | (1 << 21)
             | (rs.encodedNumber << 16) | (kind.release << 15) | (0b11111 << 10)
         return head | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    static func atomicMemory(_ kind: A64.AtomicMemoryKind, source rs: IntegerRegister, value rt: IntegerRegister?, base: IntegerRegister) throws -> UInt32 {
+        guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.mnemonic) }
+
+        let size: UInt32
+        if let fixed = kind.fixedSize {
+            guard !rs.is64Bit else { throw AssemblerError.invalidRegister(kind.mnemonic) }
+            if let rt { guard !rt.is64Bit else { throw AssemblerError.invalidRegister(kind.mnemonic) } }
+            size = fixed
+        } else {
+            if let rt { guard rt.is64Bit == rs.is64Bit else { throw AssemblerError.invalidRegister(kind.mnemonic) } }
+            size = rs.is64Bit ? 0b11 : 0b10
+        }
+
+        let rtNum: UInt32
+        if kind.isStore {
+            guard rt == nil else { throw AssemblerError.invalidRegister(kind.mnemonic) }
+            rtNum = 0b11111
+        } else {
+            guard let rt else { throw AssemblerError.invalidRegister(kind.mnemonic) }
+            rtNum = rt.encodedNumber
+        }
+
+        let a: UInt32 = kind.acquire ? 1 : 0
+        let r: UInt32 = kind.release ? 1 : 0
+        let head = (size << 30) | 0x3820_0000 | (a << 23) | (r << 22)
+            | (rs.encodedNumber << 16) | (kind.operation.o3 << 15) | (kind.operation.opc << 12)
+        return head | (base.encodedNumber << 5) | rtNum
     }
 
     static func single(_ kind: A64.LoadStoreSingleKind, target rt: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {

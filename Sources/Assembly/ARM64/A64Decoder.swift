@@ -34,6 +34,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeConditionalCompare(word) { return instruction }
         if let instruction = decodeLoadStoreExclusive(word) { return instruction }
         if let instruction = decodeCompareAndSwap(word) { return instruction }
+        if let instruction = decodeAtomicMemory(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -655,6 +656,54 @@ internal enum A64InstructionDecoder {
             value: integerRegister(number: rtNum, width: width),
             base: xRegister(number: rnNum)
         )
+    }
+
+    private static func decodeAtomicMemory(_ word: UInt32) -> Instruction? {
+        guard word & 0x3f20_0c00 == 0x3820_0000 else { return nil }
+        let o3 = (word >> 15) & 1
+        let opc = (word >> 12) & 7
+        let operation: A64.AtomicMemoryOperation
+        if o3 == 1 {
+            guard opc == 0 else { return nil }
+            operation = .swp
+        } else {
+            guard let op = A64.AtomicMemoryOperation.allCases.first(where: { $0 != .swp && $0.opc == opc }) else {
+                return nil
+            }
+            operation = op
+        }
+
+        let size = (word >> 30) & 3
+        let acquire = (word >> 23) & 1 == 1
+        let release = (word >> 22) & 1 == 1
+        let fixedSize: UInt32?
+        let width: Int
+        switch size {
+        case 0: fixedSize = 0; width = 32
+        case 1: fixedSize = 1; width = 32
+        case 2: fixedSize = nil; width = 32
+        case 3: fixedSize = nil; width = 64
+        default: return nil
+        }
+
+        let rsNum = (word >> 16) & 0x1f
+        let rtNum = word & 0x1f
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let source = integerRegister(number: rsNum, width: width)
+
+        // Prefer the ST<op> alias when the result register is discarded and the
+        // form does not acquire (no `swp` store alias exists).
+        if operation.hasStoreAlias && !acquire && rtNum == 0b11111 {
+            let kind = A64.AtomicMemoryKind(
+                operation: operation, acquire: false, release: release, fixedSize: fixedSize, isStore: true
+            )
+            return .atomicMemory(kind, source: source, value: nil, base: base)
+        }
+
+        let kind = A64.AtomicMemoryKind(
+            operation: operation, acquire: acquire, release: release, fixedSize: fixedSize, isStore: false
+        )
+        return .atomicMemory(kind, source: source, value: integerRegister(number: rtNum, width: width), base: base)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

@@ -1870,6 +1870,10 @@ internal enum A64InstructionParser {
             }
             return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
         default:
+            // Atomic memory operations (LSE): LD<op>, SWP, and the ST<op> aliases.
+            if parts.count == 1, let kind = A64.AtomicMemoryKind.parse(mnemonic) {
+                return try atomicMemory(instruction, kind: kind)
+            }
             // Advanced SIMD three-different (long/wide/narrow); the `2` suffix is
             // the upper-half form (implied by the `Q=1` arrangement).
             if parts.count == 1 {
@@ -1886,6 +1890,20 @@ internal enum A64InstructionParser {
             }
             return nil
         }
+    }
+
+    private static func atomicMemory(_ instruction: ParsedInstruction, kind: A64.AtomicMemoryKind) throws -> Instruction {
+        // ST<op> aliases take `Rs, [Xn]`; LD<op> and SWP take `Rs, Rt, [Xn]`.
+        let baseIndex = kind.isStore ? 1 : 2
+        try expectOperandCount(instruction, exactly: baseIndex + 1)
+        let source = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+        let value: A64.Register? = kind.isStore
+            ? nil : try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+        let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: baseIndex)
+        guard case .unsignedOffset(let base, 0) = memory else {
+            throw AssemblerError.invalidMemoryOperand(instruction.operands[baseIndex...].joined(separator: ", "))
+        }
+        return .atomicMemory(kind, source: source, value: value, base: base)
     }
 
     private static func exception(_ instruction: ParsedInstruction, kind: A64.ExceptionKind, mnemonic: String) throws -> Instruction {

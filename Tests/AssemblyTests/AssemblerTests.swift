@@ -444,6 +444,90 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("casp w0, w1, x2, x3, [x4]"))  // pair widths must match
     }
 
+    func testAtomicMemoryInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldadd w1, w0, [x2]"), 0xb8210040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldadda w1, w0, [x2]"), 0xb8a10040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaddl w1, w0, [x2]"), 0xb8610040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaddal w1, w0, [x2]"), 0xb8e10040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldadd x1, x0, [x2]"), 0xf8210040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaddb w1, w0, [x2]"), 0x38210040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaddh w1, w0, [x2]"), 0x78210040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaddalb w1, w0, [x2]"), 0x38e10040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldclr w1, w0, [x2]"), 0xb8211040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldeor w1, w0, [x2]"), 0xb8212040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldset w1, w0, [x2]"), 0xb8213040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldsmax w1, w0, [x2]"), 0xb8214040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldsmin w1, w0, [x2]"), 0xb8215040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldumax w1, w0, [x2]"), 0xb8216040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldumin w1, w0, [x2]"), 0xb8217040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("swp w1, w0, [x2]"), 0xb8218040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("swpal w1, w0, [x2]"), 0xb8e18040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("swp x1, x0, [x2]"), 0xf8218040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("swpb w1, w0, [x2]"), 0x38218040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stadd w1, [x2]"), 0xb821005f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("staddl w1, [x2]"), 0xb861005f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("staddlb w1, [x2]"), 0x3861005f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stumin w1, [x2]"), 0xb821705f)
+        // The ST<op> aliases share an encoding with the LD<op> form whose result is wzr.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldadd w1, wzr, [x2]"), 0xb821005f)
+    }
+
+    func testDisassembleAtomicMemory() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb8210040), "ldadd w1, w0, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8e10040), "ldaddal x1, x0, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb8218040), "swp w1, w0, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x78218040), "swph w1, w0, [x2]")
+        // Result-discarded non-acquire forms prefer the ST<op> alias.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb821005f), "stadd w1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb861005f), "staddl w1, [x2]")
+        // Acquire forms have no store alias, so the wzr destination stays explicit.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb8a1005f), "ldadda w1, wzr, [x2]")
+    }
+
+    func testAtomicMemoryRoundTrip() throws {
+        var sources: [String] = []
+        for op in ["add", "clr", "eor", "set", "smax", "smin", "umax", "umin"] {
+            for order in ["", "a", "l", "al"] {
+                for size in ["", "b", "h"] {
+                    sources.append("ld\(op)\(order)\(size) w1, w0, [x2]")
+                }
+            }
+            for order in ["", "l"] {
+                for size in ["", "b", "h"] {
+                    sources.append("st\(op)\(order)\(size) w1, [x2]")
+                }
+            }
+        }
+        for order in ["", "a", "l", "al"] {
+            for size in ["", "b", "h"] {
+                sources.append("swp\(order)\(size) w1, w0, [x2]")
+            }
+        }
+        sources.append(contentsOf: ["ldadd x1, x0, [x2]", "swpal x1, x0, [x2]", "stadd x1, [x2]"])
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testAtomicMemoryInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldaddb x1, x0, [x2]"))  // byte form requires W
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldadd w1, x0, [x2]"))   // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldadd w1, w0, [x2, #8]"))  // no offset allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stadd w1, w0, [x2]"))   // store alias takes no result
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldadd w1, [x2]"))       // load form needs a result
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("swpa w1, [x2]"))        // swp has no store alias
+    }
+
+    func testLoadStoreRegisterStillDecodesAfterAtomics() throws {
+        // The atomic group shares the 0x38 space with load/store register; ensure
+        // the ordinary forms still round-trip.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xb9400020), "ldr w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8616820), "ldr x0, [x1, x1]")
+    }
+
     func testAddSubExtendedRegisterInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb"), 0x0b220020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxth"), 0x0b222020)
