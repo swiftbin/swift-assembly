@@ -1216,6 +1216,22 @@ internal enum A64InstructionParser {
             let immediate: Int64 = instruction.operands.isEmpty ? 15 : try A64Parser.immediate(instruction.operands[0])
             try checkRange(immediate, 0...0xf, instruction: "clrex")
             return .clearExclusive(UInt32(immediate))
+        case "mrs":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let value = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            guard let register = A64.SystemRegister.parse(instruction.operands[1]) else {
+                throw AssemblerError.unsupportedOperand(instruction.operands[1])
+            }
+            return .systemRegisterMove(read: true, register: register, value: value)
+        case "msr":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            guard let register = A64.SystemRegister.parse(instruction.operands[0]) else {
+                throw AssemblerError.unsupportedOperand(instruction.operands[0])
+            }
+            let value = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            return .systemRegisterMove(read: false, register: register, value: value)
         case "cas", "casa", "casl", "casal", "casb", "casab", "caslb", "casalb",
              "cash", "casah", "caslh", "casalh":
             guard parts.count == 1 else { return nil }

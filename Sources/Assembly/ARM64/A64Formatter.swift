@@ -123,6 +123,10 @@ internal enum A64InstructionFormatter {
         case .prefetch(let kind, let operation, let memory):
             let op = formatPrefetchOperation(operation)
             return "\(kind.rawValue) \(([op] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .systemRegisterMove(let read, let register, let value):
+            return read
+                ? "mrs \(formatRegister(value)), \(register.name)"
+                : "msr \(register.name), \(formatRegister(value))"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

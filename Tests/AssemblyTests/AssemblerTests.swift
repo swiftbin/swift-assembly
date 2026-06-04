@@ -500,6 +500,57 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("prfum pldl1keep, [x0, x1]"))  // unscaled has no register form
     }
 
+    func testSystemRegisterMoveInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, nzcv"), 0xd53b4200)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr nzcv, x0"), 0xd51b4200)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x1, fpcr"), 0xd53b4401)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr fpcr, x1"), 0xd51b4401)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x2, fpsr"), 0xd53b4422)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x3, tpidr_el0"), 0xd53bd043)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x4, midr_el1"), 0xd5380004)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, daif"), 0xd53b4220)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, sp_el0"), 0xd5384100)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, cntvct_el0"), 0xd53be040)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, pmccntr_el0"), 0xd53b9d00)
+        // Generic S<op0>_<op1>_C<n>_C<m>_<op2> form.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, s3_3_c13_c2_1"), 0xd53bd220)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr s3_3_c13_c2_1, x5"), 0xd51bd225)
+    }
+
+    func testDisassembleSystemRegisterMove() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd53b4200), "mrs x0, nzcv")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd51b4200), "msr nzcv, x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5380004), "mrs x4, midr_el1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd53bd220), "mrs x0, s3_3_c13_c2_1")
+    }
+
+    func testSystemRegisterMoveRoundTrip() throws {
+        let names = [
+            "nzcv", "daif", "fpcr", "fpsr", "tpidr_el0", "tpidrro_el0", "tpidr_el1",
+            "midr_el1", "mpidr_el1", "ctr_el0", "dczid_el0", "sp_el0", "elr_el1",
+            "spsr_el1", "vbar_el1", "ttbr0_el1", "ttbr1_el1", "sctlr_el1", "esr_el1",
+            "far_el1", "cntvct_el0", "cntfrq_el0", "pmccntr_el0", "s3_3_c13_c2_1",
+        ]
+        var sources: [String] = []
+        for name in names {
+            sources.append("mrs x7, \(name)")
+            sources.append("msr \(name), x9")
+        }
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testSystemRegisterMoveInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mrs w0, nzcv"))      // must be 64-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mrs x0, bogus"))     // unknown register name
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mrs x0, s9_3_c4_c2_0")) // op0 out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("mrs x0"))            // missing operand
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

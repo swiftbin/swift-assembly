@@ -142,6 +142,12 @@ internal enum A64InstructionEncoder {
             return 0xd503_305f | (immediate << 8)
         case .prefetch(let kind, let operation, let memory):
             return try A64LoadStoreEncoder.prefetch(kind, operation: operation, memory: memory)
+        case .systemRegisterMove(let read, let register, let value):
+            guard value.is64Bit else { throw AssemblerError.invalidRegister(read ? "mrs" : "msr") }
+            let base: UInt32 = read ? 0xd530_0000 : 0xd510_0000
+            let o0 = register.op0 - 2
+            return base | (o0 << 19) | (register.op1 << 16) | (register.crn << 12)
+                | (register.crm << 8) | (register.op2 << 5) | value.encodedNumber
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):

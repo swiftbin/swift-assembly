@@ -16,6 +16,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeBarrier(word) { return instruction }
         if let instruction = decodeClearExclusive(word) { return instruction }
         if let instruction = decodeHint(word) { return instruction }
+        if let instruction = decodeSystemRegisterMove(word) { return instruction }
         if let instruction = decodeMoveWide(word) { return instruction }
         if let instruction = decodeAddSubImmediate(word) { return instruction }
         if let instruction = decodeAddSubShiftedRegister(word) { return instruction }
@@ -222,6 +223,22 @@ internal enum A64InstructionDecoder {
         // nop (#0) and the paciasp-family hints are claimed earlier in the chain.
         guard word & 0xffff_f01f == 0xd503_201f else { return nil }
         return .hint((word >> 5) & 0x7f)
+    }
+
+    private static func decodeSystemRegisterMove(_ word: UInt32) -> Instruction? {
+        // MRS/MSR (register): bits[31:22]=1101010100, bit20=1; bit21=L (read), bit19=o0.
+        guard word & 0xffd0_0000 == 0xd510_0000 else { return nil }
+        let read = (word >> 21) & 1 == 1
+        let op0 = ((word >> 19) & 1) + 2
+        let register = SystemRegister(
+            op0: op0,
+            op1: (word >> 16) & 0x7,
+            crn: (word >> 12) & 0xf,
+            crm: (word >> 8) & 0xf,
+            op2: (word >> 5) & 0x7
+        )
+        let value = integerRegister(number: word & 0x1f, width: 64)
+        return .systemRegisterMove(read: read, register: register, value: value)
     }
 
     private static func decodePointerAuthentication(_ word: UInt32) -> Instruction? {

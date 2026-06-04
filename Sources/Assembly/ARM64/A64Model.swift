@@ -590,6 +590,80 @@ internal enum A64 {
         case prfm, prfum
     }
 
+    /// A system register accessed via `MRS` / `MSR` (register).
+    ///
+    /// Encoded as the `o0` (`op0 - 2`), `op1`, `CRn`, `CRm`, and `op2` fields.
+    struct SystemRegister: Equatable {
+        var op0: UInt32
+        var op1: UInt32
+        var crn: UInt32
+        var crm: UInt32
+        var op2: UInt32
+
+        init(op0: UInt32, op1: UInt32, crn: UInt32, crm: UInt32, op2: UInt32) {
+            self.op0 = op0
+            self.op1 = op1
+            self.crn = crn
+            self.crm = crm
+            self.op2 = op2
+        }
+
+        /// Common named system registers recognised by the assembler.
+        static let named: [(name: String, register: SystemRegister)] = [
+            ("nzcv", SystemRegister(op0: 3, op1: 3, crn: 4, crm: 2, op2: 0)),
+            ("daif", SystemRegister(op0: 3, op1: 3, crn: 4, crm: 2, op2: 1)),
+            ("fpcr", SystemRegister(op0: 3, op1: 3, crn: 4, crm: 4, op2: 0)),
+            ("fpsr", SystemRegister(op0: 3, op1: 3, crn: 4, crm: 4, op2: 1)),
+            ("tpidr_el0", SystemRegister(op0: 3, op1: 3, crn: 13, crm: 0, op2: 2)),
+            ("tpidrro_el0", SystemRegister(op0: 3, op1: 3, crn: 13, crm: 0, op2: 3)),
+            ("tpidr_el1", SystemRegister(op0: 3, op1: 0, crn: 13, crm: 0, op2: 4)),
+            ("midr_el1", SystemRegister(op0: 3, op1: 0, crn: 0, crm: 0, op2: 0)),
+            ("mpidr_el1", SystemRegister(op0: 3, op1: 0, crn: 0, crm: 0, op2: 5)),
+            ("ctr_el0", SystemRegister(op0: 3, op1: 3, crn: 0, crm: 0, op2: 1)),
+            ("dczid_el0", SystemRegister(op0: 3, op1: 3, crn: 0, crm: 0, op2: 7)),
+            ("sp_el0", SystemRegister(op0: 3, op1: 0, crn: 4, crm: 1, op2: 0)),
+            ("elr_el1", SystemRegister(op0: 3, op1: 0, crn: 4, crm: 0, op2: 1)),
+            ("spsr_el1", SystemRegister(op0: 3, op1: 0, crn: 4, crm: 0, op2: 0)),
+            ("vbar_el1", SystemRegister(op0: 3, op1: 0, crn: 12, crm: 0, op2: 0)),
+            ("ttbr0_el1", SystemRegister(op0: 3, op1: 0, crn: 2, crm: 0, op2: 0)),
+            ("ttbr1_el1", SystemRegister(op0: 3, op1: 0, crn: 2, crm: 0, op2: 1)),
+            ("sctlr_el1", SystemRegister(op0: 3, op1: 0, crn: 1, crm: 0, op2: 0)),
+            ("esr_el1", SystemRegister(op0: 3, op1: 0, crn: 5, crm: 2, op2: 0)),
+            ("far_el1", SystemRegister(op0: 3, op1: 0, crn: 6, crm: 0, op2: 0)),
+            ("cntvct_el0", SystemRegister(op0: 3, op1: 3, crn: 14, crm: 0, op2: 2)),
+            ("cntfrq_el0", SystemRegister(op0: 3, op1: 3, crn: 14, crm: 0, op2: 0)),
+            ("pmccntr_el0", SystemRegister(op0: 3, op1: 3, crn: 9, crm: 13, op2: 0)),
+        ]
+
+        /// The canonical name (a known register name, or the generic
+        /// `S<op0>_<op1>_C<n>_C<m>_<op2>` form).
+        var name: String {
+            if let match = SystemRegister.named.first(where: { $0.register == self }) {
+                return match.name
+            }
+            return "s\(op0)_\(op1)_c\(crn)_c\(crm)_\(op2)"
+        }
+
+        /// Parse a register name (named or the generic `S` form).
+        static func parse(_ text: String) -> SystemRegister? {
+            let lower = text.lowercased()
+            if let match = named.first(where: { $0.name == lower }) {
+                return match.register
+            }
+            // Generic form: s<op0>_<op1>_c<n>_c<m>_<op2>
+            guard lower.hasPrefix("s") else { return nil }
+            let parts = lower.dropFirst().split(separator: "_", omittingEmptySubsequences: false)
+            guard parts.count == 5 else { return nil }
+            guard let op0 = UInt32(parts[0]), let op1 = UInt32(parts[1]),
+                  parts[2].hasPrefix("c"), parts[3].hasPrefix("c"),
+                  let crn = UInt32(parts[2].dropFirst()),
+                  let crm = UInt32(parts[3].dropFirst()),
+                  let op2 = UInt32(parts[4]) else { return nil }
+            guard op0 <= 3, op1 <= 7, crn <= 15, crm <= 15, op2 <= 7 else { return nil }
+            return SystemRegister(op0: op0, op1: op1, crn: crn, crm: crm, op2: op2)
+        }
+    }
+
     /// Load-acquire RCpc register (`LDAPR` / `LDAPRB` / `LDAPRH`).
     enum LoadAcquireRCpcKind: String, Equatable, CaseIterable {
         case ldaprb, ldaprh, ldapr
@@ -1922,6 +1996,8 @@ internal enum A64 {
         case loadAcquireRCpc(LoadAcquireRCpcKind, value: Register, base: Register)
         case clearExclusive(UInt32)
         case prefetch(PrefetchKind, operation: UInt32, memory: MemoryOperand)
+        /// Move to/from a system register (`MRS Xt, sysreg` / `MSR sysreg, Xt`).
+        case systemRegisterMove(read: Bool, register: SystemRegister, value: Register)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -2081,6 +2157,7 @@ internal typealias CompareAndSwapPairKind = A64.CompareAndSwapPairKind
 internal typealias AtomicMemoryKind = A64.AtomicMemoryKind
 internal typealias LoadAcquireRCpcKind = A64.LoadAcquireRCpcKind
 internal typealias PrefetchKind = A64.PrefetchKind
+internal typealias SystemRegister = A64.SystemRegister
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
