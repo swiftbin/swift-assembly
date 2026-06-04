@@ -448,6 +448,81 @@ internal enum A64 {
         case ldp, stp
     }
 
+    /// Load/store exclusive and load-acquire/store-release instructions.
+    /// Covers the exclusive single (`ldxr`/`stxr`), acquiring exclusive
+    /// (`ldaxr`/`stlxr`), non-exclusive ordered (`ldar`/`stlr`), and the
+    /// exclusive pair (`ldxp`/`stxp`/`ldaxp`/`stlxp`) forms.
+    enum LoadStoreExclusiveKind: String, Equatable, CaseIterable {
+        case ldxrb, ldxrh, ldxr
+        case stxrb, stxrh, stxr
+        case ldaxrb, ldaxrh, ldaxr
+        case stlxrb, stlxrh, stlxr
+        case ldarb, ldarh, ldar
+        case stlrb, stlrh, stlr
+        case ldxp, ldaxp
+        case stxp, stlxp
+
+        var isPair: Bool {
+            switch self {
+            case .ldxp, .ldaxp, .stxp, .stlxp: return true
+            default: return false
+            }
+        }
+
+        /// True for the store-exclusive forms taking a `Ws` status register.
+        var hasStatusRegister: Bool {
+            switch self {
+            case .stxrb, .stxrh, .stxr, .stlxrb, .stlxrh, .stlxr, .stxp, .stlxp: return true
+            default: return false
+            }
+        }
+
+        /// The `o2` field at bit 23 (set for the non-exclusive ordered forms).
+        var o2: UInt32 {
+            switch self {
+            case .ldarb, .ldarh, .ldar, .stlrb, .stlrh, .stlr: return 1
+            default: return 0
+            }
+        }
+
+        /// The `L` (load) field at bit 22.
+        var l: UInt32 {
+            switch self {
+            case .ldxrb, .ldxrh, .ldxr, .ldaxrb, .ldaxrh, .ldaxr, .ldarb, .ldarh, .ldar, .ldxp, .ldaxp:
+                return 1
+            default:
+                return 0
+            }
+        }
+
+        /// The `o0` field at bit 15 (acquire/release ordering).
+        var o0: UInt32 {
+            switch self {
+            case .ldaxrb, .ldaxrh, .ldaxr, .stlxrb, .stlxrh, .stlxr,
+                 .ldarb, .ldarh, .ldar, .stlrb, .stlrh, .stlr, .ldaxp, .stlxp:
+                return 1
+            default:
+                return 0
+            }
+        }
+
+        /// Fixed `size` field for byte/half forms; `nil` selects the
+        /// width-dependent word/doubleword encoding.
+        var fixedSize: UInt32? {
+            switch self {
+            case .ldxrb, .stxrb, .ldaxrb, .stlxrb, .ldarb, .stlrb: return 0b00
+            case .ldxrh, .stxrh, .ldaxrh, .stlxrh, .ldarh, .stlrh: return 0b01
+            default: return nil
+            }
+        }
+
+        static func decode(o2: UInt32, l: UInt32, o1: UInt32, o0: UInt32, fixedSize: UInt32?) -> LoadStoreExclusiveKind? {
+            allCases.first {
+                $0.o2 == o2 && $0.l == l && ($0.isPair ? 1 : 0) == o1 && $0.o0 == o0 && $0.fixedSize == fixedSize
+            }
+        }
+    }
+
     /// Advanced SIMD load/store multiple structures (`LD1`–`LD4` / `ST1`–`ST4`).
     enum LoadStoreMultipleKind: String, Equatable, CaseIterable {
         case st1, ld1, st2, ld2, st3, ld3, st4, ld4
@@ -1674,6 +1749,7 @@ internal enum A64 {
         case exceptionReturn
         case barrier(BarrierKind, option: UInt32)
         case hint(UInt32)
+        case loadStoreExclusive(LoadStoreExclusiveKind, status: Register?, value: Register, value2: Register?, base: Register)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -1827,6 +1903,7 @@ internal typealias MultiplyWideKind = A64.MultiplyWideKind
 internal typealias BitfieldKind = A64.BitfieldKind
 internal typealias AddSubCarryKind = A64.AddSubCarryKind
 internal typealias HintKind = A64.HintKind
+internal typealias LoadStoreExclusiveKind = A64.LoadStoreExclusiveKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

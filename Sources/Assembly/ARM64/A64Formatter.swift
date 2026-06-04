@@ -94,6 +94,13 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(source)), \(formatCondition(condition))"
         case .loadStoreSingle(let kind, let target, let memory):
             return "\(kind.rawValue) \(([formatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .loadStoreExclusive(let kind, let status, let value, let value2, let base):
+            var operands: [String] = []
+            if let status { operands.append(formatRegister(status)) }
+            operands.append(formatRegister(value))
+            if let value2 { operands.append(formatRegister(value2)) }
+            operands += formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
+            return "\(kind.rawValue) \(operands.joined(separator: ", "))"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

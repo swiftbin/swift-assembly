@@ -1167,6 +1167,32 @@ internal enum A64InstructionParser {
                 target: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
                 memory: try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
             )
+        case "ldxrb", "ldxrh", "ldxr", "stxrb", "stxrh", "stxr",
+             "ldaxrb", "ldaxrh", "ldaxr", "stlxrb", "stlxrh", "stlxr",
+             "ldarb", "ldarh", "ldar", "stlrb", "stlrh", "stlr",
+             "ldxp", "ldaxp", "stxp", "stlxp":
+            guard parts.count == 1 else { return nil }
+            let kind = A64.LoadStoreExclusiveKind(rawValue: mnemonic)!
+            let expected = (kind.hasStatusRegister ? 1 : 0) + (kind.isPair ? 2 : 1) + 1
+            try expectOperandCount(instruction, exactly: expected)
+            var index = 0
+            var status: A64.Register?
+            if kind.hasStatusRegister {
+                status = try A64Parser.integerRegister(instruction.operands[index], allowSP: false)
+                index += 1
+            }
+            let value = try A64Parser.integerRegister(instruction.operands[index], allowSP: false)
+            index += 1
+            var value2: A64.Register?
+            if kind.isPair {
+                value2 = try A64Parser.integerRegister(instruction.operands[index], allowSP: false)
+                index += 1
+            }
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: index)
+            guard case .unsignedOffset(let base, 0) = memory else {
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[index...].joined(separator: ", "))
+            }
+            return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
         case "ldp", "stp":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 3...4)

@@ -32,6 +32,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeDataProcessingOneSource(word) { return instruction }
         if let instruction = decodeConditionalSelect(word) { return instruction }
         if let instruction = decodeConditionalCompare(word) { return instruction }
+        if let instruction = decodeLoadStoreExclusive(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -566,6 +567,41 @@ internal enum A64InstructionDecoder {
         }
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         return .conditionalCompare(kind, first: rn, second: second, nzcv: nzcv, condition: condition)
+    }
+
+    private static func decodeLoadStoreExclusive(_ word: UInt32) -> Instruction? {
+        guard word & 0x3f00_0000 == 0x0800_0000 else { return nil }
+        let size = (word >> 30) & 3
+        let o2 = (word >> 23) & 1
+        let l = (word >> 22) & 1
+        let o1 = (word >> 21) & 1
+        let o0 = (word >> 15) & 1
+
+        let fixedSize: UInt32?
+        if o1 == 1 {
+            guard size == 2 || size == 3 else { return nil }
+            fixedSize = nil
+        } else {
+            switch size {
+            case 0: fixedSize = 0
+            case 1: fixedSize = 1
+            case 2, 3: fixedSize = nil
+            default: return nil
+            }
+        }
+
+        guard let kind = A64.LoadStoreExclusiveKind.decode(o2: o2, l: l, o1: o1, o0: o0, fixedSize: fixedSize) else {
+            return nil
+        }
+
+        let valueWidth = fixedSize == nil ? (size == 3 ? 64 : 32) : 32
+        let status: IntegerRegister? = kind.hasStatusRegister
+            ? integerRegister(number: (word >> 16) & 0x1f, width: 32) : nil
+        let value = integerRegister(number: word & 0x1f, width: valueWidth)
+        let value2: IntegerRegister? = kind.isPair
+            ? integerRegister(number: (word >> 10) & 0x1f, width: valueWidth) : nil
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

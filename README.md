@@ -31,6 +31,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - add / subtract extended register (uxtb / uxth / uxtw / uxtx / sxtb / sxth / sxtw / sxtx with an optional shift, including stack-pointer operands)
 - hint instructions (yield / wfe / wfi / sev / sevl / esb / csdb and the generic hint #imm)
 - load / store (single and pair, including pre/post-indexed)
+- load / store exclusive and acquire/release ordered (ldxr / stxr / ldaxr / stlxr / ldar / stlr with byte/half/word/doubleword forms, plus the ldxp / stxp / ldaxp / stlxp pairs)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)

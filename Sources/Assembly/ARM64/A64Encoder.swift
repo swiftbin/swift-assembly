@@ -127,6 +127,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.conditionalSet(kind, destination: destination, condition: condition)
         case .conditionalSelectAlias(let kind, let destination, let source, let condition):
             return try A64DataProcessingEncoder.conditionalSelectAlias(kind, destination: destination, source: source, condition: condition)
+        case .loadStoreExclusive(let kind, let status, let value, let value2, let base):
+            return try A64LoadStoreEncoder.exclusive(kind, status: status, value: value, value2: value2, base: base)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -438,6 +440,44 @@ internal enum A64LogicalEncoder {
 }
 
 internal enum A64LoadStoreEncoder {
+    static func exclusive(_ kind: A64.LoadStoreExclusiveKind, status: IntegerRegister?, value rt: IntegerRegister, value2 rt2: IntegerRegister?, base: IntegerRegister) throws -> UInt32 {
+        // The base must be a 64-bit address register (X or SP).
+        guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+
+        // Determine the size field and validate the value register width.
+        let size: UInt32
+        if let fixed = kind.fixedSize {
+            guard !rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            size = fixed
+        } else {
+            size = rt.is64Bit ? 0b11 : 0b10
+        }
+
+        // Status register (Ws) for the store-exclusive forms; always 32-bit.
+        let rsNum: UInt32
+        if kind.hasStatusRegister {
+            guard let status, !status.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            rsNum = status.encodedNumber
+        } else {
+            guard status == nil else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            rsNum = 0b11111
+        }
+
+        // Second value register (Rt2) for the pair forms; must match Rt width.
+        let rt2Num: UInt32
+        if kind.isPair {
+            guard let rt2, rt2.is64Bit == rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            rt2Num = rt2.encodedNumber
+        } else {
+            guard rt2 == nil else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            rt2Num = 0b11111
+        }
+
+        let head = (size << 30) | 0x0800_0000 | (kind.o2 << 23) | (kind.l << 22)
+            | ((kind.isPair ? 1 : 0) << 21) | (rsNum << 16) | (kind.o0 << 15) | (rt2Num << 10)
+        return head | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
     static func single(_ kind: A64.LoadStoreSingleKind, target rt: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {
         let mnemonic = kind.rawValue
         let descriptor = SingleDescriptor(kind: kind, rt: rt)

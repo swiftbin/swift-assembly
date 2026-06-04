@@ -316,6 +316,77 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("yield x0"))   // takes no operands
     }
 
+    func testLoadStoreExclusiveInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldxr w0, [x1]"), 0x885f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldxr x0, [x1]"), 0xc85f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldxrb w0, [x1]"), 0x085f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldxrh w0, [x1]"), 0x485f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stxr w2, w0, [x1]"), 0x88027c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stxr w2, x0, [x1]"), 0xc8027c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stxrb w2, w0, [x1]"), 0x08027c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stxrh w2, w0, [x1]"), 0x48027c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaxr w0, [x1]"), 0x885ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaxr x0, [x1]"), 0xc85ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaxrb w0, [x1]"), 0x085ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaxrh w0, [x1]"), 0x485ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlxr w2, w0, [x1]"), 0x8802fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlxr w2, x0, [x1]"), 0xc802fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlxrb w2, w0, [x1]"), 0x0802fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlxrh w2, w0, [x1]"), 0x4802fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldar w0, [x1]"), 0x88dffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldar x0, [x1]"), 0xc8dffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldarb w0, [x1]"), 0x08dffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldarh w0, [x1]"), 0x48dffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlr w0, [x1]"), 0x889ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlr x0, [x1]"), 0xc89ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlrb w0, [x1]"), 0x089ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlrh w0, [x1]"), 0x489ffc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldxp w0, w1, [x2]"), 0x887f0440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldxp x0, x1, [x2]"), 0xc87f0440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stxp w4, w0, w1, [x2]"), 0x88240440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stxp w4, x0, x1, [x2]"), 0xc8240440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldaxp w0, w1, [x2]"), 0x887f8440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlxp w4, w0, w1, [x2]"), 0x88248440)
+    }
+
+    func testDisassembleLoadStoreExclusive() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x885f7c20), "ldxr w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xc85f7c20), "ldxr x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x08027c20), "stxrb w2, w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x88dffc20), "ldar w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x889ffc20), "stlr w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xc87f0440), "ldxp x0, x1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x88248440), "stlxp w4, w0, w1, [x2]")
+    }
+
+    func testLoadStoreExclusiveRoundTrip() throws {
+        for source in [
+            "ldxr w0, [x1]", "ldxr x0, [x1]", "ldxrb w0, [x1]", "ldxrh w0, [x1]",
+            "stxr w2, w0, [x1]", "stxr w2, x0, [x1]", "stxrb w2, w0, [x1]", "stxrh w2, w0, [x1]",
+            "ldaxr w0, [x1]", "ldaxr x0, [x1]", "ldaxrb w0, [x1]", "ldaxrh w0, [x1]",
+            "stlxr w2, w0, [x1]", "stlxr w2, x0, [x1]", "stlxrb w2, w0, [x1]", "stlxrh w2, w0, [x1]",
+            "ldar w0, [x1]", "ldar x0, [x1]", "ldarb w0, [x1]", "ldarh w0, [x1]",
+            "stlr w0, [x1]", "stlr x0, [x1]", "stlrb w0, [x1]", "stlrh w0, [x1]",
+            "ldxp w0, w1, [x2]", "ldxp x0, x1, [x2]", "stxp w4, w0, w1, [x2]", "stxp w4, x0, x1, [x2]",
+            "ldaxp w0, w1, [x2]", "stlxp w4, w0, w1, [x2]",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testLoadStoreExclusiveInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldxrb x0, [x1]"))      // byte form requires W
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stxr x2, w0, [x1]"))   // status is always W
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldxr w0, [x1, #8]"))   // no offset allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldxr w0, w1"))         // base must be a memory operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldxp w0, x1, [x2]"))   // mismatched pair widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stxr w2, w0, w1, [x1]")) // too many operands
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldxr w0, w1, [x1]"))   // single form takes one value
+    }
+
     func testAddSubExtendedRegisterInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb"), 0x0b220020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxth"), 0x0b222020)
