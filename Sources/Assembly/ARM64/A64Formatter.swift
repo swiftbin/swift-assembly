@@ -69,6 +69,10 @@ internal enum A64InstructionFormatter {
             case .immediate(let imm): secondText = "#\(imm)"
             }
             return "\(kind.rawValue) \(formatRegister(first)), \(secondText), #\(nzcv), \(formatCondition(condition))"
+        case .conditionalSet(let kind, let destination, let condition):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatCondition(condition))"
+        case .conditionalSelectAlias(let kind, let destination, let source, let condition):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(source)), \(formatCondition(condition))"
         case .loadStoreSingle(let kind, let target, let memory):
             return "\(kind.rawValue) \(([formatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStorePair(let kind, let first, let second, let memory):

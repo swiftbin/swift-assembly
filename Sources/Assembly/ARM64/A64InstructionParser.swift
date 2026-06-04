@@ -934,6 +934,23 @@ internal enum A64InstructionParser {
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false),
                 condition: try A64Parser.condition(instruction.operands[3])
             )
+        case "cset", "csetm":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .conditionalSet(
+                A64.ConditionalSetKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                condition: try A64Parser.condition(instruction.operands[1])
+            )
+        case "cinc", "cinv", "cneg":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .conditionalSelectAlias(
+                A64.ConditionalSelectAliasKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                condition: try A64Parser.condition(instruction.operands[2])
+            )
         case "ccmp", "ccmn":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 4)

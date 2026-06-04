@@ -234,6 +234,52 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ccmp w0, w1, #0, zz"))   // bad condition
     }
 
+    func testConditionalSetAndSelectAliasInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cset w0, eq"), 0x1a9f17e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cset x1, ne"), 0x9a9f07e1)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csetm w2, ge"), 0x5a9fb3e2)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csetm x3, lt"), 0xda9fa3e3)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cinc w4, w5, gt"), 0x1a85d4a4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cinc x6, x7, le"), 0x9a87c4e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cinv w8, w9, mi"), 0x5a895128)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cinv x10, x11, pl"), 0xda8b416a)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cneg w12, w13, vs"), 0x5a8d75ac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cneg x14, x15, hi"), 0xda8f95ee)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cset w16, cc"), 0x1a9f27f0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csetm x17, cs"), 0xda9f33f1)
+    }
+
+    func testDisassembleConditionalSetAndSelectAlias() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1a9f17e0), "cset w0, eq")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a9fb3e2), "csetm w2, ge")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1a85d4a4), "cinc w4, w5, gt")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a895128), "cinv w8, w9, mi")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a8d75ac), "cneg w12, w13, vs")
+        // csinc/csinv/csneg with distinct source registers are NOT aliased.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1a82a420), "csinc w0, w1, w2, ge")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a82c020), "csinv w0, w1, w2, gt")
+    }
+
+    func testConditionalSetAndSelectAliasRoundTrip() throws {
+        for source in [
+            "cset w0, eq", "cset x1, ne", "csetm w2, ge", "csetm x3, lt",
+            "cinc w4, w5, gt", "cinc x6, x7, le", "cinv w8, w9, mi",
+            "cinv x10, x11, pl", "cneg w12, w13, vs", "cneg x14, x15, hi",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "round trip failed for \(source)")
+        }
+    }
+
+    func testConditionalSetAndSelectAliasInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cset w0, al"))      // AL not invertible
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cset w0, nv"))      // NV not invertible
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cinc w0, x1, eq"))  // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cneg w0, w1, nv"))  // NV not invertible
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cset w0, zz"))      // bad condition
+    }
+
     func testAdrAndAdrp() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("adr x0, #0"), 0x10000000)
         XCTAssertEqual(try ARM64Assembler.assembleWord("adr x0, #4"), 0x10000020)

@@ -231,6 +231,32 @@ internal enum A64 {
         case immediate(UInt32)
     }
 
+    /// Conditional-set aliases that take only a destination and a condition
+    /// (`cset`/`csetm`), lowering to `csinc`/`csinv` of the zero register with
+    /// the inverted condition.
+    enum ConditionalSetKind: String, Equatable, CaseIterable {
+        case cset, csetm
+
+        /// The underlying conditional-select operation.
+        var base: ConditionalSelectKind { self == .cset ? .csinc : .csinv }
+    }
+
+    /// Conditional-select aliases that take a destination and a single source
+    /// register (`cinc`/`cinv`/`cneg`), lowering to `csinc`/`csinv`/`csneg`
+    /// with that register in both source positions and the inverted condition.
+    enum ConditionalSelectAliasKind: String, Equatable, CaseIterable {
+        case cinc, cinv, cneg
+
+        /// The underlying conditional-select operation.
+        var base: ConditionalSelectKind {
+            switch self {
+            case .cinc: return .csinc
+            case .cinv: return .csinv
+            case .cneg: return .csneg
+            }
+        }
+    }
+
     enum LoadStoreSingleKind: String, Equatable {
         case ldr, ldrb, ldrh, ldrsb, ldrsh, ldrsw
         case str, strb, strh
@@ -1478,6 +1504,8 @@ internal enum A64 {
         case divide(DivideKind, destination: Register, first: Register, second: Register)
         case conditionalSelect(ConditionalSelectKind, destination: Register, first: Register, second: Register, condition: Condition)
         case conditionalCompare(ConditionalCompareKind, first: Register, second: ConditionalCompareOperand, nzcv: UInt32, condition: Condition)
+        case conditionalSet(ConditionalSetKind, destination: Register, condition: Condition)
+        case conditionalSelectAlias(ConditionalSelectAliasKind, destination: Register, source: Register, condition: Condition)
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
@@ -1607,6 +1635,8 @@ internal typealias VectorMatrixMultiplyKind = A64.VectorMatrixMultiplyKind
 internal typealias ConditionalSelectKind = A64.ConditionalSelectKind
 internal typealias ConditionalCompareKind = A64.ConditionalCompareKind
 internal typealias ConditionalCompareOperand = A64.ConditionalCompareOperand
+internal typealias ConditionalSetKind = A64.ConditionalSetKind
+internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
 internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind
 internal typealias VectorThreeSameExtraKind = A64.VectorThreeSameExtraKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind

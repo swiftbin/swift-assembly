@@ -410,9 +410,32 @@ internal enum A64InstructionDecoder {
         guard let kind = A64.ConditionalSelectKind.decode(op: op, o2: o2),
               let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
         let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rawCond = (word >> 12) & 0xf
         let rd = integerRegister(number: word & 0x1f, width: width)
+
+        // Prefer the conditional-set / conditional-select aliases when the
+        // register pattern and condition (not AL/NV) match. The displayed
+        // condition is the inverse of the encoded one.
+        if rmNum == rnNum, rawCond < 0b1110, let inverted = Condition(rawValue: rawCond ^ 1) {
+            switch kind {
+            case .csinc, .csinv:
+                let setKind: A64.ConditionalSetKind = kind == .csinc ? .cset : .csetm
+                let aliasKind: A64.ConditionalSelectAliasKind = kind == .csinc ? .cinc : .cinv
+                if rnNum == 31 {
+                    return .conditionalSet(setKind, destination: rd, condition: inverted)
+                }
+                return .conditionalSelectAlias(aliasKind, destination: rd, source: integerRegister(number: rnNum, width: width), condition: inverted)
+            case .csneg:
+                return .conditionalSelectAlias(.cneg, destination: rd, source: integerRegister(number: rnNum, width: width), condition: inverted)
+            case .csel:
+                break
+            }
+        }
+
+        let rm = integerRegister(number: rmNum, width: width)
+        let rn = integerRegister(number: rnNum, width: width)
         return .conditionalSelect(kind, destination: rd, first: rn, second: rm, condition: condition)
     }
 

@@ -110,6 +110,10 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.conditionalSelect(kind, destination: destination, first: first, second: second, condition: condition)
         case .conditionalCompare(let kind, let first, let second, let nzcv, let condition):
             return try A64DataProcessingEncoder.conditionalCompare(kind, first: first, second: second, nzcv: nzcv, condition: condition)
+        case .conditionalSet(let kind, let destination, let condition):
+            return try A64DataProcessingEncoder.conditionalSet(kind, destination: destination, condition: condition)
+        case .conditionalSelectAlias(let kind, let destination, let source, let condition):
+            return try A64DataProcessingEncoder.conditionalSelectAlias(kind, destination: destination, source: source, condition: condition)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -861,5 +865,29 @@ internal enum A64DataProcessingEncoder {
             word |= (1 << 11) | (imm5 << 16)
         }
         return word | (condition.rawValue << 12) | (rn.encodedNumber << 5) | nzcv
+    }
+
+    static func conditionalSet(_ kind: A64.ConditionalSetKind, destination rd: IntegerRegister, condition: A64.Condition) throws -> UInt32 {
+        // `cset`/`csetm` lower to `csinc`/`csinv` of the zero register with the
+        // inverted condition; the inversion is undefined for AL/NV.
+        guard condition.rawValue < 0b1110 else { throw AssemblerError.unsupportedCondition(kind.rawValue) }
+        let base = kind.base
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let head = (sf << 31) | (base.op << 30) | 0x1a80_0000
+        let invertedCondition = condition.rawValue ^ 1
+        let zr: UInt32 = 31
+        return head | (zr << 16) | (invertedCondition << 12) | (base.o2 << 10) | (zr << 5) | rd.encodedNumber
+    }
+
+    static func conditionalSelectAlias(_ kind: A64.ConditionalSelectAliasKind, destination rd: IntegerRegister, source rn: IntegerRegister, condition: A64.Condition) throws -> UInt32 {
+        // `cinc`/`cinv`/`cneg` lower to `csinc`/`csinv`/`csneg` with the source
+        // register in both source positions and the inverted condition.
+        guard rd.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        guard condition.rawValue < 0b1110 else { throw AssemblerError.unsupportedCondition(kind.rawValue) }
+        let base = kind.base
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let head = (sf << 31) | (base.op << 30) | 0x1a80_0000
+        let invertedCondition = condition.rawValue ^ 1
+        return head | (rn.encodedNumber << 16) | (invertedCondition << 12) | (base.o2 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 }

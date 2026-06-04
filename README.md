@@ -22,6 +22,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - multiply / divide (mul / madd / msub / udiv / sdiv)
 - conditional select (csel / csinc / csinv / csneg, with a condition operand)
 - conditional compare (ccmp / ccmn, register and `#imm5` forms with `#nzcv` and a condition)
+- conditional set / select aliases (cset / csetm / cinc / cinv / cneg, preferred on disassembly)
 - load / store (single and pair, including pre/post-indexed)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
