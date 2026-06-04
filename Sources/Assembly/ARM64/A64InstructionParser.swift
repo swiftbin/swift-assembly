@@ -1237,6 +1237,40 @@ internal enum A64InstructionParser {
             }
             let value = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
             return .systemRegisterMove(read: false, register: register, value: value)
+        case "sys":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 4...5)
+            let op1 = try systemFieldValue(instruction.operands[0], instruction: "sys")
+            let crn = try cRegisterNumber(instruction.operands[1], instruction: "sys")
+            let crm = try cRegisterNumber(instruction.operands[2], instruction: "sys")
+            let op2 = try systemFieldValue(instruction.operands[3], instruction: "sys")
+            let register = instruction.operands.count == 5
+                ? try A64Parser.integerRegister(instruction.operands[4], allowSP: false) : nil
+            return .systemInstruction(read: false, op1: op1, crn: crn, crm: crm, op2: op2, register: register)
+        case "sysl":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 5)
+            let register = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let op1 = try systemFieldValue(instruction.operands[1], instruction: "sysl")
+            let crn = try cRegisterNumber(instruction.operands[2], instruction: "sysl")
+            let crm = try cRegisterNumber(instruction.operands[3], instruction: "sysl")
+            let op2 = try systemFieldValue(instruction.operands[4], instruction: "sysl")
+            return .systemInstruction(read: true, op1: op1, crn: crn, crm: crm, op2: op2, register: register)
+        case "dc", "ic", "at", "tlbi":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 1...2)
+            guard let alias = A64.SystemInstructionAlias.find(
+                family: mnemonic, name: instruction.operands[0].lowercased()) else {
+                throw AssemblerError.unsupportedOperand(instruction.operands[0])
+            }
+            var register: IntegerRegister?
+            if instruction.operands.count == 2 {
+                register = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            } else if alias.needsRegister {
+                throw AssemblerError.unsupportedOperand(mnemonic)
+            }
+            return .systemInstruction(read: false, op1: alias.op1, crn: alias.crn,
+                                      crm: alias.crm, op2: alias.op2, register: register)
         case "cas", "casa", "casl", "casal", "casb", "casab", "caslb", "casalb",
              "cash", "casah", "caslh", "casalh":
             guard parts.count == 1 else { return nil }
@@ -1962,6 +1996,22 @@ internal enum A64InstructionParser {
             }
         }
         throw AssemblerError.unsupportedOperand(text)
+    }
+
+    /// Parse a `#imm` operand for a `SYS`/`SYSL` `op1`/`op2` field (0–7).
+    private static func systemFieldValue(_ text: String, instruction: String) throws -> UInt32 {
+        let value = try A64Parser.immediate(text)
+        try checkRange(value, 0...7, instruction: instruction)
+        return UInt32(value)
+    }
+
+    /// Parse a `c<n>` operand for a `SYS`/`SYSL` `CRn`/`CRm` field (0–15).
+    private static func cRegisterNumber(_ text: String, instruction: String) throws -> UInt32 {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard trimmed.hasPrefix("c"), let value = UInt32(trimmed.dropFirst()), value <= 15 else {
+            throw AssemblerError.unsupportedOperand(text)
+        }
+        return value
     }
 
     private static func atomicMemory(_ instruction: ParsedInstruction, kind: A64.AtomicMemoryKind) throws -> Instruction {

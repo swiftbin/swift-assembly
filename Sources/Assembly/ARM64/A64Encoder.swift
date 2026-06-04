@@ -151,6 +151,13 @@ internal enum A64InstructionEncoder {
         case .pstate(let field, let immediate):
             try checkRange(Int64(immediate), 0...0xf, instruction: "msr")
             return 0xd500_401f | (field.op1 << 16) | (immediate << 8) | (field.op2 << 5)
+        case .systemInstruction(let read, let op1, let crn, let crm, let op2, let register):
+            if let register = register, !register.is64Bit {
+                throw AssemblerError.invalidRegister(read ? "sysl" : "sys")
+            }
+            let base: UInt32 = read ? 0xd528_0000 : 0xd508_0000
+            let rt = register?.encodedNumber ?? 31
+            return base | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5) | rt
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):

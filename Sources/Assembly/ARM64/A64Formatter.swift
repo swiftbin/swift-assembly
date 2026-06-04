@@ -129,6 +129,20 @@ internal enum A64InstructionFormatter {
                 : "msr \(register.name), \(formatRegister(value))"
         case .pstate(let field, let immediate):
             return "msr \(field.rawValue), #\(immediate)"
+        case .systemInstruction(let read, let op1, let crn, let crm, let op2, let register):
+            if !read, let alias = SystemInstructionAlias.find(op1: op1, crn: crn, crm: crm, op2: op2) {
+                if alias.needsRegister, let register = register {
+                    return "\(alias.family) \(alias.name), \(formatRegister(register))"
+                } else if !alias.needsRegister && register == nil {
+                    return "\(alias.family) \(alias.name)"
+                }
+            }
+            let fields = "#\(op1), c\(crn), c\(crm), #\(op2)"
+            if read {
+                let target = register.map(formatRegister) ?? "xzr"
+                return "sysl \(target), \(fields)"
+            }
+            return register.map { "sys \(fields), \(formatRegister($0))" } ?? "sys \(fields)"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

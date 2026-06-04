@@ -18,6 +18,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeHint(word) { return instruction }
         if let instruction = decodeSystemRegisterMove(word) { return instruction }
         if let instruction = decodePStateImmediate(word) { return instruction }
+        if let instruction = decodeSystemInstruction(word) { return instruction }
         if let instruction = decodeMoveWide(word) { return instruction }
         if let instruction = decodeAddSubImmediate(word) { return instruction }
         if let instruction = decodeAddSubShiftedRegister(word) { return instruction }
@@ -250,6 +251,19 @@ internal enum A64InstructionDecoder {
         guard let field = PStateField.decode(op1: op1, op2: op2) else { return nil }
         let immediate = (word >> 8) & 0xf
         return .pstate(field, immediate: immediate)
+    }
+
+    private static func decodeSystemInstruction(_ word: UInt32) -> Instruction? {
+        // SYS/SYSL: bits[31:22]=1101010100, bits[20:19]=01; bit21=L selects SYSL.
+        guard word & 0xffd8_0000 == 0xd508_0000 else { return nil }
+        let read = (word >> 21) & 1 == 1
+        let op1 = (word >> 16) & 0x7
+        let crn = (word >> 12) & 0xf
+        let crm = (word >> 8) & 0xf
+        let op2 = (word >> 5) & 0x7
+        let rt = word & 0x1f
+        let register: IntegerRegister? = rt == 31 ? nil : integerRegister(number: rt, width: 64)
+        return .systemInstruction(read: read, op1: op1, crn: crn, crm: crm, op2: op2, register: register)
     }
 
     private static func decodePointerAuthentication(_ word: UInt32) -> Instruction? {

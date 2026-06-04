@@ -587,6 +587,60 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("msr daifset"))       // missing operand
     }
 
+    func testSystemInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc civac, x0"), 0xd50b7e20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc cvac, x1"), 0xd50b7a21)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc zva, x3"), 0xd50b7423)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc isw, x0"), 0xd5087640)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ic ialluis"), 0xd508711f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ic ivau, x4"), 0xd50b7524)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("at s1e1r, x5"), 0xd5087805)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vmalle1"), 0xd508871f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vae1, x6"), 0xd5088726)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vale1is, x0"), 0xd50883a0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sys #0, c7, c5, #0, x0"), 0xd5087500)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sysl x7, #0, c7, c5, #0"), 0xd5287507)
+    }
+
+    func testDisassembleSystemInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50b7e20), "dc civac, x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd508711f), "ic ialluis")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5087805), "at s1e1r, x5")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5088726), "tlbi vae1, x6")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5287507), "sysl x7, #0, c7, c5, #0")
+        // A SYS whose fields match a known alias canonicalizes to that alias.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd508751f), "ic iallu")
+        // A SYS without a matching alias keeps the generic form.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5087500), "sys #0, c7, c5, #0, x0")
+    }
+
+    func testSystemInstructionRoundTrip() throws {
+        var sources: [String] = []
+        for alias in ["dc ivac", "dc isw", "dc csw", "dc cisw", "dc zva", "dc cvac",
+                      "dc cvau", "dc cvap", "dc civac", "ic ivau", "at s1e1r", "at s1e1w",
+                      "at s1e0r", "at s1e0w", "tlbi vae1", "tlbi aside1", "tlbi vaae1",
+                      "tlbi vale1", "tlbi vaale1", "tlbi vae1is", "tlbi aside1is",
+                      "tlbi vaae1is", "tlbi vale1is", "tlbi vaale1is"] {
+            sources.append("\(alias), x2")
+        }
+        sources.append(contentsOf: ["ic ialluis", "ic iallu", "tlbi vmalle1", "tlbi vmalle1is"])
+        sources.append(contentsOf: ["sys #1, c7, c5, #0, x4", "sysl x5, #0, c2, c0, #3"])
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testSystemInstructionInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dc bogus, x0"))     // unknown DC op
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dc civac"))         // requires a register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("at s1e1r, w0"))     // register must be 64-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sys #8, c7, c5, #0")) // op1 out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sys #0, x7, c5, #0")) // CRn must be c<n>
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

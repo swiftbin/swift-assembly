@@ -590,6 +590,62 @@ internal enum A64 {
         case prfm, prfum
     }
 
+    /// A named alias of a `SYS` instruction (`DC`, `IC`, `AT`, `TLBI`).
+    struct SystemInstructionAlias: Equatable {
+        var family: String
+        var name: String
+        var op1: UInt32
+        var crn: UInt32
+        var crm: UInt32
+        var op2: UInt32
+        var needsRegister: Bool
+
+        static let all: [SystemInstructionAlias] = [
+            // Data cache (DC), CRn=c7.
+            SystemInstructionAlias(family: "dc", name: "ivac", op1: 0, crn: 7, crm: 6, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "isw", op1: 0, crn: 7, crm: 6, op2: 2, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "csw", op1: 0, crn: 7, crm: 10, op2: 2, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "cisw", op1: 0, crn: 7, crm: 14, op2: 2, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "zva", op1: 3, crn: 7, crm: 4, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "cvac", op1: 3, crn: 7, crm: 10, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "cvau", op1: 3, crn: 7, crm: 11, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "cvap", op1: 3, crn: 7, crm: 12, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "dc", name: "civac", op1: 3, crn: 7, crm: 14, op2: 1, needsRegister: true),
+            // Instruction cache (IC), CRn=c7.
+            SystemInstructionAlias(family: "ic", name: "ialluis", op1: 0, crn: 7, crm: 1, op2: 0, needsRegister: false),
+            SystemInstructionAlias(family: "ic", name: "iallu", op1: 0, crn: 7, crm: 5, op2: 0, needsRegister: false),
+            SystemInstructionAlias(family: "ic", name: "ivau", op1: 3, crn: 7, crm: 5, op2: 1, needsRegister: true),
+            // Address translation (AT), CRn=c7.
+            SystemInstructionAlias(family: "at", name: "s1e1r", op1: 0, crn: 7, crm: 8, op2: 0, needsRegister: true),
+            SystemInstructionAlias(family: "at", name: "s1e1w", op1: 0, crn: 7, crm: 8, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "at", name: "s1e0r", op1: 0, crn: 7, crm: 8, op2: 2, needsRegister: true),
+            SystemInstructionAlias(family: "at", name: "s1e0w", op1: 0, crn: 7, crm: 8, op2: 3, needsRegister: true),
+            // TLB invalidate (TLBI), CRn=c8.
+            SystemInstructionAlias(family: "tlbi", name: "vmalle1is", op1: 0, crn: 8, crm: 3, op2: 0, needsRegister: false),
+            SystemInstructionAlias(family: "tlbi", name: "vae1is", op1: 0, crn: 8, crm: 3, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "aside1is", op1: 0, crn: 8, crm: 3, op2: 2, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vaae1is", op1: 0, crn: 8, crm: 3, op2: 3, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vale1is", op1: 0, crn: 8, crm: 3, op2: 5, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vaale1is", op1: 0, crn: 8, crm: 3, op2: 7, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vmalle1", op1: 0, crn: 8, crm: 7, op2: 0, needsRegister: false),
+            SystemInstructionAlias(family: "tlbi", name: "vae1", op1: 0, crn: 8, crm: 7, op2: 1, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "aside1", op1: 0, crn: 8, crm: 7, op2: 2, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vaae1", op1: 0, crn: 8, crm: 7, op2: 3, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vale1", op1: 0, crn: 8, crm: 7, op2: 5, needsRegister: true),
+            SystemInstructionAlias(family: "tlbi", name: "vaale1", op1: 0, crn: 8, crm: 7, op2: 7, needsRegister: true),
+        ]
+
+        /// Look up an alias by its family (`dc`/`ic`/`at`/`tlbi`) and operation name.
+        static func find(family: String, name: String) -> SystemInstructionAlias? {
+            all.first { $0.family == family && $0.name == name }
+        }
+
+        /// Look up an alias by its encoded `op1`/`CRn`/`CRm`/`op2` fields.
+        static func find(op1: UInt32, crn: UInt32, crm: UInt32, op2: UInt32) -> SystemInstructionAlias? {
+            all.first { $0.op1 == op1 && $0.crn == crn && $0.crm == crm && $0.op2 == op2 }
+        }
+    }
+
     /// A PSTATE field written by `MSR <field>, #imm` (MSR immediate).
     enum PStateField: String, Equatable, CaseIterable {
         case spsel, daifset, daifclr, uao, pan, dit, ssbs
@@ -2030,6 +2086,8 @@ internal enum A64 {
         case systemRegisterMove(read: Bool, register: SystemRegister, value: Register)
         /// Write a PSTATE field with an immediate (`MSR <field>, #imm`).
         case pstate(PStateField, immediate: UInt32)
+        /// A system instruction (`SYS`/`SYSL` and the `DC`/`IC`/`AT`/`TLBI` aliases).
+        case systemInstruction(read: Bool, op1: UInt32, crn: UInt32, crm: UInt32, op2: UInt32, register: Register?)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -2191,6 +2249,7 @@ internal typealias LoadAcquireRCpcKind = A64.LoadAcquireRCpcKind
 internal typealias PrefetchKind = A64.PrefetchKind
 internal typealias SystemRegister = A64.SystemRegister
 internal typealias PStateField = A64.PStateField
+internal typealias SystemInstructionAlias = A64.SystemInstructionAlias
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
