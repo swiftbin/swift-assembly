@@ -81,6 +81,16 @@ internal enum A64InstructionEncoder {
             return 0xd4200000 | (UInt32(immediate) << 5)
         case .exception(.halt, let immediate):
             return 0xd4400000 | (UInt32(immediate) << 5)
+        case .exception(.hypervisorCall, let immediate):
+            return 0xd4000002 | (UInt32(immediate) << 5)
+        case .exception(.secureMonitorCall, let immediate):
+            return 0xd4000003 | (UInt32(immediate) << 5)
+        case .exception(.debugChangeState1, let immediate):
+            return 0xd4a00001 | (UInt32(immediate) << 5)
+        case .exception(.debugChangeState2, let immediate):
+            return 0xd4a00002 | (UInt32(immediate) << 5)
+        case .exception(.debugChangeState3, let immediate):
+            return 0xd4a00003 | (UInt32(immediate) << 5)
         case .exceptionReturn:
             return 0xd69f03e0
         case .barrier(.instructionSynchronization, let option):

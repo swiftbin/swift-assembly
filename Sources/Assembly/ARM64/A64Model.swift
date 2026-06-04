@@ -157,6 +157,11 @@ internal enum A64 {
         case supervisorCall
         case breakpoint
         case halt
+        case hypervisorCall
+        case secureMonitorCall
+        case debugChangeState1
+        case debugChangeState2
+        case debugChangeState3
     }
 
     enum BarrierKind: Equatable {

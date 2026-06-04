@@ -813,6 +813,17 @@ internal enum A64InstructionParser {
         case "hlt":
             guard parts.count == 1 else { return nil }
             return try exception(instruction, kind: .halt, mnemonic: mnemonic)
+        case "hvc":
+            guard parts.count == 1 else { return nil }
+            return try exception(instruction, kind: .hypervisorCall, mnemonic: mnemonic)
+        case "smc":
+            guard parts.count == 1 else { return nil }
+            return try exception(instruction, kind: .secureMonitorCall, mnemonic: mnemonic)
+        case "dcps1", "dcps2", "dcps3":
+            guard parts.count == 1 else { return nil }
+            let kind: A64.ExceptionKind = mnemonic == "dcps1" ? .debugChangeState1
+                : (mnemonic == "dcps2" ? .debugChangeState2 : .debugChangeState3)
+            return try exceptionOptional(instruction, kind: kind, mnemonic: mnemonic)
         case "eret":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
@@ -2217,6 +2228,14 @@ internal enum A64InstructionParser {
     private static func exception(_ instruction: ParsedInstruction, kind: A64.ExceptionKind, mnemonic: String) throws -> Instruction {
         try expectOperandCount(instruction, exactly: 1)
         let immediate = try A64Parser.immediate(instruction.operands[0])
+        try checkRange(immediate, 0...0xffff, instruction: mnemonic)
+        return .exception(kind, immediate: immediate)
+    }
+
+    /// Exception generation with an optional immediate that defaults to 0 (used by `DCPSn`).
+    private static func exceptionOptional(_ instruction: ParsedInstruction, kind: A64.ExceptionKind, mnemonic: String) throws -> Instruction {
+        try expectOperandCount(instruction, 0...1)
+        let immediate = instruction.operands.isEmpty ? 0 : try A64Parser.immediate(instruction.operands[0])
         try checkRange(immediate, 0...0xffff, instruction: mnemonic)
         return .exception(kind, immediate: immediate)
     }

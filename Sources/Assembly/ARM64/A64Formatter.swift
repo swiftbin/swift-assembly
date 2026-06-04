@@ -27,6 +27,16 @@ internal enum A64InstructionFormatter {
             return "brk #\(immediate)"
         case .exception(.halt, let immediate):
             return "hlt #\(immediate)"
+        case .exception(.hypervisorCall, let immediate):
+            return "hvc #\(immediate)"
+        case .exception(.secureMonitorCall, let immediate):
+            return "smc #\(immediate)"
+        case .exception(.debugChangeState1, let immediate):
+            return immediate == 0 ? "dcps1" : "dcps1 #\(immediate)"
+        case .exception(.debugChangeState2, let immediate):
+            return immediate == 0 ? "dcps2" : "dcps2 #\(immediate)"
+        case .exception(.debugChangeState3, let immediate):
+            return immediate == 0 ? "dcps3" : "dcps3 #\(immediate)"
         case .exceptionReturn:
             return "eret"
         case .barrier(.instructionSynchronization, let option):

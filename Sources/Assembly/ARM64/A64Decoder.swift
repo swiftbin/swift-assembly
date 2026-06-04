@@ -233,6 +233,16 @@ internal enum A64InstructionDecoder {
             return .exception(.breakpoint, immediate: immediate)
         case 0xd4400000:
             return .exception(.halt, immediate: immediate)
+        case 0xd4000002:
+            return .exception(.hypervisorCall, immediate: immediate)
+        case 0xd4000003:
+            return .exception(.secureMonitorCall, immediate: immediate)
+        case 0xd4a00001:
+            return .exception(.debugChangeState1, immediate: immediate)
+        case 0xd4a00002:
+            return .exception(.debugChangeState2, immediate: immediate)
+        case 0xd4a00003:
+            return .exception(.debugChangeState3, immediate: immediate)
         default:
             return nil
         }

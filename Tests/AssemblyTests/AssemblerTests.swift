@@ -1024,6 +1024,53 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("setf16 x0"))         // 32-bit only
     }
 
+    func testExceptionGenerationInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("hvc #0"), 0xd4000002)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("hvc #1"), 0xd4000022)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smc #0"), 0xd4000003)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smc #15"), 0xd40001e3)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dcps1"), 0xd4a00001)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dcps1 #0"), 0xd4a00001)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dcps1 #7"), 0xd4a000e1)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dcps2"), 0xd4a00002)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dcps2 #3"), 0xd4a00062)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dcps3"), 0xd4a00003)
+    }
+
+    func testDisassembleExceptionGeneration() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4000002), "hvc #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd40001e3), "smc #15")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4a00001), "dcps1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4a000e1), "dcps1 #7")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4a00002), "dcps2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd4a00003), "dcps3")
+    }
+
+    func testExceptionGenerationRoundTrip() throws {
+        var sources = ["dcps1", "dcps2", "dcps3"]
+        for imm in [0, 1, 15, 4095, 65535] {
+            sources.append("hvc #\(imm)")
+            sources.append("smc #\(imm)")
+        }
+        for imm in [1, 7, 255] {
+            sources.append("dcps1 #\(imm)")
+            sources.append("dcps3 #\(imm)")
+        }
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testExceptionGenerationInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smc"))             // smc needs an immediate
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("hvc #65536"))      // immediate out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dcps1 #65536"))    // immediate out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("dcps1 #0, #1"))    // too many operands
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)
