@@ -120,6 +120,9 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(([formatRegister(value)] + mem).joined(separator: ", "))"
         case .clearExclusive(let immediate):
             return immediate == 15 ? "clrex" : "clrex #\(immediate)"
+        case .prefetch(let kind, let operation, let memory):
+            let op = formatPrefetchOperation(operation)
+            return "\(kind.rawValue) \(([op] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):
@@ -598,6 +601,16 @@ internal enum A64InstructionFormatter {
         case .shiftedRegister(let register, let shift):
             return [formatRegister(register)] + (shift.map { [formatShift($0)] } ?? [])
         }
+    }
+
+    private static func formatPrefetchOperation(_ operation: UInt32) -> String {
+        let type = (operation >> 3) & 3
+        let target = (operation >> 1) & 3
+        let policy = operation & 1
+        let typeNames = ["pld", "pli", "pst"]
+        let targetNames = ["l1", "l2", "l3"]
+        guard type < 3, target < 3 else { return "#\(operation)" }
+        return typeNames[Int(type)] + targetNames[Int(target)] + (policy == 0 ? "keep" : "strm")
     }
 
     private static func formatMemoryOperand(_ memory: MemoryOperand) -> [String] {

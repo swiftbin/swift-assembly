@@ -585,6 +585,11 @@ internal enum A64 {
         }
     }
 
+    /// Prefetch memory (`PRFM` scaled/register, `PRFUM` unscaled).
+    enum PrefetchKind: String, Equatable, CaseIterable {
+        case prfm, prfum
+    }
+
     /// Load-acquire RCpc register (`LDAPR` / `LDAPRB` / `LDAPRH`).
     enum LoadAcquireRCpcKind: String, Equatable, CaseIterable {
         case ldaprb, ldaprh, ldapr
@@ -1916,6 +1921,7 @@ internal enum A64 {
         case atomicMemory(AtomicMemoryKind, source: Register, value: Register?, base: Register)
         case loadAcquireRCpc(LoadAcquireRCpcKind, value: Register, base: Register)
         case clearExclusive(UInt32)
+        case prefetch(PrefetchKind, operation: UInt32, memory: MemoryOperand)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -2074,6 +2080,7 @@ internal typealias CompareAndSwapKind = A64.CompareAndSwapKind
 internal typealias CompareAndSwapPairKind = A64.CompareAndSwapPairKind
 internal typealias AtomicMemoryKind = A64.AtomicMemoryKind
 internal typealias LoadAcquireRCpcKind = A64.LoadAcquireRCpcKind
+internal typealias PrefetchKind = A64.PrefetchKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

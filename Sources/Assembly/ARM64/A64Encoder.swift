@@ -140,6 +140,8 @@ internal enum A64InstructionEncoder {
         case .clearExclusive(let immediate):
             try checkRange(Int64(immediate), 0...0xf, instruction: "clrex")
             return 0xd503_305f | (immediate << 8)
+        case .prefetch(let kind, let operation, let memory):
+            return try A64LoadStoreEncoder.prefetch(kind, operation: operation, memory: memory)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -556,6 +558,36 @@ internal enum A64LoadStoreEncoder {
             size = rt.is64Bit ? 0b11 : 0b10
         }
         return (size << 30) | 0x38bf_c000 | (base.encodedNumber << 5) | rt.encodedNumber
+    }
+
+    static func prefetch(_ kind: A64.PrefetchKind, operation: UInt32, memory: MemoryOperand) throws -> UInt32 {
+        try checkRange(Int64(operation), 0...0x1f, instruction: kind.rawValue)
+        let op = operation & 0x1f
+        switch (kind, memory) {
+        case (.prfm, .unsignedOffset(let base, let offset)):
+            guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            guard offset >= 0, offset % 8 == 0 else {
+                throw AssemblerError.immediateAlignment(instruction: kind.rawValue, value: offset, alignment: 8)
+            }
+            let scaled = offset / 8
+            try checkRange(scaled, 0...0xfff, instruction: kind.rawValue)
+            return 0xf980_0000 | (UInt32(scaled) << 10) | (base.encodedNumber << 5) | op
+
+        case (.prfm, .registerOffset(let base, let rm, let ext, let shift)):
+            guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            let option = ext ?? (rm.is64Bit ? ExtendKind.uxtx : ExtendKind.uxtw)
+            guard shift == 0 || shift == 3 else { throw AssemblerError.unsupportedShift("lsl #\(shift)") }
+            return 0xf8a0_0800 | (rm.encodedNumber << 16) | (option.rawValue << 13)
+                | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | op
+
+        case (.prfum, .unsignedOffset(let base, let offset)), (.prfum, .signedUnscaled(let base, let offset)):
+            guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            try checkRange(offset, -256...255, instruction: kind.rawValue)
+            return 0xf880_0000 | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (base.encodedNumber << 5) | op
+
+        default:
+            throw AssemblerError.unsupportedOperand(kind.rawValue)
+        }
     }
 
     static func single(_ kind: A64.LoadStoreSingleKind, target rt: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {

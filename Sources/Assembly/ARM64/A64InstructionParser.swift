@@ -1193,6 +1193,13 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidMemoryOperand(instruction.operands[index...].joined(separator: ", "))
             }
             return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
+        case "prfm", "prfum":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            let kind = A64.PrefetchKind(rawValue: mnemonic)!
+            let operation = try prefetchOperation(instruction.operands[0])
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            return .prefetch(kind, operation: operation, memory: memory)
         case "ldaprb", "ldaprh", "ldapr":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
@@ -1906,6 +1913,34 @@ internal enum A64InstructionParser {
             }
             return nil
         }
+    }
+
+    /// Parses a prefetch operation operand: a `<type><target><policy>` name
+    /// (e.g. `pldl1keep`, `pstl3strm`) or a 5-bit `#imm`.
+    private static func prefetchOperation(_ text: String) throws -> UInt32 {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("#") {
+            let value = try A64Parser.immediate(trimmed)
+            try checkRange(value, 0...0x1f, instruction: "prfm")
+            return UInt32(value)
+        }
+        let name = trimmed.lowercased()
+        let types = ["pld": UInt32(0), "pli": 1, "pst": 2]
+        let targets = ["l1": UInt32(0), "l2": 1, "l3": 2]
+        for (typeName, type) in types where name.hasPrefix(typeName) {
+            let rest = name.dropFirst(typeName.count)
+            for (targetName, target) in targets where rest.hasPrefix(targetName) {
+                let policyName = rest.dropFirst(targetName.count)
+                let policy: UInt32
+                switch policyName {
+                case "keep": policy = 0
+                case "strm": policy = 1
+                default: continue
+                }
+                return (type << 3) | (target << 1) | policy
+            }
+        }
+        throw AssemblerError.unsupportedOperand(text)
     }
 
     private static func atomicMemory(_ instruction: ParsedInstruction, kind: A64.AtomicMemoryKind) throws -> Instruction {

@@ -37,6 +37,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCompareAndSwap(word) { return instruction }
         if let instruction = decodeAtomicMemory(word) { return instruction }
         if let instruction = decodeLoadAcquireRCpc(word) { return instruction }
+        if let instruction = decodePrefetch(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -731,6 +732,34 @@ internal enum A64InstructionDecoder {
             value: integerRegister(number: word & 0x1f, width: width),
             base: xRegister(number: (word >> 5) & 0x1f)
         )
+    }
+
+    private static func decodePrefetch(_ word: UInt32) -> Instruction? {
+        let operation = word & 0x1f
+        let base = xRegister(number: (word >> 5) & 0x1f)
+
+        // PRFM (immediate, unsigned offset): size=11, opc=10, scaled by 8.
+        if word & 0xffc0_0000 == 0xf980_0000 {
+            let offset = Int64((word >> 10) & 0xfff) * 8
+            return .prefetch(.prfm, operation: operation, memory: .unsignedOffset(base: base, offset: offset))
+        }
+        // PRFM (register offset): size=11, opc=10, bit21=1, bits[11:10]=10.
+        if word & 0xffe0_0c00 == 0xf8a0_0800 {
+            let option = (word >> 13) & 7
+            let s = (word >> 12) & 1
+            let shift = s == 1 ? 3 : 0
+            let rmWidth = (option == 2 || option == 6) ? 32 : 64
+            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let extend: ExtendKind? = option == 3 ? nil : ExtendKind(rawValue: option)
+            return .prefetch(.prfm, operation: operation, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
+        }
+        // PRFUM (unscaled immediate): size=11, opc=10, bit21=0, bits[11:10]=00.
+        if word & 0xffe0_0c00 == 0xf880_0000 {
+            let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+            let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
+            return .prefetch(.prfum, operation: operation, memory: mem)
+        }
+        return nil
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

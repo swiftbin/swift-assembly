@@ -444,6 +444,62 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("casp w0, w1, x2, x3, [x4]"))  // pair widths must match
     }
 
+    func testPrefetchInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0]"), 0xf9800000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0, #8]"), 0xf9800400)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1strm, [x0, #16]"), 0xf9800801)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl2keep, [x0]"), 0xf9800002)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl3keep, [x0]"), 0xf9800004)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm plil1keep, [x0]"), 0xf9800008)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pstl1keep, [x0]"), 0xf9800010)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pstl3strm, [x0, #4088]"), 0xf987fc15)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm #5, [x0]"), 0xf9800005)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0, x1]"), 0xf8a16800)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0, x1, lsl #3]"), 0xf8a17800)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0, w1, uxtw #3]"), 0xf8a15800)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfum pldl1keep, [x0]"), 0xf8800000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfum pldl1keep, [x0, #-4]"), 0xf89fc000)
+    }
+
+    func testDisassemblePrefetch() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf9800000), "prfm pldl1keep, [x0]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf987fc15), "prfm pstl3strm, [x0, #4088]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8a17800), "prfm pldl1keep, [x0, x1, lsl #3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf89fc000), "prfum pldl1keep, [x0, #-4]")
+        // A numeric prefetch operation decodes to its canonical name.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf9800005), "prfm pldl3strm, [x0]")
+    }
+
+    func testPrefetchRoundTrip() throws {
+        var sources: [String] = []
+        for type in ["pld", "pli", "pst"] {
+            for target in ["l1", "l2", "l3"] {
+                for policy in ["keep", "strm"] {
+                    sources.append("prfm \(type)\(target)\(policy), [x0, #16]")
+                    sources.append("prfum \(type)\(target)\(policy), [x1, #-8]")
+                }
+            }
+        }
+        sources.append(contentsOf: [
+            "prfm pldl1keep, [x0]", "prfm pldl1keep, [x0, x1]",
+            "prfm pldl1keep, [x0, x1, lsl #3]", "prfm pldl1keep, [x0, w1, uxtw #3]",
+        ])
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testPrefetchInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0, #7]"))   // offset not a multiple of 8
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("prfm pldl1keep, [x0, #-8]"))  // scaled form is unsigned
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("prfm bogus, [x0]"))           // unknown prefetch op
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("prfm #32, [x0]"))             // op out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("prfum pldl1keep, [x0, x1]"))  // unscaled has no register form
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)
