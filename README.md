@@ -40,6 +40,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - BFloat16 convert (bfcvtn / bfcvtn2, FP32 `.4s` → BF16 `.4h` / `.8h` narrowing)
 - Advanced SIMD half-precision three-same (FP16) arithmetic and compares on `.4h`/`.8h` (fadd / fsub / fmul / fdiv / fmla / fmls / fmax / fmin / fmaxnm / fminnm / fmulx / fcmeq / fcmge / fcmgt / facge / facgt / frecps / frsqrts / fabd / faddp / fmaxp / fminp / fmaxnmp / fminnmp)
 - Advanced SIMD half-precision (FP16) by-element fmla / fmls / fmul / fmulx in both the vector (`.4h`/`.8h`, `Vm.h[index]`) and scalar (`h0, h1, Vm.h[index]`) forms
+- Advanced SIMD half-precision (FP16) two-register misc on `.4h`/`.8h` (fabs / fneg / fsqrt, frintn / frintm / frintp / frintz / frinta / frintx / frinti, frecpe / frsqrte, fcvtns / fcvtnu / fcvtms / fcvtmu / fcvtas / fcvtau / fcvtps / fcvtpu / fcvtzs / fcvtzu / scvtf / ucvtf, and fcmeq / fcmge / fcmgt / fcmle / fcmlt vs #0.0)
 - Advanced SIMD vector x indexed element (mul / mla / mls / sqdmulh / sqrdmulh / fmul / fmla / fmls / fmulx and the long smull(2) / umull / smlal / umlsl / sqdmull / sqdmlal(2) / sqdmlsl forms)
 - Advanced SIMD scalar three-same (add / sub / cmeq / cmge / cmgt / cmhi / cmhs / cmtst / sqadd / uqadd / sqsub / uqsub / sshl / ushl / srshl / urshl / sqshl / uqshl / sqrshl / uqrshl / sqdmulh / sqrdmulh)
 - Advanced SIMD scalar pairwise reductions (addp / faddp / fmaxp / fminp / fmaxnmp / fminnmp)

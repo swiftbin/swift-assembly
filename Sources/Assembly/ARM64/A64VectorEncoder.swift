@@ -81,6 +81,13 @@ internal enum A64VectorEncoder {
         case .fsqrt: u = 1; opcode = 0b11111
         }
 
+        let isFloat = kind == .fabs || kind == .fneg || kind == .fsqrt
+        if isFloat, rn.arrangement.elementWidth == 16 {
+            // FP16 form (`.4h`/`.8h`): the FP16 misc page fixes `a` (bit23) = 1.
+            let head = (rn.arrangement.q << 30) | (u << 29) | fp16TwoRegisterMiscBase | (1 << 23)
+            return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
+
         let size = kind == .rbit ? UInt32(0b01) : rn.arrangement.elementSize
         let head = (rn.arrangement.q << 30) | (u << 29) | 0x0e20_0800 | (size << 22)
         return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
@@ -1077,14 +1084,20 @@ internal enum A64VectorEncoder {
         case .abs, .neg, .sqabs, .sqneg, .suqadd, .usqadd:
             return [.b8, .b16, .h4, .h8, .s2, .s4, .d2].contains(arrangement)
         case .fabs, .fneg, .fsqrt:
-            return [.s2, .s4, .d2].contains(arrangement)
+            return [.h4, .h8, .s2, .s4, .d2].contains(arrangement)
         }
     }
+
+    /// Base for the "Advanced SIMD two-register miscellaneous (FP16)" encoding
+    /// class: bits[28:24]=01110, [22]=1, [21:17]=11100, [11:10]=10. The `a` bit
+    /// at [23] (which equals the regular form's high `size` bit) and the 5-bit
+    /// `opcode` at [16:12] select the operation.
+    static let fp16TwoRegisterMiscBase: UInt32 = 0x0e78_0800
 
     /// Arrangements permitted by the integer compare-against-zero forms.
     private static let allowedCompareZeroInteger: Set<A64.VectorArrangement> = [.b8, .b16, .h4, .h8, .s2, .s4, .d2]
     /// Arrangements permitted by the floating-point compare-against-zero forms.
-    private static let allowedCompareZeroFloat: Set<A64.VectorArrangement> = [.s2, .s4, .d2]
+    private static let allowedCompareZeroFloat: Set<A64.VectorArrangement> = [.h4, .h8, .s2, .s4, .d2]
 
     static func compareZero(_ kind: A64.VectorCompareZeroKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         guard rd.arrangement == rn.arrangement else { throw AssemblerError.invalidRegister(kind.rawValue) }
@@ -1092,6 +1105,11 @@ internal enum A64VectorEncoder {
         guard allowed.contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
 
         let spec = kind.spec
+        if kind.isFloat, rd.arrangement.elementWidth == 16 {
+            // FP16 form: the compare-against-#0.0 opcodes live on the `a`=1 page.
+            let head = (rd.arrangement.q << 30) | (spec.u << 29) | fp16TwoRegisterMiscBase | (1 << 23)
+            return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
         let size = rd.arrangement.elementSize
         let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
         return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
@@ -1099,9 +1117,14 @@ internal enum A64VectorEncoder {
 
     static func convert(_ kind: A64.VectorConvertKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         guard rd.arrangement == rn.arrangement else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        guard [A64.VectorArrangement.s2, .s4, .d2].contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        guard [A64.VectorArrangement.h4, .h8, .s2, .s4, .d2].contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
 
         let spec = kind.spec
+        if rd.arrangement.elementWidth == 16 {
+            // FP16 form: `a` (bit23) carries the high `size` bit selector.
+            let head = (rd.arrangement.q << 30) | (spec.u << 29) | fp16TwoRegisterMiscBase | (spec.sizeHi << 23)
+            return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
         let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
         let size = (spec.sizeHi << 1) | sz
         let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
@@ -1204,10 +1227,17 @@ internal enum A64VectorEncoder {
 
     static func roundReciprocal(_ kind: A64.VectorRoundReciprocalKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         guard rd.arrangement == rn.arrangement else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let allowed: [A64.VectorArrangement] = kind.allowsDouble ? [.s2, .s4, .d2] : [.s2, .s4]
+        let allowed: [A64.VectorArrangement] = kind.allowsFP16
+            ? (kind.allowsDouble ? [.h4, .h8, .s2, .s4, .d2] : [.h4, .h8, .s2, .s4])
+            : (kind.allowsDouble ? [.s2, .s4, .d2] : [.s2, .s4])
         guard allowed.contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
 
         let spec = kind.spec
+        if rd.arrangement.elementWidth == 16 {
+            // FP16 form: `a` (bit23) carries the high `size` bit selector.
+            let head = (rd.arrangement.q << 30) | (spec.u << 29) | fp16TwoRegisterMiscBase | (spec.sizeHi << 23)
+            return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
         let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
         let size = (spec.sizeHi << 1) | sz
         let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)

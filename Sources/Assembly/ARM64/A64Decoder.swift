@@ -48,6 +48,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCryptoSHA3Four(word) { return instruction }
         if let instruction = decodeCryptoRAX1(word) { return instruction }
         if let instruction = decodeCryptoXAR(word) { return instruction }
+        if let instruction = decodeVectorTwoRegisterMiscFP16(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -946,6 +947,55 @@ internal enum A64InstructionDecoder {
         guard word & 0xffe0_0000 == 0xce80_0000 else { return nil }
         let imm6 = (word >> 10) & 0x3f
         return .cryptoXAR(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, imm6: imm6)
+    }
+
+    private static func decodeVectorTwoRegisterMiscFP16(_ word: UInt32) -> Instruction? {
+        // Advanced SIMD two-register miscellaneous (FP16): bits[28:24]=01110,
+        // [22]=1, [21:17]=11100, [11:10]=10. `a`=bit23 carries the regular form's
+        // high `size` bit and selects the operation sub-page.
+        guard word & 0x9f7e_0c00 == 0x0e78_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let a = (word >> 23) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        let arrangement: A64.VectorArrangement = q == 1 ? .h8 : .h4
+        func reg(_ n: UInt32) -> VectorRegister { VectorRegister(number: n, arrangement: arrangement) }
+
+        // fabs / fneg / fsqrt (`a`=1).
+        if a == 1 {
+            let miscKind: A64.VectorTwoRegisterMiscKind?
+            switch (u, opcode) {
+            case (0, 0b01111): miscKind = .fabs
+            case (1, 0b01111): miscKind = .fneg
+            case (1, 0b11111): miscKind = .fsqrt
+            default: miscKind = nil
+            }
+            if let kind = miscKind {
+                return .vectorTwoRegisterMisc(kind, destination: reg(rdNum), source: reg(rnNum))
+            }
+        }
+
+        // Compare against #0.0 (`a`=1): opcodes 01100/01101/01110.
+        if a == 1, [0b01100, 0b01101, 0b01110].contains(opcode),
+           let kind = A64.VectorCompareZeroKind.decode(u: u, opcode: opcode, isFloat: true) {
+            return .vectorCompareZero(kind, destination: reg(rdNum), source: reg(rnNum))
+        }
+
+        // FP↔int convert: opcodes 11010/11011/11100/11101 (high size bit = `a`).
+        if [0b11010, 0b11011, 0b11100, 0b11101].contains(opcode),
+           let kind = A64.VectorConvertKind.decode(u: u, opcode: opcode, sizeHi: a) {
+            return .vectorConvert(kind, destination: reg(rdNum), source: reg(rnNum))
+        }
+
+        // FRINT* and FRECPE/FRSQRTE: opcodes 11000/11001/11100/11101.
+        if [0b11000, 0b11001, 0b11100, 0b11101].contains(opcode),
+           let kind = A64.VectorRoundReciprocalKind.decode(u: u, opcode: opcode, sizeHi: a), kind.allowsFP16 {
+            return .vectorRoundReciprocal(kind, destination: reg(rdNum), source: reg(rnNum))
+        }
+
+        return nil
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {

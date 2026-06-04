@@ -2469,7 +2469,6 @@ final class AssemblerTests: XCTestCase {
 
     func testVectorConvertInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.8b, v1.8b"))   // integer arrangements not allowed
-        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.4h, v1.4h"))   // FP16 not supported here
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtzs v0.2s, v1.4s"))  // arrangement mismatch
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.1d, v1.1d"))   // 1d is the scalar form
     }
@@ -2573,6 +2572,81 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("urecpe v0.2d, v1.2d"))   // urecpe has no double form
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ursqrte v0.2d, v1.2d"))  // ursqrte has no double form
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("frecpe v0.2s, v1.4s"))   // arrangement mismatch
+    }
+
+    func testVectorTwoRegisterMiscFP16Instructions() throws {
+        // fabs / fneg / fsqrt on .4h/.8h.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fabs v0.4h, v1.4h"), 0x0ef8f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fabs v0.8h, v1.8h"), 0x4ef8f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fneg v0.4h, v1.4h"), 0x2ef8f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fsqrt v0.8h, v1.8h"), 0x6ef9f820)
+        // FRINT* roundings.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintn v0.4h, v1.4h"), 0x0e798820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintm v0.4h, v1.4h"), 0x0e799820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintp v0.4h, v1.4h"), 0x0ef98820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintz v0.4h, v1.4h"), 0x0ef99820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinta v0.4h, v1.4h"), 0x2e798820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintx v0.4h, v1.4h"), 0x2e799820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinti v0.4h, v1.4h"), 0x2ef99820)
+        // Reciprocal estimates.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpe v0.4h, v1.4h"), 0x0ef9d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrte v0.4h, v1.4h"), 0x2ef9d820)
+        // FP↔int converts.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns v0.4h, v1.4h"), 0x0e79a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtnu v0.4h, v1.4h"), 0x2e79a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtms v0.4h, v1.4h"), 0x0e79b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtmu v0.4h, v1.4h"), 0x2e79b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtas v0.4h, v1.4h"), 0x0e79c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtau v0.4h, v1.4h"), 0x2e79c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtps v0.4h, v1.4h"), 0x0ef9a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtpu v0.4h, v1.4h"), 0x2ef9a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs v0.4h, v1.4h"), 0x0ef9b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu v0.4h, v1.4h"), 0x2ef9b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf v0.4h, v1.4h"), 0x0e79d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf v0.8h, v1.8h"), 0x6e79d820)
+        // Compare against #0.0.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq v0.4h, v1.4h, #0.0"), 0x0ef8d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmge v0.4h, v1.4h, #0.0"), 0x2ef8c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt v0.4h, v1.4h, #0.0"), 0x0ef8c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmle v0.4h, v1.4h, #0.0"), 0x2ef8d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmlt v0.4h, v1.4h, #0.0"), 0x0ef8e820)
+    }
+
+    func testDisassembleVectorTwoRegisterMiscFP16() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ef8f820), "fabs v0.4h, v1.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ef9f820), "fsqrt v0.8h, v1.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e798820), "frintn v0.4h, v1.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ef9d820), "frecpe v0.4h, v1.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e79d820), "scvtf v0.4h, v1.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ef8c820), "fcmgt v0.4h, v1.4h, #0.0")
+    }
+
+    func testVectorTwoRegisterMiscFP16RoundTrip() throws {
+        let sources = [
+            "fabs v2.4h, v3.4h", "fneg v4.8h, v5.8h", "fsqrt v6.4h, v7.4h",
+            "frintn v8.4h, v9.4h", "frintm v10.8h, v11.8h", "frintp v12.4h, v13.4h",
+            "frintz v14.4h, v15.4h", "frinta v16.4h, v17.4h", "frintx v18.8h, v19.8h",
+            "frinti v20.4h, v21.4h", "frecpe v22.4h, v23.4h", "frsqrte v24.8h, v25.8h",
+            "fcvtns v26.4h, v27.4h", "fcvtnu v28.4h, v29.4h", "fcvtms v30.4h, v31.4h",
+            "fcvtmu v0.8h, v1.8h", "fcvtas v2.4h, v3.4h", "fcvtau v4.4h, v5.4h",
+            "fcvtps v6.4h, v7.4h", "fcvtpu v8.4h, v9.4h", "fcvtzs v10.4h, v11.4h",
+            "fcvtzu v12.4h, v13.4h", "scvtf v14.8h, v15.8h", "ucvtf v16.4h, v17.4h",
+            "fcmeq v18.4h, v19.4h, #0.0", "fcmge v20.4h, v21.4h, #0.0",
+            "fcmgt v22.4h, v23.4h, #0.0", "fcmle v24.4h, v25.4h, #0.0",
+            "fcmlt v26.8h, v27.8h, #0.0",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorTwoRegisterMiscFP16InvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fabs v0.2h, v1.2h"))         // .2h not a valid arrangement
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fsqrt v0.4h, v1.8h"))        // arrangement mismatch
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf v0.4h, v1.4s"))        // arrangement mismatch
     }
 
     func testVectorFPConvertPrecisionInstructions() throws {

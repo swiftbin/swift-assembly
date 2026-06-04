@@ -430,6 +430,15 @@ internal enum A64 {
             }
         }
 
+        /// `URECPE`/`URSQRTE` are integer estimates with no half-precision form;
+        /// the FRINT* roundings and FRECPE/FRSQRTE accept `.4h`/`.8h`.
+        var allowsFP16: Bool {
+            switch self {
+            case .urecpe, .ursqrte: return false
+            default: return true
+            }
+        }
+
         static func decode(u: UInt32, opcode: UInt32, sizeHi: UInt32) -> VectorRoundReciprocalKind? {
             allCases.first { $0.spec == (u, opcode, sizeHi) }
         }
