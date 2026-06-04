@@ -1927,6 +1927,16 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrts s0, s1, s2"), 0x5ea2fc20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fabd s0, s1, s2"), 0x7ea2d420)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fabd d0, d1, d2"), 0x7ee2d420)
+        // Half-precision (`h` register) forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx h0, h1, h2"), 0x5e421c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq h0, h1, h2"), 0x5e422420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmge h0, h1, h2"), 0x7e422420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt h0, h1, h2"), 0x7ec22420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("facge h0, h1, h2"), 0x7e422c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("facgt h0, h1, h2"), 0x7ec22c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecps h0, h1, h2"), 0x5e423c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrts h0, h1, h2"), 0x5ec23c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fabd h0, h1, h2"), 0x7ec21420)
     }
 
     func testDisassembleScalarThreeSameFP() throws {
@@ -1934,6 +1944,9 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ea2e420), "fcmgt s0, s1, s2")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea2fc20), "frsqrts s0, s1, s2")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ee2d420), "fabd d0, d1, d2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e421c20), "fmulx h0, h1, h2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ec21420), "fabd h0, h1, h2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ec23c20), "frsqrts h0, h1, h2")
     }
 
     func testScalarThreeSameFPRoundTrip() throws {
@@ -1942,6 +1955,9 @@ final class AssemblerTests: XCTestCase {
             "fcmge d9, d10, d11", "fcmgt s12, s13, s14", "facge d15, d16, d17",
             "facgt s18, s19, s20", "frecps d21, d22, d23", "frsqrts s24, s25, s26",
             "fabd d27, d28, d29", "fabd s30, s31, s0",
+            "fmulx h1, h2, h3", "fcmeq h4, h5, h6", "fcmge h7, h8, h9",
+            "fcmgt h10, h11, h12", "facge h13, h14, h15", "facgt h16, h17, h18",
+            "frecps h19, h20, h21", "frsqrts h22, h23, h24", "fabd h25, h26, h27",
         ]
         for source in sources {
             let word = try ARM64Assembler.assembleWord(source)

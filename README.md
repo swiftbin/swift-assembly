@@ -50,7 +50,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - Advanced SIMD scalar x indexed element (sqdmlal / sqdmlsl / sqdmull / sqdmulh / sqrdmulh / fmul / fmla / fmls / fmulx)
 - Advanced SIMD scalar copy (dup / mov from a vector element to a scalar FP register)
 - Advanced SIMD scalar FP two-register misc (fcvtns / fcvtnu / fcvtms / fcvtmu / fcvtas / fcvtau / fcvtps / fcvtpu / fcvtzs / fcvtzu / scvtf / ucvtf / frecpe / frsqrte / frecpx / fcvtxn and the compare-against-#0.0 fcmeq / fcmge / fcmgt / fcmle / fcmlt)
-- Advanced SIMD scalar FP three-same (fmulx / fcmeq / fcmge / fcmgt / facge / facgt / frecps / frsqrts / fabd)
+- Advanced SIMD scalar FP three-same (fmulx / fcmeq / fcmge / fcmgt / facge / facgt / frecps / frsqrts / fabd), in both single/double (`s`/`d`) and half-precision (`h`) forms
 - Advanced SIMD scalar shift by immediate, narrowing (sqshrn / sqrshrn / uqshrn / uqrshrn / sqshrun / sqrshrun)
 - Advanced SIMD scalar two-register misc, saturating extract-narrow (sqxtn / uqxtn / sqxtun)
 - Advanced SIMD scalar shift by immediate, fixed-point convert (scvtf / ucvtf / fcvtzs / fcvtzu with #fbits)

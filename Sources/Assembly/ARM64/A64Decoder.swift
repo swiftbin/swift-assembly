@@ -80,6 +80,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarIndexed(word) { return instruction }
         if let instruction = decodeScalarCopy(word) { return instruction }
         if let instruction = decodeScalarFPTwoRegisterMisc(word) { return instruction }
+        if let instruction = decodeScalarThreeSameFP16(word) { return instruction }
         if let instruction = decodeScalarThreeSameFP(word) { return instruction }
         if let instruction = decodeScalarShiftNarrow(word) { return instruction }
         if let instruction = decodeScalarTwoRegisterMiscNarrow(word) { return instruction }
@@ -2106,6 +2107,30 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: width),
             source: floatRegister(number: rnNum, width: width),
             fbits: fbits)
+    }
+
+    private static func decodeScalarThreeSameFP16(_ word: UInt32) -> Instruction? {
+        // Half-precision scalar three-same: bits[31:30]=01, bits[28:24]=11110,
+        // bit22=1, bit21=0, bits[15:14]=00, bit10=1. Distinguished by (U, bit23,
+        // opcode) where the encoded opcode field is only 3 bits ([13:11]) and the
+        // full opcode is 0b11_000 | field.
+        guard word & 0xdf60_c400 == 0x5e40_0400 else { return nil }
+        let u = (word >> 29) & 1
+        let hi = (word >> 23) & 1
+        let opcode = 0b11000 | ((word >> 11) & 0b111)
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarThreeSameFPKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.u == u && spec.hi == hi && spec.opcode == opcode
+        }) else { return nil }
+
+        return .scalarThreeSameFP(kind,
+            destination: floatRegister(number: rdNum, width: 16),
+            first: floatRegister(number: rnNum, width: 16),
+            second: floatRegister(number: rmNum, width: 16))
     }
 
     private static func decodeScalarThreeSameFP(_ word: UInt32) -> Instruction? {

@@ -805,6 +805,15 @@ internal enum A64VectorEncoder {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
 
         guard rd.width == rn.width, rn.width == rm.width else { throw fail() }
+
+        // Half-precision (`h` registers) use a distinct encoding with a 3-bit
+        // opcode field and bit23 carrying the `hi` selector.
+        if rd.width == 16 {
+            // Base: bits[31:30]=01, bits[28:24]=11110, bit22=1, bit21=0, bits[15:14]=00, bit10=1.
+            let base: UInt32 = 0x5e40_0400
+            return base | (spec.u << 29) | (spec.hi << 23) | (rm.encodedNumber << 16) | ((spec.opcode & 0b111) << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
+
         let sz: UInt32
         switch rd.width {
         case 32: sz = 0
