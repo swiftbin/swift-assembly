@@ -2209,6 +2209,21 @@ internal enum A64InstructionParser {
              "fmaxnmp", "faddp", "fcmge", "facge", "fmaxp",
              "fminnmp", "fabd", "fcmgt", "facgt", "fminp":
             guard parts.count == 1 else { return nil }
+            // FEAT_CSSC scalar integer min/max: GP-register destination, register or
+            // `#imm` source. (The vector three-same form takes vector operands.)
+            if ["smax", "umax", "smin", "umin"].contains(mnemonic),
+               !instruction.operands.isEmpty,
+               !isVectorRegisterOperand(instruction.operands[0]) {
+                try expectOperandCount(instruction, exactly: 3)
+                let kind = A64.MinMaxKind(rawValue: mnemonic)!
+                let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+                let rn = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+                let third = instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines)
+                if third.hasPrefix("#") {
+                    return .minMaxImmediate(kind, destination: rd, source: rn, immediate: try A64Parser.immediate(third))
+                }
+                return .minMaxRegister(kind, destination: rd, first: rn, second: try A64Parser.integerRegister(third, allowSP: false))
+            }
             // `sqshl`/`uqshl` also have a shift-by-immediate form (`Vd.T, Vn.T, #imm`).
             if (mnemonic == "sqshl" || mnemonic == "uqshl"), isVectorShiftImmediate(instruction) {
                 return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: mnemonic)!)

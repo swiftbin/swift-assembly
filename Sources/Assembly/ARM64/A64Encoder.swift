@@ -123,6 +123,10 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.multiply(kind, destination: destination, first: first, second: second, accumulator: accumulator)
         case .divide(let kind, let destination, let first, let second):
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
+        case .minMaxRegister(let kind, let destination, let first, let second):
+            return try A64DataProcessingEncoder.minMaxRegister(kind, destination: destination, first: first, second: second)
+        case .minMaxImmediate(let kind, let destination, let source, let immediate):
+            return try A64DataProcessingEncoder.minMaxImmediate(kind, destination: destination, source: source, immediate: immediate)
         case .addSubCarry(let kind, let destination, let first, let second):
             return try A64DataProcessingEncoder.addSubCarry(kind, destination: destination, first: first, second: second)
         case .multiplyWide(let kind, let destination, let first, let second, let accumulator):
@@ -1287,6 +1291,28 @@ internal enum A64DataProcessingEncoder {
         let o1: UInt32 = kind == .sdiv ? 1 : 0
         let head = (sf << 31) | 0x1ac00800
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func minMaxRegister(_ kind: A64.MinMaxKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
+        guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let head = (sf << 31) | 0x1ac0_0000
+        return head | (rm.encodedNumber << 16) | (kind.registerOpcode << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func minMaxImmediate(_ kind: A64.MinMaxKind, destination rd: IntegerRegister, source rn: IntegerRegister, immediate: Int64) throws -> UInt32 {
+        guard rd.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let imm8: UInt32
+        if kind.isSigned {
+            try checkRange(immediate, -128...127, instruction: kind.rawValue)
+            imm8 = UInt32(bitPattern: Int32(truncatingIfNeeded: immediate)) & 0xff
+        } else {
+            try checkRange(immediate, 0...255, instruction: kind.rawValue)
+            imm8 = UInt32(immediate) & 0xff
+        }
+        let head = (sf << 31) | 0x11c0_0000
+        return head | (kind.immediateOpc << 18) | (imm8 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func addSubCarry(_ kind: A64.AddSubCarryKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {

@@ -39,6 +39,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMultiply(word) { return instruction }
         if let instruction = decodeMultiplyWide(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
+        if let instruction = decodeMinMaxRegister(word) { return instruction }
+        if let instruction = decodeMinMaxImmediate(word) { return instruction }
         if let instruction = decodeAddSubCarry(word) { return instruction }
         if let instruction = decodeMTETag(word) { return instruction }
         if let instruction = decodeRMIF(word) { return instruction }
@@ -443,7 +445,8 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAddSubImmediate(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f00_0000 == 0x1100_0000 else { return nil }
+        // bits[28:23]=100010 (bit23=0 excludes the FEAT_CSSC min/max immediate space).
+        guard word & 0x1f80_0000 == 0x1100_0000 else { return nil }
         let sf = (word >> 31) & 1
         let op = (word >> 30) & 1
         let s = (word >> 29) & 1
@@ -647,6 +650,34 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         let rd = integerRegister(number: word & 0x1f, width: width)
         return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+    }
+
+    private static func decodeMinMaxRegister(_ word: UInt32) -> Instruction? {
+        // FEAT_CSSC min/max (register): data-processing-2-source, opcode[15:12]=0110.
+        guard word & 0x7fe0_f000 == 0x1ac0_6000 else { return nil }
+        guard let kind = A64.MinMaxKind.decodeRegister(opcode: (word >> 10) & 0x3f) else { return nil }
+        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        return .minMaxRegister(
+            kind,
+            destination: integerRegister(number: word & 0x1f, width: width),
+            first: integerRegister(number: (word >> 5) & 0x1f, width: width),
+            second: integerRegister(number: (word >> 16) & 0x1f, width: width)
+        )
+    }
+
+    private static func decodeMinMaxImmediate(_ word: UInt32) -> Instruction? {
+        // FEAT_CSSC min/max (immediate): bits[30:20] fixed, opc[19:18], imm8[17:10].
+        guard word & 0x7ff0_0000 == 0x11c0_0000 else { return nil }
+        guard let kind = A64.MinMaxKind.decodeImmediate(opc: (word >> 18) & 3) else { return nil }
+        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        let imm8 = (word >> 10) & 0xff
+        let immediate: Int64 = kind.isSigned ? Int64(signExtend(imm8, bitCount: 8)) : Int64(imm8)
+        return .minMaxImmediate(
+            kind,
+            destination: integerRegister(number: word & 0x1f, width: width),
+            source: integerRegister(number: (word >> 5) & 0x1f, width: width),
+            immediate: immediate
+        )
     }
 
     private static func decodeAddSubExtendedRegister(_ word: UInt32) -> Instruction? {

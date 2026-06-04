@@ -232,6 +232,44 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// FEAT_CSSC integer minimum/maximum (`smax`/`umax`/`smin`/`umin`) on
+    /// general-purpose registers, in both register (`Rd, Rn, Rm`) and
+    /// immediate (`Rd, Rn, #imm`) forms.
+    enum MinMaxKind: String, Equatable, CaseIterable {
+        case smax, umax, smin, umin
+
+        /// Whether the immediate form takes a signed `#imm` (`smax`/`smin`).
+        var isSigned: Bool { self == .smax || self == .smin }
+
+        /// The data-processing-2-source `opcode` at [15:10] (register form).
+        var registerOpcode: UInt32 {
+            switch self {
+            case .smax: return 0b011000
+            case .umax: return 0b011001
+            case .smin: return 0b011010
+            case .umin: return 0b011011
+            }
+        }
+
+        /// The `opc` field at [19:18] (immediate form).
+        var immediateOpc: UInt32 {
+            switch self {
+            case .smax: return 0
+            case .umax: return 1
+            case .smin: return 2
+            case .umin: return 3
+            }
+        }
+
+        static func decodeRegister(opcode: UInt32) -> MinMaxKind? {
+            allCases.first { $0.registerOpcode == opcode }
+        }
+
+        static func decodeImmediate(opc: UInt32) -> MinMaxKind? {
+            allCases.first { $0.immediateOpc == opc }
+        }
+    }
+
     /// Add/subtract with carry (`adc`/`adcs`/`sbc`/`sbcs`). The `ngc`/`ngcs`
     /// aliases lower to `sbc`/`sbcs` with the zero register as first source.
     enum AddSubCarryKind: String, Equatable {
@@ -2380,6 +2418,8 @@ internal enum A64 {
         case extractOrRotateAlias(ExtractKind, destination: Register, first: Register, operand: ExtractOperand)
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
+        case minMaxRegister(MinMaxKind, destination: Register, first: Register, second: Register)
+        case minMaxImmediate(MinMaxKind, destination: Register, source: Register, immediate: Int64)
         case addSubCarry(AddSubCarryKind, destination: Register, first: Register, second: Register)
         case multiplyWide(MultiplyWideKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case bitfield(BitfieldKind, destination: Register, source: Register, immr: UInt32, imms: UInt32)

@@ -1477,6 +1477,48 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ngc w0, x1"))       // mismatched widths
     }
 
+    func testMinMaxInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smax w0, w1, w2"), 0x1ac26020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smax x0, x1, x2"), 0x9ac26020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umax w0, w1, w2"), 0x1ac26420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smin w0, w1, w2"), 0x1ac26820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umin x0, x1, x2"), 0x9ac26c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smax w0, w1, #5"), 0x11c01420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smax x0, x1, #-3"), 0x91c3f420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umax x0, x1, #200"), 0x91c72020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smin x0, x1, #-128"), 0x91ca0020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umin x0, x1, #255"), 0x91cffc20)
+    }
+
+    func testDisassembleMinMax() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ac26020), "smax w0, w1, w2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9ac26c20), "umin x0, x1, x2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x11c01420), "smax w0, w1, #5")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x91c3f420), "smax x0, x1, #-3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x91cffc20), "umin x0, x1, #255")
+    }
+
+    func testMinMaxRoundTrip() throws {
+        let sources = [
+            "smax w0, w1, w2", "umax x3, x4, x5", "smin w6, w7, w8", "umin x9, x10, x11",
+            "smax w0, w1, #127", "smin x2, x3, #-128", "umax w4, w5, #0", "umin x6, x7, #255",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testMinMaxInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smax w0, x1, w2"))   // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smax w0, w1, #128")) // signed imm out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("umax w0, w1, #256")) // unsigned imm out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("umin w0, w1, #-1"))  // unsigned imm negative
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smin w0, w1"))       // too few operands
+    }
+
     func testBitfieldInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sbfm w0, w1, #2, #3"), 0x13020c20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sbfm x0, x1, #2, #3"), 0x93420c20)

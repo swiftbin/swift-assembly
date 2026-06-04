@@ -96,6 +96,10 @@ internal enum A64InstructionFormatter {
             return formatBitfield(kind, destination: destination, source: source, immr: immr, imms: imms)
         case .divide(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
+        case .minMaxRegister(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
+        case .minMaxImmediate(let kind, let destination, let source, let immediate):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(source)), #\(immediate)"
         case .addSubCarry(let kind, let destination, let first, let second):
             // `sbc`/`sbcs` with the zero register source prefer the ngc/ngcs alias.
             if (kind == .sbc || kind == .sbcs), first.number == 31 {
