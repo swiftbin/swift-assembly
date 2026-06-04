@@ -1109,6 +1109,21 @@ internal enum A64InstructionParser {
             return .fpCompare(A64.FPCompareKind(rawValue: mnemonic)!, first: first, second: second)
         case "fmov":
             guard parts.count == 1 else { return nil }
+            // High-half move between a general register and a 128-bit vector element:
+            // `fmov x<d>, v<n>.d[1]` and `fmov v<d>.d[1], x<n>`.
+            if instruction.operands.count == 2,
+               (A64Parser.isVectorElementOperand(instruction.operands[0]) || A64Parser.isVectorElementOperand(instruction.operands[1])) {
+                if A64Parser.isVectorElementOperand(instruction.operands[1]) {
+                    return .fpMoveVectorHighToGeneral(
+                        destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                        source: try A64Parser.vectorElement(instruction.operands[1])
+                    )
+                }
+                return .fpMoveGeneralToVectorHigh(
+                    destination: try A64Parser.vectorElement(instruction.operands[0]),
+                    source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+                )
+            }
             // Vector modified-immediate form: `Vd.T, #fp`.
             if isVectorRegisterOperand(instruction.operands[0]) {
                 return try vectorModifiedImmediate(instruction, kind: .fmov)

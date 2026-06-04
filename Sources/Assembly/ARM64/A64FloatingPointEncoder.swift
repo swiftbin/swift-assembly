@@ -163,6 +163,21 @@ internal enum A64FloatEncoder {
         return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func moveVectorHighToGeneral(destination rd: IntegerRegister, source element: A64.VectorElement) throws -> UInt32 {
+        // Only `fmov x<d>, v<n>.d[1]` is encodable (64-bit general, top half of a 128-bit register).
+        guard rd.is64Bit, element.width == .d, element.index == 1 else {
+            throw AssemblerError.invalidRegister("fmov")
+        }
+        return 0x9eae_0000 | (element.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func moveGeneralToVectorHigh(destination element: A64.VectorElement, source rn: IntegerRegister) throws -> UInt32 {
+        guard rn.is64Bit, element.width == .d, element.index == 1 else {
+            throw AssemblerError.invalidRegister("fmov")
+        }
+        return 0x9eaf_0000 | (rn.encodedNumber << 5) | element.encodedNumber
+    }
+
     static func convertToFixed(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister, fbits: UInt32) throws -> UInt32 {
         let sf: UInt32 = rd.is64Bit ? 1 : 0
         let type = try ptype(rn, instruction: kind.rawValue)

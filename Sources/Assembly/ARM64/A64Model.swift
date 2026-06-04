@@ -1446,6 +1446,10 @@ internal enum A64 {
         case fpMoveImmediate(destination: FPRegister, value: Double)
         case fpMoveToGeneral(destination: Register, source: FPRegister)
         case fpMoveFromGeneral(destination: FPRegister, source: Register)
+        /// `fmov x<d>, v<n>.d[1]` — move the high 64 bits of a vector register into a general register.
+        case fpMoveVectorHighToGeneral(destination: Register, source: VectorElement)
+        /// `fmov v<d>.d[1], x<n>` — move a general register into the high 64 bits of a vector register.
+        case fpMoveGeneralToVectorHigh(destination: VectorElement, source: Register)
         case fpConvertToInt(FPConvertToIntKind, destination: Register, source: FPRegister)
         case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
         /// Scalar floating-point to fixed-point convert (`fcvtzs/fcvtzu <Wd|Xd>, <n>, #fbits`).

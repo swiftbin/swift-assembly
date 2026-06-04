@@ -142,6 +142,10 @@ internal enum A64InstructionFormatter {
             return "fmov \(formatRegister(destination)), \(formatFloatRegister(source))"
         case .fpMoveFromGeneral(let destination, let source):
             return "fmov \(formatFloatRegister(destination)), \(formatRegister(source))"
+        case .fpMoveVectorHighToGeneral(let destination, let source):
+            return "fmov \(formatRegister(destination)), \(formatVectorElement(source))"
+        case .fpMoveGeneralToVectorHigh(let destination, let source):
+            return "fmov \(formatVectorElement(destination)), \(formatRegister(source))"
         case .fpConvertToInt(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatFloatRegister(source))"
         case .fpConvertFromInt(let kind, let destination, let source):

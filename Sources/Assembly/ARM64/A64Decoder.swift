@@ -37,6 +37,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPConditionalSelect(word) { return instruction }
         if let instruction = decodeFPConditionalCompare(word) { return instruction }
         if let instruction = decodeFPMoveImmediate(word) { return instruction }
+        if let instruction = decodeFPMoveVectorHigh(word) { return instruction }
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeFPFixedPointConvert(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
@@ -794,6 +795,23 @@ internal enum A64InstructionDecoder {
             second = .register(floatRegister(number: (word >> 16) & 0x1f, width: width))
         }
         return .fpCompare(kind, first: rn, second: second)
+    }
+
+    private static func decodeFPMoveVectorHigh(_ word: UInt32) -> Instruction? {
+        // `fmov x<d>, v<n>.d[1]` (opcode 110) / `fmov v<d>.d[1], x<n>` (opcode 111).
+        guard word & 0xfffe_fc00 == 0x9eae_0000 else { return nil }
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        if (word >> 16) & 1 == 0 {
+            return .fpMoveVectorHighToGeneral(
+                destination: integerRegister(number: rdNum, width: 64),
+                source: A64.VectorElement(number: rnNum, width: .d, index: 1)
+            )
+        }
+        return .fpMoveGeneralToVectorHigh(
+            destination: A64.VectorElement(number: rdNum, width: .d, index: 1),
+            source: integerRegister(number: rnNum, width: 64)
+        )
     }
 
     private static func decodeFPFixedPointConvert(_ word: UInt32) -> Instruction? {

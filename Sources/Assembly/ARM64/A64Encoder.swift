@@ -138,6 +138,10 @@ internal enum A64InstructionEncoder {
             return try A64FloatEncoder.moveToGeneral(destination: destination, source: source)
         case .fpMoveFromGeneral(let destination, let source):
             return try A64FloatEncoder.moveFromGeneral(destination: destination, source: source)
+        case .fpMoveVectorHighToGeneral(let destination, let source):
+            return try A64FloatEncoder.moveVectorHighToGeneral(destination: destination, source: source)
+        case .fpMoveGeneralToVectorHigh(let destination, let source):
+            return try A64FloatEncoder.moveGeneralToVectorHigh(destination: destination, source: source)
         case .fpConvertToInt(let kind, let destination, let source):
             return try A64FloatEncoder.convertToInt(kind, destination: destination, source: source)
         case .fpConvertFromInt(let kind, let destination, let source):

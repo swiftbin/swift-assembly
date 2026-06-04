@@ -688,6 +688,32 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtzs w0, s1, #65"))  // out of range
     }
 
+    func testFMovVectorHighInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x0, v1.d[1]"), 0x9eae0020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v2.d[1], x3"), 0x9eaf0062)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x30, v31.d[1]"), 0x9eae03fe)
+    }
+
+    func testDisassembleFMovVectorHigh() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9eae0020), "fmov x0, v1.d[1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9eaf0062), "fmov v2.d[1], x3")
+    }
+
+    func testFMovVectorHighRoundTrip() throws {
+        for source in ["fmov x0, v1.d[1]", "fmov v2.d[1], x3", "fmov x30, v31.d[1]", "fmov v4.d[1], x5"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testFMovVectorHighInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov w0, v1.d[1]"))  // must be 64-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov x0, v1.s[1]"))  // only .d[1] form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov x0, v1.d[0]"))  // index must be 1
+    }
+
     func testAcrossLanesIntegerInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)
