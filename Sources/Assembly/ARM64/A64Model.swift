@@ -1626,6 +1626,7 @@ internal enum A64 {
     enum AddSubOperand: Equatable {
         case immediate(Int64, shift: Int?)
         case shiftedRegister(Register, shift: Shift?)
+        case extendedRegister(Register, extend: ExtendKind, amount: Int?)
     }
 
     enum LogicalOperand: Equatable {

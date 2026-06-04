@@ -274,6 +274,58 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz w0"))         // missing source
     }
 
+    func testAddSubExtendedRegisterInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb"), 0x0b220020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxth"), 0x0b222020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtw"), 0x0b224020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, sxtb"), 0x0b228020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, sxth"), 0x0b22a020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, sxtw"), 0x0b22c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb #2"), 0x0b220820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, w2, uxtw"), 0x8b224020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2, uxtx"), 0x8b226020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2, sxtx"), 0x8b22e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, w2, sxtw #3"), 0x8b22cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("adds w5, w6, w7, uxtb"), 0x2b2700c5)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sub x8, x9, w10, uxth #1"), 0xcb2a2528)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subs w11, w12, w13, sxtb"), 0x6b2d818b)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add sp, x1, x2, uxtx"), 0x8b22603f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, sp, x2"), 0x8b2263e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmp x1, x2, sxtx"), 0xeb22e03f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cmn w3, w4, uxtb"), 0x2b24007f)
+    }
+
+    func testDisassembleAddSubExtendedRegister() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0b220020), "add w0, w1, w2, uxtb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0b220820), "add w0, w1, w2, uxtb #2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x8b226020), "add x0, x1, x2, uxtx")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x8b2263e0), "add x0, sp, x2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xeb22e03f), "cmp x1, x2, sxtx")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2b24007f), "cmn w3, w4, uxtb")
+    }
+
+    func testAddSubExtendedRegisterRoundTrip() throws {
+        for source in [
+            "add w0, w1, w2, uxtb", "add w0, w1, w2, uxth", "add w0, w1, w2, uxtw",
+            "add w0, w1, w2, sxtb", "add w0, w1, w2, sxth", "add w0, w1, w2, sxtw",
+            "add w0, w1, w2, uxtb #2", "add x0, x1, w2, uxtw", "add x0, x1, x2, uxtx",
+            "add x0, x1, x2, sxtx", "add x0, x1, w2, sxtw #3", "adds w5, w6, w7, uxtb",
+            "sub x8, x9, w10, uxth #1", "subs w11, w12, w13, sxtb",
+            "add x0, sp, x2", "cmp x1, x2, sxtx", "cmn w3, w4, uxtb",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testAddSubExtendedRegisterInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("add x0, x1, x2, uxtw"))   // uxtw needs a 32-bit source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("add x0, x1, w2, uxtx"))   // uxtx needs a 64-bit source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb #5")) // shift amount out of range
+    }
+
     func testAddSubCarryInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("adc w0, w1, w2"), 0x1a020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("adc x3, x4, x5"), 0x9a050083)

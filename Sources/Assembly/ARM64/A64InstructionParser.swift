@@ -863,19 +863,24 @@ internal enum A64InstructionParser {
                 return try vectorThreeSame(instruction, kind: A64.VectorThreeSameKind(rawValue: mnemonic)!)
             }
             try expectOperandCount(instruction, 3...4)
+            let addSubRd = try A64Parser.integerRegister(instruction.operands[0], allowSP: mnemonic == "add" || mnemonic == "sub")
+            let addSubRn = try A64Parser.integerRegister(instruction.operands[1], allowSP: true)
+            let addSubOp = promoteToExtendedIfStackPointer(try addSubOperand(instruction, startIndex: 2), rd: addSubRd, rn: addSubRn)
             return .addSub(
                 A64.AddSubKind(rawValue: mnemonic)!,
-                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: mnemonic == "add" || mnemonic == "sub"),
-                first: try A64Parser.integerRegister(instruction.operands[1], allowSP: true),
-                operand: try addSubOperand(instruction, startIndex: 2)
+                destination: addSubRd,
+                first: addSubRn,
+                operand: addSubOp
             )
         case "cmp", "cmn":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)
+            let cmpRn = try A64Parser.integerRegister(instruction.operands[0], allowSP: true)
+            let cmpOp = promoteToExtendedIfStackPointer(try addSubOperand(instruction, startIndex: 1), rd: zeroRegister(width: cmpRn.width), rn: cmpRn)
             return .compareAlias(
                 A64.CompareAliasKind(rawValue: mnemonic)!,
-                first: try A64Parser.integerRegister(instruction.operands[0], allowSP: true),
-                operand: try addSubOperand(instruction, startIndex: 1)
+                first: cmpRn,
+                operand: cmpOp
             )
         case "and", "ands", "orr", "eor", "bic", "bics", "orn", "eon":
             guard parts.count == 1 else { return nil }
@@ -1843,8 +1848,50 @@ internal enum A64InstructionParser {
         }
 
         let register = try A64Parser.integerRegister(instruction.operands[startIndex], allowSP: false)
-        let parsedShift = try instruction.operands.count > startIndex + 1 ? shift(instruction.operands[startIndex + 1]) : nil
-        return .shiftedRegister(register, shift: parsedShift)
+        if instruction.operands.count > startIndex + 1 {
+            let modifier = instruction.operands[startIndex + 1]
+            if let extend = addSubExtend(modifier) {
+                return .extendedRegister(register, extend: extend.0, amount: extend.1)
+            }
+            return .shiftedRegister(register, shift: try shift(modifier))
+        }
+        return .shiftedRegister(register, shift: nil)
+    }
+
+    /// Parses an add/sub extend modifier such as `uxtb` or `sxtw #3`.
+    /// Returns `nil` when the text is not an extend keyword (e.g. a shift).
+    private static func addSubExtend(_ text: String) -> (A64.ExtendKind, Int?)? {
+        let parts = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            .split(separator: " ", omittingEmptySubsequences: true)
+            .map { String($0).lowercased() }
+        guard let keyword = parts.first else { return nil }
+        let kind: A64.ExtendKind
+        switch keyword {
+        case "uxtb": kind = .uxtb
+        case "uxth": kind = .uxth
+        case "uxtw": kind = .uxtw
+        case "uxtx": kind = .uxtx
+        case "sxtb": kind = .sxtb
+        case "sxth": kind = .sxth
+        case "sxtw": kind = .sxtw
+        case "sxtx": kind = .sxtx
+        default: return nil
+        }
+        var amount: Int? = nil
+        if parts.count >= 2 {
+            let raw = parts[1].hasPrefix("#") ? String(parts[1].dropFirst()) : parts[1]
+            amount = Int(raw)
+        }
+        return (kind, amount)
+    }
+
+    /// `add`/`sub`/`cmp`/`cmn` with a stack-pointer operand and a plain register
+    /// must use the extended-register form (the shifted form cannot encode SP).
+    /// The implicit extend is `uxtx` for 64-bit operations and `uxtw` for 32-bit.
+    private static func promoteToExtendedIfStackPointer(_ operand: A64.AddSubOperand, rd: IntegerRegister, rn: IntegerRegister) -> A64.AddSubOperand {
+        guard case .shiftedRegister(let rm, let shift) = operand, shift == nil else { return operand }
+        guard rd.kind == .stackPointer || rn.kind == .stackPointer else { return operand }
+        return .extendedRegister(rm, extend: rn.is64Bit ? .uxtx : .uxtw, amount: nil)
     }
 
     private static func logicalOperand(_ instruction: ParsedInstruction) throws -> A64.LogicalOperand {

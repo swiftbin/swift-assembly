@@ -743,7 +743,23 @@ internal enum A64AddSubEncoder {
             return try immediate(kind, destination: rd, first: rn, value: value, shift: shift)
         case .shiftedRegister(let rm, let shift):
             return try shiftedRegister(kind, destination: rd, first: rn, second: rm, shift: shift)
+        case .extendedRegister(let rm, let extend, let amount):
+            return try extendedRegister(kind, destination: rd, first: rn, second: rm, extend: extend, amount: amount)
         }
+    }
+
+    private static func extendedRegister(_ kind: A64.AddSubKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, extend: A64.ExtendKind, amount: Int?) throws -> UInt32 {
+        let amt = amount ?? 0
+        guard amt >= 0, amt <= 4 else { throw AssemblerError.unsupportedShift("\(extend) #\(amt)") }
+        // The shifted operand register width follows the extend: 64-bit for the
+        // `*x` extends, 32-bit otherwise.
+        let expectedRmWidth = (extend == .uxtx || extend == .sxtx) ? 64 : 32
+        guard rm.width == expectedRmWidth else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let op: UInt32 = (kind == .sub || kind == .subs) ? 1 : 0
+        let s: UInt32 = (kind == .adds || kind == .subs) ? 1 : 0
+        let head = (sf << 31) | (op << 30) | (s << 29) | 0x0b20_0000
+        return head | (rm.encodedNumber << 16) | (extend.rawValue << 13) | (UInt32(amt) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func compareAlias(_ kind: A64.CompareAliasKind, first rn: IntegerRegister, operand: A64.AddSubOperand) throws -> UInt32 {

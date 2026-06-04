@@ -17,6 +17,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMoveWide(word) { return instruction }
         if let instruction = decodeAddSubImmediate(word) { return instruction }
         if let instruction = decodeAddSubShiftedRegister(word) { return instruction }
+        if let instruction = decodeAddSubExtendedRegister(word) { return instruction }
         if let instruction = decodeLogicalImmediate(word) { return instruction }
         if let instruction = decodeLogicalShiftedRegister(word) { return instruction }
         if let instruction = decodeBitfieldShiftAlias(word) { return instruction }
@@ -443,6 +444,30 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         let rd = integerRegister(number: word & 0x1f, width: width)
         return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+    }
+
+    private static func decodeAddSubExtendedRegister(_ word: UInt32) -> Instruction? {
+        // op[28:24]=01011, opt[23:22]=00, and bit21=1 distinguish this from the
+        // shifted-register form (bit21=0).
+        guard word & 0x1fe0_0000 == 0x0b20_0000 else { return nil }
+        let sf = (word >> 31) & 1
+        let op = (word >> 30) & 1
+        let s = (word >> 29) & 1
+        guard let extend = ExtendKind(rawValue: (word >> 13) & 7) else { return nil }
+        let imm3 = (word >> 10) & 7
+        guard imm3 <= 4 else { return nil }
+        let width = sf == 1 ? 64 : 32
+        let rmWidth = (extend == .uxtx || extend == .sxtx) ? 64 : 32
+        let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+        let rnNum = (word >> 5) & 0x1f
+        let amount = imm3 == 0 ? nil : Int(imm3)
+        let operand = A64.AddSubOperand.extendedRegister(rm, extend: extend, amount: amount)
+        if s == 1 && word & 0x1f == 31 {
+            return .compareAlias(op == 1 ? .cmp : .cmn, first: baseRegister(number: rnNum, width: width), operand: operand)
+        }
+        let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
+        let rd: IntegerRegister = s == 0 ? baseRegister(number: word & 0x1f, width: width) : integerRegister(number: word & 0x1f, width: width)
+        return .addSub(kind, destination: rd, first: baseRegister(number: rnNum, width: width), operand: operand)
     }
 
     private static func decodeAddSubCarry(_ word: UInt32) -> Instruction? {

@@ -40,9 +40,10 @@ internal enum A64InstructionFormatter {
         case .moveWide(let kind, let destination, let immediate, let shift):
             return "\(kind.rawValue) \(([formatRegister(destination), formatImmediate(immediate)] + (shift.map { [formatLSL($0)] } ?? [])).joined(separator: ", "))"
         case .addSub(let kind, let destination, let first, let operand):
-            return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first)] + formatAddSubOperand(operand)).joined(separator: ", "))"
+            let spInvolved = destination.kind == .stackPointer || first.kind == .stackPointer
+            return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first)] + formatAddSubOperand(operand, stackPointerInvolved: spInvolved, is64Bit: first.is64Bit)).joined(separator: ", "))"
         case .compareAlias(let kind, let first, let operand):
-            return "\(kind.rawValue) \(([formatRegister(first)] + formatAddSubOperand(operand)).joined(separator: ", "))"
+            return "\(kind.rawValue) \(([formatRegister(first)] + formatAddSubOperand(operand, stackPointerInvolved: first.kind == .stackPointer, is64Bit: first.is64Bit)).joined(separator: ", "))"
         case .logical(let kind, let destination, let first, let operand):
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first)] + formatLogicalOperand(operand)).joined(separator: ", "))"
         case .mvnAlias(let destination, let source, let shift):
@@ -541,12 +542,23 @@ internal enum A64InstructionFormatter {
         }
     }
 
-    private static func formatAddSubOperand(_ operand: A64.AddSubOperand) -> [String] {
+    private static func formatAddSubOperand(_ operand: A64.AddSubOperand, stackPointerInvolved: Bool = false, is64Bit: Bool = false) -> [String] {
         switch operand {
         case .immediate(let value, let shift):
             return [formatImmediate(value)] + (shift.map { [formatLSL($0)] } ?? [])
         case .shiftedRegister(let register, let shift):
             return [formatRegister(register)] + (shift.map { [formatShift($0)] } ?? [])
+        case .extendedRegister(let register, let extend, let amount):
+            let amt = amount ?? 0
+            // With a stack-pointer operand the default extend (uxtx/uxtw) and a
+            // zero shift are omitted, matching `add x0, sp, x2`.
+            let defaultExtend: ExtendKind = is64Bit ? .uxtx : .uxtw
+            if stackPointerInvolved && extend == defaultExtend && amt == 0 {
+                return [formatRegister(register)]
+            }
+            var modifier = formatExtendKind(extend)
+            if amt != 0 { modifier += " #\(amt)" }
+            return [formatRegister(register), modifier]
         }
     }
 
