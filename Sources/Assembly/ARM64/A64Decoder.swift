@@ -822,6 +822,10 @@ internal enum A64InstructionDecoder {
         case (0b00, 0b111):
             guard width == 32 || width == 64 else { return nil }
             return .fpMoveFromGeneral(destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
+        case (0b11, 0b110):
+            // FJCVTZS: fixed 32-bit general destination, double-precision source.
+            guard sf == 0, width == 64 else { return nil }
+            return .fjcvtzs(destination: integerRegister(number: rdNum, width: 32), source: floatRegister(number: rnNum, width: 64))
         default:
             return nil
         }

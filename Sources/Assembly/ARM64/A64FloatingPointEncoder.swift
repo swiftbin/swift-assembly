@@ -163,6 +163,14 @@ internal enum A64FloatEncoder {
         return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func fjcvtzs(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
+        // Fixed form: 32-bit general destination, double-precision source.
+        guard !rd.is64Bit, rn.width == 64 else {
+            throw AssemblerError.invalidRegister("fjcvtzs")
+        }
+        return 0x1e7e_0000 | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     /// Resolves the `sf`/`type` fields for `FMOV` between a general register and a single/double FP register.
     private static func generalMoveFields(general: IntegerRegister, float: FloatRegister, instruction: String) throws -> (sf: UInt32, type: UInt32) {
         switch (general.is64Bit, float.width) {

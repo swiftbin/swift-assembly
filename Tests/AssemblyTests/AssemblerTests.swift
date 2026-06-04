@@ -557,6 +557,31 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint32z v0.2s, v1.4s"))  // arrangements must match
     }
 
+    func testFJCVTZSInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fjcvtzs w0, d1"), 0x1e7e0020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fjcvtzs w5, d7"), 0x1e7e00e5)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fjcvtzs w20, d31"), 0x1e7e03f4)
+    }
+
+    func testDisassembleFJCVTZS() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e7e0020), "fjcvtzs w0, d1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e7e03f4), "fjcvtzs w20, d31")
+    }
+
+    func testFJCVTZSRoundTrip() throws {
+        for source in ["fjcvtzs w0, d1", "fjcvtzs w5, d7", "fjcvtzs w20, d31"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testFJCVTZSInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fjcvtzs x0, d1"))  // dest must be 32-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fjcvtzs w0, s1"))  // source must be double
+    }
+
     func testAcrossLanesIntegerInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)

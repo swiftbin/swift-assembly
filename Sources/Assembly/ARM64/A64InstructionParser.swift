@@ -1133,6 +1133,13 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
             )
+        case "fjcvtzs":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .fjcvtzs(
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
         case "saddlv", "uaddlv", "smaxv", "umaxv", "sminv", "uminv", "addv":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

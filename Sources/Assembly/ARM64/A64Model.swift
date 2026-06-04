@@ -1440,6 +1440,8 @@ internal enum A64 {
         case fpMoveFromGeneral(destination: FPRegister, source: Register)
         case fpConvertToInt(FPConvertToIntKind, destination: Register, source: FPRegister)
         case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
+        /// Floating-point JavaScript Convert to Signed fixed-point (`fjcvtzs w<d>, d<n>`).
+        case fjcvtzs(destination: Register, source: FPRegister)
         case acrossLanesInteger(AcrossLanesIntegerKind, destination: FPRegister, source: VectorRegister)
         case acrossLanesFP(AcrossLanesFPKind, destination: FPRegister, source: VectorRegister)
         case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)
