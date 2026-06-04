@@ -641,6 +641,32 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sys #0, x7, c5, #0")) // CRn must be c<n>
     }
 
+    func testPStateFlagInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cfinv"), 0xd500401f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("axflag"), 0xd500405f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xaflag"), 0xd500403f)
+    }
+
+    func testDisassemblePStateFlag() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd500401f), "cfinv")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd500405f), "axflag")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd500403f), "xaflag")
+    }
+
+    func testPStateFlagRoundTrip() throws {
+        for source in ["cfinv", "axflag", "xaflag"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testPStateFlagInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cfinv x0"))   // takes no operands
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("axflag #1"))  // takes no operands
+    }
+
     func testRCpcUnscaledInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("stlurb w0, [x1]"), 0x19000020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("stlurb w0, [x1, #4]"), 0x19004020)

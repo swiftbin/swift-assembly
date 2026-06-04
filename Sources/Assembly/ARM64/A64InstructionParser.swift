@@ -781,6 +781,10 @@ internal enum A64InstructionParser {
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
             return .hint(A64.HintKind(rawValue: mnemonic)!.immediate)
+        case "cfinv", "axflag", "xaflag":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 0)
+            return .pstateFlag(A64.PStateFlagKind(rawValue: mnemonic)!)
         case "hint":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 1)

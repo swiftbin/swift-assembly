@@ -132,6 +132,8 @@ internal enum A64InstructionFormatter {
                 : "msr \(register.name), \(formatRegister(value))"
         case .pstate(let field, let immediate):
             return "msr \(field.rawValue), #\(immediate)"
+        case .pstateFlag(let kind):
+            return kind.rawValue
         case .systemInstruction(let read, let op1, let crn, let crm, let op2, let register):
             if !read, let alias = SystemInstructionAlias.find(op1: op1, crn: crn, crm: crm, op2: op2) {
                 if alias.needsRegister, let register = register {

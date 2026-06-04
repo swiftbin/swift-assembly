@@ -4,6 +4,9 @@ internal enum A64InstructionDecoder {
     static func decode(_ word: UInt32) throws -> Instruction {
         if word == 0xd503201f { return .nop }
         if word == 0xd69f03e0 { return .exceptionReturn }
+        if let kind = PStateFlagKind.allCases.first(where: { $0.word == word }) {
+            return .pstateFlag(kind)
+        }
 
         if let instruction = decodePointerAuthentication(word) { return instruction }
         if let instruction = decodeBranchRegister(word) { return instruction }

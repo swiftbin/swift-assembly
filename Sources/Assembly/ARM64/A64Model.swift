@@ -646,6 +646,20 @@ internal enum A64 {
         }
     }
 
+    /// A no-operand PSTATE flag manipulation instruction (`CFINV`, `AXFLAG`,
+    /// `XAFLAG`). These occupy the MSR-immediate space with a fixed encoding.
+    enum PStateFlagKind: String, Equatable, CaseIterable {
+        case cfinv, axflag, xaflag
+
+        var word: UInt32 {
+            switch self {
+            case .cfinv: return 0xd500_401f
+            case .xaflag: return 0xd500_403f
+            case .axflag: return 0xd500_405f
+            }
+        }
+    }
+
     /// A PSTATE field written by `MSR <field>, #imm` (MSR immediate).
     enum PStateField: String, Equatable, CaseIterable {
         case spsel, daifset, daifclr, uao, pan, dit, ssbs
@@ -2142,6 +2156,8 @@ internal enum A64 {
         case systemRegisterMove(read: Bool, register: SystemRegister, value: Register)
         /// Write a PSTATE field with an immediate (`MSR <field>, #imm`).
         case pstate(PStateField, immediate: UInt32)
+        /// A no-operand PSTATE flag manipulation instruction.
+        case pstateFlag(PStateFlagKind)
         /// A system instruction (`SYS`/`SYSL` and the `DC`/`IC`/`AT`/`TLBI` aliases).
         case systemInstruction(read: Bool, op1: UInt32, crn: UInt32, crm: UInt32, op2: UInt32, register: Register?)
         case moveAlias(destination: Register, source: MoveAliasSource)
@@ -2305,6 +2321,7 @@ internal typealias LoadAcquireRCpcKind = A64.LoadAcquireRCpcKind
 internal typealias PrefetchKind = A64.PrefetchKind
 internal typealias SystemRegister = A64.SystemRegister
 internal typealias PStateField = A64.PStateField
+internal typealias PStateFlagKind = A64.PStateFlagKind
 internal typealias SystemInstructionAlias = A64.SystemInstructionAlias
 internal typealias RCpcUnscaledKind = A64.RCpcUnscaledKind
 internal typealias CRC32Kind = A64.CRC32Kind

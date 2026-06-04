@@ -40,6 +40,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - PSTATE field writes (msr immediate: spsel / daifset / daifclr / uao / pan / dit / ssbs)
 - system instructions (sys / sysl plus the dc / ic / at / tlbi cache, address-translation, and TLB-maintenance aliases)
 - RCpc unscaled load/store (ldapur / ldapurb / ldapurh / ldapursb / ldapursh / ldapursw / stlur / stlurb / stlurh)
+- PSTATE flag manipulation (cfinv / axflag / xaflag)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
