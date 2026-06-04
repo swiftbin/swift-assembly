@@ -1397,6 +1397,37 @@ internal enum A64InstructionParser {
                 register: try instruction.operands.first.map(A64Parser.xRegister),
                 architecture: architecture
             )
+        case "pacia", "pacib", "pacda", "pacdb", "autia", "autib", "autda", "autdb",
+             "paciza", "pacizb", "pacdza", "pacdzb", "autiza", "autizb", "autdza", "autdzb",
+             "pacga":
+            guard parts.count == 1 else { return nil }
+            try requireARM64E(architecture, instruction: mnemonic)
+            let kind = A64.PointerAuthDataKind(rawValue: mnemonic)!
+            if kind.isGeneric {
+                try expectOperandCount(instruction, exactly: 3)
+                return .pointerAuthData(
+                    kind,
+                    destination: try A64Parser.xRegister(instruction.operands[0]),
+                    source: try A64Parser.xRegister(instruction.operands[1]),
+                    modifier: try A64Parser.xRegister(instruction.operands[2])
+                )
+            } else if kind.isImplicitModifier {
+                try expectOperandCount(instruction, exactly: 1)
+                return .pointerAuthData(
+                    kind,
+                    destination: try A64Parser.xRegister(instruction.operands[0]),
+                    source: nil,
+                    modifier: nil
+                )
+            } else {
+                try expectOperandCount(instruction, exactly: 2)
+                return .pointerAuthData(
+                    kind,
+                    destination: try A64Parser.xRegister(instruction.operands[0]),
+                    source: try A64Parser.xRegister(instruction.operands[1]),
+                    modifier: nil
+                )
+            }
         case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
             guard parts.count == 1 else { return nil }
             if mnemonic != "fnmul", allOperandsAreVectorRegisters(instruction) {

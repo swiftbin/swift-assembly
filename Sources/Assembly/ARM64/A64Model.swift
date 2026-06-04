@@ -996,6 +996,47 @@ internal enum A64 {
         case paciasp, autiasp, pacibsp, autibsp, xpaci, xpacd
     }
 
+    /// Data-processing pointer authentication (`PACIA`/`AUTIA`/… `Xd, Xn`, the
+    /// implicit-modifier `*Z*` forms, and the generic `PACGA Xd, Xn, Xm`).
+    enum PointerAuthDataKind: String, Equatable, CaseIterable {
+        case pacia, pacib, pacda, pacdb, autia, autib, autda, autdb
+        case paciza, pacizb, pacdza, pacdzb, autiza, autizb, autdza, autdzb
+        case pacga
+
+        /// The `opcode` field at bits [15:10] for the data-processing (1 source)
+        /// forms. (`pacga` is data-processing (2 source) and handled separately.)
+        var opcode: UInt32 {
+            switch self {
+            case .pacia: return 0; case .pacib: return 1
+            case .pacda: return 2; case .pacdb: return 3
+            case .autia: return 4; case .autib: return 5
+            case .autda: return 6; case .autdb: return 7
+            case .paciza: return 8; case .pacizb: return 9
+            case .pacdza: return 10; case .pacdzb: return 11
+            case .autiza: return 12; case .autizb: return 13
+            case .autdza: return 14; case .autdzb: return 15
+            case .pacga: return 0b001100
+            }
+        }
+
+        /// `true` for the `*Z*` forms whose source register is implicitly `xzr`.
+        var isImplicitModifier: Bool {
+            switch self {
+            case .paciza, .pacizb, .pacdza, .pacdzb, .autiza, .autizb, .autdza, .autdzb:
+                return true
+            default:
+                return false
+            }
+        }
+
+        /// `true` for the generic `PACGA` (data-processing 2 source) form.
+        var isGeneric: Bool { self == .pacga }
+
+        static func decodeOneSource(opcode: UInt32) -> PointerAuthDataKind? {
+            allCases.first { !$0.isGeneric && $0.opcode == opcode }
+        }
+    }
+
     enum FPDataProcessing2Kind: String, Equatable {
         case fmul, fdiv, fadd, fsub, fmax, fmin, fmaxnm, fminnm, fnmul
     }
@@ -2187,6 +2228,7 @@ internal enum A64 {
         case loadStoreSingleLane(LoadStoreMultipleKind, registers: VectorLaneList, address: VectorMemoryOperand)
         case loadStoreReplicate(LoadStoreReplicateKind, registers: VectorRegisterList, address: VectorMemoryOperand)
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
+        case pointerAuthData(PointerAuthDataKind, destination: Register, source: Register?, modifier: Register?)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
@@ -2324,6 +2366,7 @@ internal typealias PStateField = A64.PStateField
 internal typealias PStateFlagKind = A64.PStateFlagKind
 internal typealias SystemInstructionAlias = A64.SystemInstructionAlias
 internal typealias RCpcUnscaledKind = A64.RCpcUnscaledKind
+internal typealias PointerAuthDataKind = A64.PointerAuthDataKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

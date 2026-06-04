@@ -186,6 +186,8 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.replicate(kind, registers: registers, address: address)
         case .pointerAuthentication(let kind, let register, let architecture):
             return try A64PointerAuthenticationEncoder.encode(kind, register: register, architecture: architecture)
+        case .pointerAuthData(let kind, let destination, let source, let modifier):
+            return try A64PointerAuthenticationEncoder.encodeData(kind, destination: destination, source: source, modifier: modifier)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
@@ -366,6 +368,27 @@ internal enum A64PointerAuthenticationEncoder {
             }
             return (kind == .xpaci ? 0xdac143e0 : 0xdac147e0) | rd.encodedNumber
         }
+    }
+
+    static func encodeData(_ kind: A64.PointerAuthDataKind, destination: IntegerRegister, source: IntegerRegister?, modifier: IntegerRegister?) throws -> UInt32 {
+        guard destination.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        if kind.isGeneric {
+            guard let source, let modifier, source.is64Bit, modifier.is64Bit else {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            // PACGA: data-processing (2 source).
+            return 0x9ac0_3000 | (modifier.encodedNumber << 16) | (source.encodedNumber << 5) | destination.encodedNumber
+        }
+        // Data-processing (1 source). The `*Z*` forms have an implicit `xzr` source.
+        let rn: UInt32
+        if kind.isImplicitModifier {
+            guard source == nil else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            rn = 0b11111
+        } else {
+            guard let source, source.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            rn = source.encodedNumber
+        }
+        return 0xdac1_0000 | (kind.opcode << 10) | (rn << 5) | destination.encodedNumber
     }
 }
 

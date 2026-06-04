@@ -9,6 +9,7 @@ internal enum A64InstructionDecoder {
         }
 
         if let instruction = decodePointerAuthentication(word) { return instruction }
+        if let instruction = decodePointerAuthData(word) { return instruction }
         if let instruction = decodeBranchRegister(word) { return instruction }
         if let instruction = decodeUnconditionalBranch(word) { return instruction }
         if let instruction = decodeConditionalBranch(word) { return instruction }
@@ -285,6 +286,26 @@ internal enum A64InstructionDecoder {
             return .pointerAuthentication(.xpacd, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
         }
         return nil
+    }
+
+    private static func decodePointerAuthData(_ word: UInt32) -> Instruction? {
+        // PACGA: data-processing (2 source), opcode[15:10]=001100.
+        if word & 0xffe0_fc00 == 0x9ac0_3000 {
+            let rd = integerRegister(number: word & 0x1f, width: 64)
+            let rn = integerRegister(number: (word >> 5) & 0x1f, width: 64)
+            let rm = integerRegister(number: (word >> 16) & 0x1f, width: 64)
+            return .pointerAuthData(.pacga, destination: rd, source: rn, modifier: rm)
+        }
+        // Data-processing (1 source): bit31=1, op[30:21]=1011000001, opcode[15:10]=0000xx..0011xx.
+        guard word & 0xffff_0000 == 0xdac1_0000 else { return nil }
+        let opcode = (word >> 10) & 0x3f
+        guard let kind = A64.PointerAuthDataKind.decodeOneSource(opcode: opcode) else { return nil }
+        let rd = integerRegister(number: word & 0x1f, width: 64)
+        if kind.isImplicitModifier {
+            return .pointerAuthData(kind, destination: rd, source: nil, modifier: nil)
+        }
+        let rn = integerRegister(number: (word >> 5) & 0x1f, width: 64)
+        return .pointerAuthData(kind, destination: rd, source: rn, modifier: nil)
     }
 
     private static func decodeMoveWide(_ word: UInt32) -> Instruction? {

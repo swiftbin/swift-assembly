@@ -207,6 +207,11 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
         case .pointerAuthentication(let kind, let register, _):
             return ([kind.rawValue] + (register.map { [formatRegister($0)] } ?? [])).joined(separator: " ")
+        case .pointerAuthData(let kind, let destination, let source, let modifier):
+            var operands = [formatRegister(destination)]
+            if let source { operands.append(formatRegister(source)) }
+            if let modifier { operands.append(formatRegister(modifier)) }
+            return "\(kind.rawValue) \(operands.joined(separator: ", "))"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

@@ -717,6 +717,61 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldapur w0, [x1, x2]"))    // no register offset form
     }
 
+    func testPointerAuthDataInstructions() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacia x0, x1", architecture: arch), 0xdac10020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacib x0, x1", architecture: arch), 0xdac10420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacda x0, x1", architecture: arch), 0xdac10820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacdb x0, x1", architecture: arch), 0xdac10c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autia x0, x1", architecture: arch), 0xdac11020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autib x0, x1", architecture: arch), 0xdac11420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autda x0, x1", architecture: arch), 0xdac11820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autdb x0, x1", architecture: arch), 0xdac11c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("paciza x0", architecture: arch), 0xdac123e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacizb x0", architecture: arch), 0xdac127e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacdza x0", architecture: arch), 0xdac12be0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacdzb x0", architecture: arch), 0xdac12fe0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autiza x0", architecture: arch), 0xdac133e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autizb x0", architecture: arch), 0xdac137e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autdza x0", architecture: arch), 0xdac13be0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autdzb x0", architecture: arch), 0xdac13fe0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacga x0, x1, x2", architecture: arch), 0x9ac23020)
+    }
+
+    func testDisassemblePointerAuthData() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac10020), "pacia x0, x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac11c20), "autdb x0, x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac123e0), "paciza x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xdac13fe0), "autdzb x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9ac23020), "pacga x0, x1, x2")
+    }
+
+    func testPointerAuthDataRoundTrip() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        let sources = [
+            "pacia x3, x5", "pacib x3, x5", "pacda x3, x5", "pacdb x3, x5",
+            "autia x3, x5", "autib x3, x5", "autda x3, x5", "autdb x3, x5",
+            "paciza x7", "pacizb x7", "pacdza x7", "pacdzb x7",
+            "autiza x7", "autizb x7", "autdza x7", "autdzb x7",
+            "pacga x9, x10, x11",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source, architecture: arch)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text, architecture: arch), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testPointerAuthDataInvalidInputsThrow() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pacia x0, x1"))  // requires arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pacia w0, w1", architecture: arch))  // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pacia x0", architecture: arch))      // needs source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("paciza x0, x1", architecture: arch)) // Z form takes no source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pacga x0, x1", architecture: arch))  // pacga needs 3 operands
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)
