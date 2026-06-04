@@ -2374,6 +2374,31 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtps w0"))          // too few operands
     }
 
+    func testBFloat16ScalarConvertInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfcvt h0, s1"), 0x1e634020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfcvt h7, s9"), 0x1e634127)
+    }
+
+    func testDisassembleBFloat16ScalarConvert() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e634020), "bfcvt h0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e634127), "bfcvt h7, s9")
+    }
+
+    func testBFloat16ScalarConvertRoundTrip() throws {
+        for source in ["bfcvt h0, s1", "bfcvt h15, s16", "bfcvt h31, s31"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testBFloat16ScalarConvertInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfcvt s0, s1"))  // destination must be half
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfcvt h0, d1"))  // source must be single
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfcvt h0"))      // missing source
+    }
+
     func testFMovVectorHighInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x0, v1.d[1]"), 0x9eae0020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v2.d[1], x3"), 0x9eaf0062)

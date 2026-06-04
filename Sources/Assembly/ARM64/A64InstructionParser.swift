@@ -1676,6 +1676,13 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.floatRegister(instruction.operands[1])
             )
+        case "bfcvt":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .bfloat16Convert(
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
         case "fmadd", "fmsub", "fnmadd", "fnmsub":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 4)

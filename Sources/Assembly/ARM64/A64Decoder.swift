@@ -67,6 +67,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorTableLookup(word) { return instruction }
         if let instruction = decodeFPDataProcessing3(word) { return instruction }
         if let instruction = decodeFPDataProcessing2(word) { return instruction }
+        if let instruction = decodeBFloat16Convert(word) { return instruction }
         if let instruction = decodeFPDataProcessing1(word) { return instruction }
         if let instruction = decodeFPCompare(word) { return instruction }
         if let instruction = decodeFPConditionalSelect(word) { return instruction }
@@ -1400,6 +1401,15 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: word & 0x1f, width: width),
             first: floatRegister(number: (word >> 5) & 0x1f, width: width),
             second: floatRegister(number: (word >> 16) & 0x1f, width: width)
+        )
+    }
+
+    private static func decodeBFloat16Convert(_ word: UInt32) -> Instruction? {
+        // BFCVT Hd, Sn: fixed encoding (ptype=01, opcode=000110); only Rn/Rd vary.
+        guard word & 0xffff_fc00 == 0x1e63_4000 else { return nil }
+        return .bfloat16Convert(
+            destination: floatRegister(number: word & 0x1f, width: 16),
+            source: floatRegister(number: (word >> 5) & 0x1f, width: 32)
         )
     }
 

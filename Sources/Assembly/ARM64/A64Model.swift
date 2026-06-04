@@ -2465,6 +2465,8 @@ internal enum A64 {
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
         case fpCompare(FPCompareKind, first: FPRegister, second: FPCompareOperand)
         case fpConvertPrecision(destination: FPRegister, source: FPRegister)
+        /// `BFCVT Hd, Sn` — convert single-precision to BFloat16 (scalar).
+        case bfloat16Convert(destination: FPRegister, source: FPRegister)
         case fpMoveImmediate(destination: FPRegister, value: Double)
         case fpMoveToGeneral(destination: Register, source: FPRegister)
         case fpMoveFromGeneral(destination: FPRegister, source: Register)

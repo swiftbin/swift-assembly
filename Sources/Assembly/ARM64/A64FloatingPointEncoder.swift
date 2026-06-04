@@ -126,6 +126,12 @@ internal enum A64FloatEncoder {
         return head | (opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func bfloat16Convert(destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
+        // BFCVT converts a single-precision source to a BFloat16 (half-width) result.
+        guard rd.width == 16, rn.width == 32 else { throw AssemblerError.invalidRegister("bfcvt") }
+        return 0x1e63_4000 | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func moveImmediate(destination rd: FloatRegister, value: Double) throws -> UInt32 {
         let type = try ptype(rd, instruction: "fmov")
         guard let imm8 = A64FloatImmediate.encode(value) else {

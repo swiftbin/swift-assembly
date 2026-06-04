@@ -288,6 +288,8 @@ internal enum A64InstructionFormatter {
             }
         case .fpConvertPrecision(let destination, let source):
             return "fcvt \(formatFloatRegister(destination)), \(formatFloatRegister(source))"
+        case .bfloat16Convert(let destination, let source):
+            return "bfcvt \(formatFloatRegister(destination)), \(formatFloatRegister(source))"
         case .fpMoveImmediate(let destination, let value):
             return "fmov \(formatFloatRegister(destination)), \(formatFloatImmediate(value))"
         case .fpMoveToGeneral(let destination, let source):

@@ -239,6 +239,8 @@ internal enum A64InstructionEncoder {
             return try A64FloatEncoder.compare(kind, first: first, second: second)
         case .fpConvertPrecision(let destination, let source):
             return try A64FloatEncoder.convertPrecision(destination: destination, source: source)
+        case .bfloat16Convert(let destination, let source):
+            return try A64FloatEncoder.bfloat16Convert(destination: destination, source: source)
         case .fpMoveImmediate(let destination, let value):
             return try A64FloatEncoder.moveImmediate(destination: destination, value: value)
         case .fpMoveToGeneral(let destination, let source):
