@@ -862,6 +862,57 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldraa x0, [x1], #8", architecture: arch))    // no post-index form
     }
 
+    func testMTETagArithmeticInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("irg x0, x1"), 0x9adf1020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("irg x0, x1, x2"), 0x9ac21020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("gmi x0, x1, x2"), 0x9ac21420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subp x0, x1, x2"), 0x9ac20020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subps x0, x1, x2"), 0xbac20020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addg x0, x1, #0, #0"), 0x91800020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addg x0, x1, #16, #1"), 0x91810420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subg x0, x1, #0, #0"), 0xd1800020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subg x0, x1, #1008, #15"), 0xd1bf3c20)
+        // SP / XZR forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("irg sp, sp, x0"), 0x9ac013ff)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("subp x0, sp, sp"), 0x9adf03e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("addg sp, sp, #16, #1"), 0x918107ff)
+    }
+
+    func testDisassembleMTETagArithmetic() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9adf1020), "irg x0, x1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9ac21420), "gmi x0, x1, x2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xbac20020), "subps x0, x1, x2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd1bf3c20), "subg x0, x1, #1008, #15")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x918107ff), "addg sp, sp, #16, #1")
+    }
+
+    func testMTETagArithmeticRoundTrip() throws {
+        var sources = [
+            "irg x0, x1", "irg x3, x5, x7",
+            "gmi x0, x1, x2", "subp x0, x1, x2", "subps x0, x1, x2",
+        ]
+        for offset in [0, 16, 240, 1008] {
+            for tag in [0, 1, 15] {
+                sources.append("addg x0, x1, #\(offset), #\(tag)")
+                sources.append("subg x9, x10, #\(offset), #\(tag)")
+            }
+        }
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testMTETagArithmeticInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("irg w0, w1"))            // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("gmi x0, x1"))            // gmi needs 3 operands
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addg x0, x1, #8, #0"))   // offset not multiple of 16
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addg x0, x1, #1024, #0"))// offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addg x0, x1, #16, #16")) // tag out of range
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

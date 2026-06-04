@@ -25,6 +25,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodePStateImmediate(word) { return instruction }
         if let instruction = decodeSystemInstruction(word) { return instruction }
         if let instruction = decodeMoveWide(word) { return instruction }
+        if let instruction = decodeMTEAddSubTag(word) { return instruction }
         if let instruction = decodeAddSubImmediate(word) { return instruction }
         if let instruction = decodeAddSubShiftedRegister(word) { return instruction }
         if let instruction = decodeAddSubExtendedRegister(word) { return instruction }
@@ -37,6 +38,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMultiplyWide(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
         if let instruction = decodeAddSubCarry(word) { return instruction }
+        if let instruction = decodeMTETag(word) { return instruction }
         if let instruction = decodeCRC32(word) { return instruction }
         if let instruction = decodeDataProcessingOneSource(word) { return instruction }
         if let instruction = decodeConditionalSelect(word) { return instruction }
@@ -357,6 +359,38 @@ internal enum A64InstructionDecoder {
         let rd = integerRegister(number: word & 0x1f, width: sf == 1 ? 64 : 32)
         let shift = hw == 0 ? nil : Int(hw) * 16
         return .moveWide(kind, destination: rd, immediate: imm, shift: shift)
+    }
+
+    private static func decodeMTEAddSubTag(_ word: UInt32) -> Instruction? {
+        // ADDG/SUBG (add/subtract immediate, with tags): sf=1, S=0,
+        // bits[28:23]=100011, bit22(o2)=0, bits[15:14]=00.
+        guard word & 0xbfc0_c000 == 0x9180_0000 else { return nil }
+        let subtract = ((word >> 30) & 1) == 1
+        let uimm6 = (word >> 16) & 0x3f
+        let tag = (word >> 10) & 0xf
+        let rn = xRegister(number: (word >> 5) & 0x1f)
+        let rd = xRegister(number: word & 0x1f)
+        return .mteAddSubTag(subtract: subtract, destination: rd, source: rn, offset: uimm6 * 16, tag: tag)
+    }
+
+    private static func decodeMTETag(_ word: UInt32) -> Instruction? {
+        // Data-processing (2 source), 64-bit: sf=1, bit30=0, bits[28:21]=11010110.
+        guard ((word >> 31) & 1) == 1, ((word >> 30) & 1) == 0, ((word >> 21) & 0xff) == 0xd6 else { return nil }
+        let setsFlags = ((word >> 29) & 1) == 1
+        let opcode = (word >> 10) & 0x3f
+        guard let kind = A64.MTETagKind.decode(setsFlags: setsFlags, opcode: opcode) else { return nil }
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        switch kind {
+        case .irg:
+            let mask = integerRegister(number: rmNum, width: 64)
+            return .mteTag(kind, destination: xRegister(number: rdNum), first: xRegister(number: rnNum), second: mask)
+        case .gmi:
+            return .mteTag(kind, destination: integerRegister(number: rdNum, width: 64), first: xRegister(number: rnNum), second: integerRegister(number: rmNum, width: 64))
+        case .subp, .subps:
+            return .mteTag(kind, destination: integerRegister(number: rdNum, width: 64), first: xRegister(number: rnNum), second: xRegister(number: rmNum))
+        }
     }
 
     private static func decodeAddSubImmediate(_ word: UInt32) -> Instruction? {

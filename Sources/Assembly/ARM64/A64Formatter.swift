@@ -219,6 +219,14 @@ internal enum A64InstructionFormatter {
             return operands.isEmpty ? kind.rawValue : "\(kind.rawValue) \(operands.joined(separator: ", "))"
         case .pointerAuthLoad(let kind, let target, let memory):
             return "\(kind.rawValue) \(([formatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .mteTag(let kind, let destination, let first, let second):
+            // IRG omits the mask operand when it is the zero register.
+            if kind == .irg, second.number == 31 {
+                return "irg \(formatRegister(destination)), \(formatRegister(first))"
+            }
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
+        case .mteAddSubTag(let subtract, let destination, let source, let offset, let tag):
+            return "\(subtract ? "subg" : "addg") \(formatRegister(destination)), \(formatRegister(source)), #\(offset), #\(tag)"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

@@ -1467,6 +1467,51 @@ internal enum A64InstructionParser {
                 try expectOperandCount(instruction, exactly: 0)
                 return .pointerAuthBranch(kind, target: nil, modifier: nil)
             }
+        case "irg", "gmi", "subp", "subps":
+            guard parts.count == 1 else { return nil }
+            let kind = A64.MTETagKind(rawValue: mnemonic)!
+            switch kind {
+            case .irg:
+                try expectOperandCount(instruction, 2...3)
+                let mask = instruction.operands.count == 3
+                    ? try A64Parser.xRegister(instruction.operands[2])
+                    : try A64Parser.xRegister("xzr")
+                return .mteTag(
+                    kind,
+                    destination: try A64Parser.xRegisterAllowingSP(instruction.operands[0]),
+                    first: try A64Parser.xRegisterAllowingSP(instruction.operands[1]),
+                    second: mask
+                )
+            case .gmi:
+                try expectOperandCount(instruction, exactly: 3)
+                return .mteTag(
+                    kind,
+                    destination: try A64Parser.xRegister(instruction.operands[0]),
+                    first: try A64Parser.xRegisterAllowingSP(instruction.operands[1]),
+                    second: try A64Parser.xRegister(instruction.operands[2])
+                )
+            case .subp, .subps:
+                try expectOperandCount(instruction, exactly: 3)
+                return .mteTag(
+                    kind,
+                    destination: try A64Parser.xRegister(instruction.operands[0]),
+                    first: try A64Parser.xRegisterAllowingSP(instruction.operands[1]),
+                    second: try A64Parser.xRegisterAllowingSP(instruction.operands[2])
+                )
+            }
+        case "addg", "subg":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let offset = try A64Parser.immediate(instruction.operands[2])
+            let tag = try A64Parser.immediate(instruction.operands[3])
+            guard offset >= 0, tag >= 0 else { throw AssemblerError.unsupportedOperand(instruction.operands[2]) }
+            return .mteAddSubTag(
+                subtract: mnemonic == "subg",
+                destination: try A64Parser.xRegisterAllowingSP(instruction.operands[0]),
+                source: try A64Parser.xRegisterAllowingSP(instruction.operands[1]),
+                offset: UInt32(truncatingIfNeeded: offset),
+                tag: UInt32(truncatingIfNeeded: tag)
+            )
         case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
             guard parts.count == 1 else { return nil }
             if mnemonic != "fnmul", allOperandsAreVectorRegisters(instruction) {

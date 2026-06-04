@@ -192,6 +192,10 @@ internal enum A64InstructionEncoder {
             return try A64PointerAuthenticationEncoder.encodeBranch(kind, target: target, modifier: modifier)
         case .pointerAuthLoad(let kind, let target, let memory):
             return try A64PointerAuthenticationEncoder.encodeLoad(kind, target: target, memory: memory)
+        case .mteTag(let kind, let destination, let first, let second):
+            return try A64MTEEncoder.tag(kind, destination: destination, first: first, second: second)
+        case .mteAddSubTag(let subtract, let destination, let source, let offset, let tag):
+            return try A64MTEEncoder.addSubTag(subtract: subtract, destination: destination, source: source, offset: offset, tag: tag)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
@@ -442,6 +446,26 @@ internal enum A64PointerAuthenticationEncoder {
         let m: UInt32 = kind.isBKey ? 1 : 0
         let w: UInt32 = writeback ? 1 : 0
         return 0xf820_0400 | (m << 23) | (s << 22) | (imm9 << 12) | (w << 11) | (base.encodedNumber << 5) | target.encodedNumber
+    }
+}
+
+internal enum A64MTEEncoder {
+    static func tag(_ kind: A64.MTETagKind, destination: IntegerRegister, first: IntegerRegister, second: IntegerRegister) throws -> UInt32 {
+        guard destination.is64Bit, first.is64Bit, second.is64Bit else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        return kind.baseWord | (second.encodedNumber << 16) | (first.encodedNumber << 5) | destination.encodedNumber
+    }
+
+    static func addSubTag(subtract: Bool, destination: IntegerRegister, source: IntegerRegister, offset: UInt32, tag: UInt32) throws -> UInt32 {
+        let mnemonic = subtract ? "subg" : "addg"
+        guard destination.is64Bit, source.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) }
+        guard offset % 16 == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: Int64(offset), alignment: 16) }
+        let uimm6 = offset / 16
+        try checkRange(Int64(uimm6), 0...63, instruction: mnemonic)
+        try checkRange(Int64(tag), 0...15, instruction: mnemonic)
+        let base: UInt32 = subtract ? 0xd180_0000 : 0x9180_0000
+        return base | (uimm6 << 16) | (tag << 10) | (source.encodedNumber << 5) | destination.encodedNumber
     }
 }
 

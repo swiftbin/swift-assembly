@@ -1076,6 +1076,38 @@ internal enum A64 {
         }
     }
 
+    /// Memory Tagging Extension tag-arithmetic forms that use the
+    /// data-processing (2 source) layout: `IRG`, `GMI`, `SUBP`, `SUBPS`.
+    enum MTETagKind: String, Equatable, CaseIterable {
+        case irg, gmi, subp, subps
+
+        var setsFlags: Bool { self == .subps }
+
+        /// The `opcode` field at bits [15:10].
+        var opcodeField: UInt32 {
+            switch self {
+            case .subp, .subps: return 0
+            case .irg: return 4
+            case .gmi: return 5
+            }
+        }
+
+        /// Base encoding with `Rd`/`Rn`/`Rm` zeroed.
+        var baseWord: UInt32 {
+            0x9ac0_0000 | (setsFlags ? (UInt32(1) << 29) : 0) | (opcodeField << 10)
+        }
+
+        static func decode(setsFlags: Bool, opcode: UInt32) -> MTETagKind? {
+            switch (setsFlags, opcode) {
+            case (false, 0): return .subp
+            case (true, 0): return .subps
+            case (false, 4): return .irg
+            case (false, 5): return .gmi
+            default: return nil
+            }
+        }
+    }
+
     /// Load register with pointer authentication (`LDRAA`/`LDRAB`). The signed
     /// 10-bit offset is scaled by 8 and an optional `!` selects writeback.
     enum PointerAuthLoadKind: String, Equatable, CaseIterable {
@@ -2278,6 +2310,8 @@ internal enum A64 {
         case pointerAuthData(PointerAuthDataKind, destination: Register, source: Register?, modifier: Register?)
         case pointerAuthBranch(PointerAuthBranchKind, target: Register?, modifier: Register?)
         case pointerAuthLoad(PointerAuthLoadKind, target: Register, memory: MemoryOperand)
+        case mteTag(MTETagKind, destination: Register, first: Register, second: Register)
+        case mteAddSubTag(subtract: Bool, destination: Register, source: Register, offset: UInt32, tag: UInt32)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
@@ -2418,6 +2452,7 @@ internal typealias RCpcUnscaledKind = A64.RCpcUnscaledKind
 internal typealias PointerAuthDataKind = A64.PointerAuthDataKind
 internal typealias PointerAuthBranchKind = A64.PointerAuthBranchKind
 internal typealias PointerAuthLoadKind = A64.PointerAuthLoadKind
+internal typealias MTETagKind = A64.MTETagKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
