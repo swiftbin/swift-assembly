@@ -39,6 +39,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeDivide(word) { return instruction }
         if let instruction = decodeAddSubCarry(word) { return instruction }
         if let instruction = decodeMTETag(word) { return instruction }
+        if let instruction = decodeRMIF(word) { return instruction }
+        if let instruction = decodeEvaluateIntoFlags(word) { return instruction }
         if let instruction = decodeCRC32(word) { return instruction }
         if let instruction = decodeDataProcessingOneSource(word) { return instruction }
         if let instruction = decodeConditionalSelect(word) { return instruction }
@@ -393,6 +395,23 @@ internal enum A64InstructionDecoder {
         case .subp, .subps:
             return .mteTag(kind, destination: integerRegister(number: rdNum, width: 64), first: xRegister(number: rnNum), second: xRegister(number: rmNum))
         }
+    }
+
+    private static func decodeRMIF(_ word: UInt32) -> Instruction? {
+        // RMIF: bits[31:21]=10111010000, bits[14:10]=00001, bit4=0.
+        guard word & 0xffe0_7c10 == 0xba00_0400 else { return nil }
+        let rotate = (word >> 15) & 0x3f
+        let mask = word & 0xf
+        let source = xRegister(number: (word >> 5) & 0x1f)
+        return .rmif(source: source, rotate: rotate, mask: mask)
+    }
+
+    private static func decodeEvaluateIntoFlags(_ word: UInt32) -> Instruction? {
+        // SETF8/SETF16: bits fixed except sz (bit14) and Rn.
+        guard word & 0xffff_bc1f == 0x3a00_080d else { return nil }
+        let kind: A64.EvaluateFlagsKind = ((word >> 14) & 1) == 1 ? .setf16 : .setf8
+        let source = integerRegister(number: (word >> 5) & 0x1f, width: 32)
+        return .evaluateIntoFlags(kind, source: source)
     }
 
     private static func decodeAddSubImmediate(_ word: UInt32) -> Instruction? {

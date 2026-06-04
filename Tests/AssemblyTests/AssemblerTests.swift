@@ -984,6 +984,46 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("stgp x0, x1, [x2, #8]"))  // pair offset not multiple of 16
     }
 
+    func testFlagManipulationInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rmif x0, #1, #2"), 0xba008402)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rmif x3, #63, #15"), 0xba1f846f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rmif x1, #0, #0"), 0xba000420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("setf8 w0"), 0x3a00080d)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("setf8 w5"), 0x3a0008ad)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("setf16 w0"), 0x3a00480d)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("setf16 w12"), 0x3a00498d)
+    }
+
+    func testDisassembleFlagManipulation() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xba008402), "rmif x0, #1, #2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xba1f846f), "rmif x3, #63, #15")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3a0008ad), "setf8 w5")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x3a00498d), "setf16 w12")
+    }
+
+    func testFlagManipulationRoundTrip() throws {
+        var sources = ["setf8 w0", "setf8 w17", "setf16 w0", "setf16 w30"]
+        for rotate in [0, 1, 31, 63] {
+            for mask in [0, 1, 8, 15] {
+                sources.append("rmif x4, #\(rotate), #\(mask)")
+            }
+        }
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testFlagManipulationInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rmif w0, #1, #2"))   // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rmif x0, #64, #0"))  // rotate out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rmif x0, #0, #16"))  // mask out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("setf8 x0"))          // 32-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("setf16 x0"))         // 32-bit only
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

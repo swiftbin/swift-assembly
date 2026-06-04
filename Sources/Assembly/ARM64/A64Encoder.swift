@@ -204,6 +204,10 @@ internal enum A64InstructionEncoder {
             return try A64MTEEncoder.tagMultiple(kind, target: target, base: base)
         case .mteStoreTagPair(let first, let second, let memory):
             return try A64MTEEncoder.storeTagPair(first: first, second: second, memory: memory)
+        case .rmif(let source, let rotate, let mask):
+            return try A64FlagManipulationEncoder.rmif(source: source, rotate: rotate, mask: mask)
+        case .evaluateIntoFlags(let kind, let source):
+            return try A64FlagManipulationEncoder.evaluateIntoFlags(kind, source: source)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
@@ -557,6 +561,21 @@ internal enum A64MTEEncoder {
         try checkRange(scaled, -64...63, instruction: "stgp")
         let imm7 = UInt32(bitPattern: Int32(scaled)) & 0x7f
         return modeBase | (imm7 << 15) | (second.encodedNumber << 10) | (base.encodedNumber << 5) | first.encodedNumber
+    }
+}
+
+internal enum A64FlagManipulationEncoder {
+    static func rmif(source: IntegerRegister, rotate: UInt32, mask: UInt32) throws -> UInt32 {
+        guard source.is64Bit else { throw AssemblerError.invalidRegister("rmif") }
+        try checkRange(Int64(rotate), 0...63, instruction: "rmif")
+        try checkRange(Int64(mask), 0...15, instruction: "rmif")
+        return 0xba00_0400 | (rotate << 15) | (source.encodedNumber << 5) | mask
+    }
+
+    static func evaluateIntoFlags(_ kind: A64.EvaluateFlagsKind, source: IntegerRegister) throws -> UInt32 {
+        guard !source.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let base: UInt32 = kind.isSixteen ? 0x3a00_480d : 0x3a00_080d
+        return base | (source.encodedNumber << 5)
     }
 }
 

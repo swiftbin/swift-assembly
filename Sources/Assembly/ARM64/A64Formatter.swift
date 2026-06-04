@@ -235,6 +235,10 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(target)), [\(formatRegister(base))]"
         case .mteStoreTagPair(let first, let second, let memory):
             return "stgp \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
+        case .rmif(let source, let rotate, let mask):
+            return "rmif \(formatRegister(source)), #\(rotate), #\(mask)"
+        case .evaluateIntoFlags(let kind, let source):
+            return "\(kind.rawValue) \(formatRegister(source))"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

@@ -1148,6 +1148,14 @@ internal enum A64 {
         }
     }
 
+    /// "Evaluate into flags" (FlagM): `SETF8` / `SETF16` set the NZV flags from
+    /// the low 8 or 16 bits of `Wn`.
+    enum EvaluateFlagsKind: String, Equatable, CaseIterable {
+        case setf8, setf16
+        /// The `sz` field at bit 14 (0 = 8-bit, 1 = 16-bit).
+        var isSixteen: Bool { self == .setf16 }
+    }
+
     /// Load register with pointer authentication (`LDRAA`/`LDRAB`). The signed
     /// 10-bit offset is scaled by 8 and an optional `!` selects writeback.
     enum PointerAuthLoadKind: String, Equatable, CaseIterable {
@@ -2356,6 +2364,10 @@ internal enum A64 {
         case mteLoadTag(target: Register, memory: MemoryOperand)
         case mteTagMultiple(MTETagMultipleKind, target: Register, base: Register)
         case mteStoreTagPair(first: Register, second: Register, memory: MemoryOperand)
+        /// `RMIF` — rotate `Xn` right by `rotate` and insert the selected bits into the flags.
+        case rmif(source: Register, rotate: UInt32, mask: UInt32)
+        /// `SETF8` / `SETF16` — evaluate the low bits of `Wn` into the NZV flags.
+        case evaluateIntoFlags(EvaluateFlagsKind, source: Register)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
@@ -2499,6 +2511,7 @@ internal typealias PointerAuthLoadKind = A64.PointerAuthLoadKind
 internal typealias MTETagKind = A64.MTETagKind
 internal typealias MTEStoreTagKind = A64.MTEStoreTagKind
 internal typealias MTETagMultipleKind = A64.MTETagMultipleKind
+internal typealias EvaluateFlagsKind = A64.EvaluateFlagsKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

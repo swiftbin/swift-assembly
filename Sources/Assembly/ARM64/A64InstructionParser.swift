@@ -1547,6 +1547,21 @@ internal enum A64InstructionParser {
             let second = try A64Parser.xRegister(instruction.operands[1])
             let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 2)
             return .mteStoreTagPair(first: first, second: second, memory: memory)
+        case "rmif":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let source = try A64Parser.xRegister(instruction.operands[0])
+            let rotate = try A64Parser.immediate(instruction.operands[1])
+            let mask = try A64Parser.immediate(instruction.operands[2])
+            guard rotate >= 0, mask >= 0 else { throw AssemblerError.unsupportedOperand(instruction.operands[1]) }
+            return .rmif(source: source, rotate: UInt32(truncatingIfNeeded: rotate), mask: UInt32(truncatingIfNeeded: mask))
+        case "setf8", "setf16":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 1)
+            let kind = A64.EvaluateFlagsKind(rawValue: mnemonic)!
+            let source = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            guard !source.is64Bit else { throw AssemblerError.invalidRegister(instruction.operands[0]) }
+            return .evaluateIntoFlags(kind, source: source)
         case "fadd", "fsub", "fmul", "fdiv", "fmax", "fmin", "fmaxnm", "fminnm", "fnmul":
             guard parts.count == 1 else { return nil }
             if mnemonic != "fnmul", allOperandsAreVectorRegisters(instruction) {
