@@ -163,6 +163,28 @@ internal enum A64FloatEncoder {
         return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func convertToFixed(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister, fbits: UInt32) throws -> UInt32 {
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let type = try ptype(rn, instruction: kind.rawValue)
+        let maxFbits: UInt32 = rd.is64Bit ? 64 : 32
+        guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
+        let scale = 64 - fbits
+        let opcode: UInt32 = kind == .fcvtzs ? 0b000 : 0b001
+        let head: UInt32 = (sf << 31) | 0x1e00_0000 | (type << 22) | (0b11 << 19)
+        return head | (opcode << 16) | (scale << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func convertFromFixed(_ kind: A64.FPConvertFromIntKind, destination rd: FloatRegister, source rn: IntegerRegister, fbits: UInt32) throws -> UInt32 {
+        let sf: UInt32 = rn.is64Bit ? 1 : 0
+        let type = try ptype(rd, instruction: kind.rawValue)
+        let maxFbits: UInt32 = rn.is64Bit ? 64 : 32
+        guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
+        let scale = 64 - fbits
+        let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
+        let head: UInt32 = (sf << 31) | 0x1e00_0000 | (type << 22)
+        return head | (opcode << 16) | (scale << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func conditionalSelect(destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, condition: A64.Condition) throws -> UInt32 {
         try requireSameType(rd, rn, rm, instruction: "fcsel")
         let type = try ptype(rd, instruction: "fcsel")

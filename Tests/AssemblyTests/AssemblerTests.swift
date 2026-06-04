@@ -652,6 +652,42 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fccmp s1, d2, #0, eq"))   // mixed widths
     }
 
+    func testFPFixedPointConvertInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf s0, w1, #4"), 0x1e02f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf d0, x1, #8"), 0x9e43e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs w0, s1, #4"), 0x1e18f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu x0, d1, #8"), 0x9e59e020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf h0, w1, #2"), 0x1ec2f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs w0, h1, #3"), 0x1ed8f420)
+    }
+
+    func testDisassembleFPFixedPointConvert() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e02f020), "scvtf s0, w1, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9e43e020), "ucvtf d0, x1, #8")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e18f020), "fcvtzs w0, s1, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ed8f420), "fcvtzs w0, h1, #3")
+    }
+
+    func testFPFixedPointConvertRoundTrip() throws {
+        let sources = [
+            "scvtf s0, w1, #4", "ucvtf d2, x3, #8", "scvtf d4, w5, #1", "ucvtf s6, x7, #31",
+            "fcvtzs w0, s1, #4", "fcvtzu x2, d3, #8", "fcvtzs x4, s5, #32", "fcvtzu w6, d7, #16",
+            "scvtf h8, w9, #2", "fcvtzs w10, h11, #3", "ucvtf h12, x13, #5", "fcvtzu x14, h15, #6",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testFPFixedPointConvertInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf s0, w1, #0"))   // fbits must be >= 1
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("scvtf s0, w1, #33"))  // W register: fbits <= 32
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtzs w0, s1, #65"))  // out of range
+    }
+
     func testAcrossLanesIntegerInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)

@@ -146,6 +146,10 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatFloatRegister(source))"
         case .fpConvertFromInt(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatRegister(source))"
+        case .fpConvertToFixed(let kind, let destination, let source, let fbits):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatFloatRegister(source)), #\(fbits)"
+        case .fpConvertFromFixed(let kind, let destination, let source, let fbits):
+            return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatRegister(source)), #\(fbits)"
         case .fjcvtzs(let destination, let source):
             return "fjcvtzs \(formatRegister(destination)), \(formatFloatRegister(source))"
         case .fpConditionalSelect(let destination, let first, let second, let condition):

@@ -38,6 +38,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPConditionalCompare(word) { return instruction }
         if let instruction = decodeFPMoveImmediate(word) { return instruction }
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
+        if let instruction = decodeFPFixedPointConvert(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
         if let instruction = decodeCryptoAES(word) { return instruction }
         if let instruction = decodeCryptoSHA3(word) { return instruction }
@@ -793,6 +794,32 @@ internal enum A64InstructionDecoder {
             second = .register(floatRegister(number: (word >> 16) & 0x1f, width: width))
         }
         return .fpCompare(kind, first: rn, second: second)
+    }
+
+    private static func decodeFPFixedPointConvert(_ word: UInt32) -> Instruction? {
+        guard word & 0x7f20_0000 == 0x1e00_0000 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        let sf = (word >> 31) & 1
+        let generalWidth = sf == 1 ? 64 : 32
+        let rmode = (word >> 19) & 3
+        let opcode = (word >> 16) & 7
+        let scale = (word >> 10) & 0x3f
+        // For 32-bit general registers `scale` must have its high bit set (fbits 1...32).
+        if sf == 0 { guard scale >= 32 else { return nil } }
+        let fbits = 64 - scale
+        guard fbits >= 1 else { return nil }
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        switch (rmode, opcode) {
+        case (0b11, 0b000), (0b11, 0b001):
+            let kind: A64.FPConvertToIntKind = opcode == 0b000 ? .fcvtzs : .fcvtzu
+            return .fpConvertToFixed(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width), fbits: fbits)
+        case (0b00, 0b010), (0b00, 0b011):
+            let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
+            return .fpConvertFromFixed(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth), fbits: fbits)
+        default:
+            return nil
+        }
     }
 
     private static func decodeFPConditionalSelect(_ word: UInt32) -> Instruction? {

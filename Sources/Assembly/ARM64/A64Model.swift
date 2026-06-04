@@ -1448,6 +1448,10 @@ internal enum A64 {
         case fpMoveFromGeneral(destination: FPRegister, source: Register)
         case fpConvertToInt(FPConvertToIntKind, destination: Register, source: FPRegister)
         case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
+        /// Scalar floating-point to fixed-point convert (`fcvtzs/fcvtzu <Wd|Xd>, <n>, #fbits`).
+        case fpConvertToFixed(FPConvertToIntKind, destination: Register, source: FPRegister, fbits: UInt32)
+        /// Scalar fixed-point to floating-point convert (`scvtf/ucvtf <d>, <Wn|Xn>, #fbits`).
+        case fpConvertFromFixed(FPConvertFromIntKind, destination: FPRegister, source: Register, fbits: UInt32)
         /// Floating-point JavaScript Convert to Signed fixed-point (`fjcvtzs w<d>, d<n>`).
         case fjcvtzs(destination: Register, source: FPRegister)
         /// Scalar floating-point conditional select (`fcsel <d>, <n>, <m>, <cond>`).

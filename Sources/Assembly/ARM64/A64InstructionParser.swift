@@ -1138,6 +1138,17 @@ internal enum A64InstructionParser {
             if isVectorShiftImmediate(instruction) {
                 return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: mnemonic)!)
             }
+            // Scalar fixed-point form: `<Wd|Xd>, <n>, #fbits`.
+            if instruction.operands.count == 3 {
+                let fbits = try A64Parser.immediate(instruction.operands[2])
+                guard fbits >= 1, fbits <= 64 else { throw AssemblerError.invalidImmediate(instruction.operands[2]) }
+                return .fpConvertToFixed(
+                    A64.FPConvertToIntKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                    source: try A64Parser.floatRegister(instruction.operands[1]),
+                    fbits: UInt32(fbits)
+                )
+            }
             try expectOperandCount(instruction, exactly: 2)
             return .fpConvertToInt(
                 A64.FPConvertToIntKind(rawValue: mnemonic)!,
@@ -1149,6 +1160,17 @@ internal enum A64InstructionParser {
             // Vector fixed-point form: `Vd.T, Vn.T, #fbits`.
             if isVectorShiftImmediate(instruction) {
                 return try vectorShiftImmediate(instruction, kind: A64.VectorShiftImmediateKind(rawValue: mnemonic)!)
+            }
+            // Scalar fixed-point form: `<d>, <Wn|Xn>, #fbits`.
+            if instruction.operands.count == 3 {
+                let fbits = try A64Parser.immediate(instruction.operands[2])
+                guard fbits >= 1, fbits <= 64 else { throw AssemblerError.invalidImmediate(instruction.operands[2]) }
+                return .fpConvertFromFixed(
+                    A64.FPConvertFromIntKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.floatRegister(instruction.operands[0]),
+                    source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                    fbits: UInt32(fbits)
+                )
             }
             try expectOperandCount(instruction, exactly: 2)
             return .fpConvertFromInt(
