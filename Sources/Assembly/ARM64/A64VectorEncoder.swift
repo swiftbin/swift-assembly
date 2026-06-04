@@ -681,7 +681,7 @@ internal enum A64VectorEncoder {
                   elementWidth(of: rn.arrangement) == element.width else { throw fail() }
         case .fp:
             guard rd.arrangement == rn.arrangement,
-                  [.s2, .s4, .d2].contains(rn.arrangement),
+                  [.h4, .h8, .s2, .s4, .d2].contains(rn.arrangement),
                   elementWidth(of: rn.arrangement) == element.width else { throw fail() }
         case .long:
             guard [.h4, .h8, .s2, .s4].contains(rn.arrangement),
@@ -722,8 +722,13 @@ internal enum A64VectorEncoder {
             throw fail()
         }
 
+        // The FP16 by-element form (fmul/fmla/fmls/fmulx on `.4h`/`.8h`) uses
+        // `size=00` (half precision), unlike the integer `.h` element which is
+        // `size=01`. The index/Vm fields are identical to the `.h` case above.
+        let encodedSize = (spec.form == .fp && element.width == .h) ? 0b00 : size
+
         let base: UInt32 = 0x0f00_0000
-        let head = (q << 30) | (spec.u << 29) | base | (size << 22)
+        let head = (q << 30) | (spec.u << 29) | base | (encodedSize << 22)
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -866,8 +871,8 @@ internal enum A64VectorEncoder {
             guard elementBits == 16 || elementBits == 32,
                   rd.width == elementBits, rn.width == elementBits else { throw fail() }
         case .fp:
-            // fmul / fmla / fmls / fmulx: S or D, all widths equal.
-            guard elementBits == 32 || elementBits == 64,
+            // fmul / fmla / fmls / fmulx: H (FP16), S or D, all widths equal.
+            guard elementBits == 16 || elementBits == 32 || elementBits == 64,
                   rd.width == elementBits, rn.width == elementBits else { throw fail() }
         case .long:
             // sqdmlal / sqdmlsl / sqdmull: H->S or S->D.
@@ -906,9 +911,13 @@ internal enum A64VectorEncoder {
             throw fail()
         }
 
+        // The FP16 scalar by-element form uses `size=00` (half precision),
+        // unlike the integer `.h` element which is `size=01`.
+        let encodedSize = (spec.form == .fp && element.width == .h) ? 0b00 : size
+
         // Base: bit30=1, bits[28:24]=11111.
         let base: UInt32 = 0x5f00_0000
-        let head = (spec.u << 29) | base | (size << 22)
+        let head = (spec.u << 29) | base | (encodedSize << 22)
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 

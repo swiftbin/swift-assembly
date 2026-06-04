@@ -1767,7 +1767,9 @@ internal enum A64InstructionDecoder {
         let index: Int
         let vm: UInt32
         switch size {
-        case 0b01:
+        case 0b00, 0b01:
+            // `size=00` is the FP16 by-element form; `size=01` is the integer
+            // `.h` element. Both pack the index as H:L:M and Vm in four bits.
             width = .h
             index = Int((h << 2) | (l << 1) | m)
             vm = rmField
@@ -1787,18 +1789,20 @@ internal enum A64InstructionDecoder {
         let first: A64.VectorArrangement
         switch kind.spec.form {
         case .same:
-            guard width != .d, let arrangement = differentNarrowArrangement(size: size, q: q) else { return nil }
+            guard size != 0b00, width != .d,
+                  let arrangement = differentNarrowArrangement(size: size, q: q) else { return nil }
             destination = arrangement
             first = arrangement
         case .fp:
             switch size {
+            case 0b00: destination = q == 1 ? .h8 : .h4
             case 0b10: destination = q == 1 ? .s4 : .s2
             case 0b11: guard q == 1 else { return nil }; destination = .d2
             default: return nil
             }
             first = destination
         case .long:
-            guard width != .d,
+            guard size != 0b00, width != .d,
                   let narrow = differentNarrowArrangement(size: size, q: q),
                   let wide = doubledArrangement(narrow) else { return nil }
             destination = wide
@@ -2070,7 +2074,9 @@ internal enum A64InstructionDecoder {
         let index: Int
         let vm: UInt32
         switch size {
-        case 0b01:
+        case 0b00, 0b01:
+            // `size=00` is the FP16 by-element form; `size=01` is the integer
+            // `.h` element. Both pack the index as H:L:M and Vm in four bits.
             width = .h
             index = Int((h << 2) | (l << 1) | m)
             vm = rmField
@@ -2098,13 +2104,14 @@ internal enum A64InstructionDecoder {
         let firstWidth: Int
         switch kind.spec.form {
         case .same:
-            guard elementBits == 16 || elementBits == 32 else { return nil }
+            guard size != 0b00, elementBits == 16 || elementBits == 32 else { return nil }
             destWidth = elementBits; firstWidth = elementBits
         case .fp:
-            guard elementBits == 32 || elementBits == 64 else { return nil }
+            // FP16 uses size=00; FP32/64 use size=10/11; size=01 is invalid.
+            guard size != 0b01 else { return nil }
             destWidth = elementBits; firstWidth = elementBits
         case .long:
-            guard elementBits == 16 || elementBits == 32 else { return nil }
+            guard size != 0b00, elementBits == 16 || elementBits == 32 else { return nil }
             firstWidth = elementBits; destWidth = elementBits * 2
         }
 

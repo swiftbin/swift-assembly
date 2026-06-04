@@ -1443,8 +1443,54 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.4h, v1.4h, v16.h[3]"))   // H form limits register to 0-15
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.8b, v1.8b, v2.b[3]"))    // byte element unsupported
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("smull v0.2d, v1.4h, v2.h[3]"))  // long dest must be one size up
-        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v2.h[3]"))   // FP16 indexed form unsupported
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmul v0.2d, v1.4s, v2.s[1]"))   // fp dest/source mismatch
+    }
+
+    func testVectorIndexedFP16Instructions() throws {
+        // FP16 by-element fmla / fmls / fmul / fmulx on `.4h`/`.8h` (size=00).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v2.h[0]"), 0x0f021020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla v0.8h, v1.8h, v2.h[7]"), 0x4f321820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmls v0.4h, v1.4h, v2.h[1]"), 0x0f125020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul v0.8h, v1.8h, v2.h[3]"), 0x4f329020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx v0.4h, v1.4h, v2.h[5]"), 0x2f129820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v15.h[2]"), 0x0f2f1020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul v0.4h, v1.4h, v15.h[6]"), 0x0f2f9820)
+        // Scalar FP16 by-element forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla h0, h1, v2.h[0]"), 0x5f021020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla h0, h1, v2.h[7]"), 0x5f321820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmls h0, h1, v2.h[1]"), 0x5f125020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul h0, h1, v2.h[3]"), 0x5f329020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx h0, h1, v15.h[5]"), 0x7f1f9820)
+    }
+
+    func testDisassembleVectorIndexedFP16() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f021020), "fmla v0.4h, v1.4h, v2.h[0]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4f321820), "fmla v0.8h, v1.8h, v2.h[7]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2f129820), "fmulx v0.4h, v1.4h, v2.h[5]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5f329020), "fmul h0, h1, v2.h[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7f1f9820), "fmulx h0, h1, v15.h[5]")
+    }
+
+    func testVectorIndexedFP16RoundTrip() throws {
+        let sources = [
+            "fmla v0.4h, v1.4h, v2.h[0]", "fmla v3.8h, v4.8h, v5.h[7]",
+            "fmls v6.4h, v7.4h, v8.h[1]", "fmul v9.8h, v10.8h, v11.h[3]",
+            "fmulx v12.4h, v13.4h, v14.h[5]", "fmul v15.4h, v16.4h, v15.h[6]",
+            "fmla h0, h1, v2.h[0]", "fmls h3, h4, v5.h[2]",
+            "fmul h6, h7, v8.h[4]", "fmulx h9, h10, v11.h[7]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorIndexedFP16InvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v16.h[0]"))  // FP16 H form: Vm 0-15
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v2.h[8]"))   // index 0-7
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmla v0.4h, v1.8h, v2.h[0]"))   // dest/source arrangement mismatch
     }
 
     func testScalarThreeSameInstructions() throws {
@@ -1745,7 +1791,6 @@ final class AssemblerTests: XCTestCase {
     func testScalarIndexedInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull d0, h1, v2.h[3]"))    // h source must produce s
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmulh d0, d1, v2.d[1]"))    // sqdmulh has no d form
-        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmul h0, h1, v2.h[3]"))       // FP16 scalar indexed unsupported
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmull s0, h1, v16.h[3]"))   // H element reg limited to 0-15
     }
 
