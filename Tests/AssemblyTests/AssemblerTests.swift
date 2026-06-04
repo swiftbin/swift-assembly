@@ -1060,6 +1060,33 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("setf16 x0"))         // 32-bit only
     }
 
+    func testWaitWithTimeoutInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("wfet x0"), 0xd5031000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("wfet x1"), 0xd5031001)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("wfit x0"), 0xd5031020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("wfit x5"), 0xd5031025)
+    }
+
+    func testDisassembleWaitWithTimeout() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5031000), "wfet x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5031025), "wfit x5")
+    }
+
+    func testWaitWithTimeoutRoundTrip() throws {
+        for source in ["wfet x0", "wfet x1", "wfet x9", "wfit x0", "wfit x5", "wfit x9"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testWaitWithTimeoutInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("wfet w0"))   // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("wfit"))      // needs a register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("wfet x0, x1")) // too many operands
+    }
+
     func testExceptionGenerationInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("hvc #0"), 0xd4000002)
         XCTAssertEqual(try ARM64Assembler.assembleWord("hvc #1"), 0xd4000022)

@@ -258,6 +258,8 @@ internal enum A64InstructionFormatter {
             return "rmif \(formatRegister(source)), #\(rotate), #\(mask)"
         case .evaluateIntoFlags(let kind, let source):
             return "\(kind.rawValue) \(formatRegister(source))"
+        case .waitWithTimeout(let isEvent, let register):
+            return "\(isEvent ? "wfet" : "wfit") \(formatRegister(register))"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

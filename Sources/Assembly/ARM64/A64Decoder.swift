@@ -20,6 +20,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeException(word) { return instruction }
         if let instruction = decodeBarrier(word) { return instruction }
         if let instruction = decodeClearExclusive(word) { return instruction }
+        if let instruction = decodeWaitWithTimeout(word) { return instruction }
         if let instruction = decodeHint(word) { return instruction }
         if let instruction = decodeSystemRegisterMove(word) { return instruction }
         if let instruction = decodePStateImmediate(word) { return instruction }
@@ -267,6 +268,13 @@ internal enum A64InstructionDecoder {
         // CLREX (CRn=0011, op2=010, Rt=11111); only the CRm immediate at [11:8] varies.
         guard word & 0xffff_f0ff == 0xd503_305f else { return nil }
         return .clearExclusive((word >> 8) & 0xf)
+    }
+
+    private static func decodeWaitWithTimeout(_ word: UInt32) -> Instruction? {
+        // WFET/WFIT: fixed bits[31:6]=0xd503_1000>>6, op2 (bit5) selects, Rt at [4:0].
+        guard word & 0xffff_ffc0 == 0xd503_1000 else { return nil }
+        let isEvent = ((word >> 5) & 1) == 0
+        return .waitWithTimeout(isEvent: isEvent, register: xRegister(number: word & 0x1f))
     }
 
     private static func decodeHint(_ word: UInt32) -> Instruction? {

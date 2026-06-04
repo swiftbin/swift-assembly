@@ -791,6 +791,10 @@ internal enum A64InstructionParser {
             case "jc": return .hint(38)
             default: throw AssemblerError.unsupportedOperand(instruction.operands[0])
             }
+        case "wfet", "wfit":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 1)
+            return .waitWithTimeout(isEvent: mnemonic == "wfet", register: try A64Parser.xRegister(instruction.operands[0]))
         case "psb", "tsb":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 1)

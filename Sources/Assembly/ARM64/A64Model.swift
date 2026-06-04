@@ -2374,6 +2374,8 @@ internal enum A64 {
         case rmif(source: Register, rotate: UInt32, mask: UInt32)
         /// `SETF8` / `SETF16` — evaluate the low bits of `Wn` into the NZV flags.
         case evaluateIntoFlags(EvaluateFlagsKind, source: Register)
+        /// `WFET` (`isEvent == true`) / `WFIT` — wait for event/interrupt with a timeout held in `Xt`.
+        case waitWithTimeout(isEvent: Bool, register: Register)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)

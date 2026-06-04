@@ -218,6 +218,9 @@ internal enum A64InstructionEncoder {
             return try A64FlagManipulationEncoder.rmif(source: source, rotate: rotate, mask: mask)
         case .evaluateIntoFlags(let kind, let source):
             return try A64FlagManipulationEncoder.evaluateIntoFlags(kind, source: source)
+        case .waitWithTimeout(let isEvent, let register):
+            guard register.is64Bit else { throw AssemblerError.invalidRegister(isEvent ? "wfet" : "wfit") }
+            return (isEvent ? 0xd503_1000 : 0xd503_1020) | register.encodedNumber
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
