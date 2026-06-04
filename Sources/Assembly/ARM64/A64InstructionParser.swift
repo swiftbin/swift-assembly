@@ -1189,6 +1189,14 @@ internal enum A64InstructionParser {
                 return .vectorBFMLALByElement(top: top, destination: destination, first: first, elementRegister: element.number, index: UInt32(element.index))
             }
             return .vectorBFMLAL(top: top, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "bfcvtn", "bfcvtn2":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .vectorBFConvertNarrow(
+                top: mnemonic == "bfcvtn2",
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
         case "bfmmla":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 3)

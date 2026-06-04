@@ -197,6 +197,8 @@ internal enum A64InstructionFormatter {
             return "\(top ? "bfmlalt" : "bfmlalb") \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).h[\(index)]"
         case .vectorBFMatrixMultiply(let destination, let first, let second):
             return "bfmmla \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorBFConvertNarrow(let top, let destination, let source):
+            return "\(top ? "bfcvtn2" : "bfcvtn") \(formatVectorRegister(destination)), \(formatVectorRegister(source))"
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .scalarPairwise(let kind, let destination, let source):

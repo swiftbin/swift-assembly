@@ -200,6 +200,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.bfMultiplyLongByElement(top: top, destination: destination, first: first, elementRegister: elementRegister, index: index)
         case .vectorBFMatrixMultiply(let destination, let first, let second):
             return try A64VectorEncoder.bfMatrixMultiply(destination: destination, first: first, second: second)
+        case .vectorBFConvertNarrow(let top, let destination, let source):
+            return try A64VectorEncoder.bfConvertNarrow(top: top, destination: destination, source: source)
         case .scalarThreeSame(let kind, let destination, let first, let second):
             return try A64VectorEncoder.scalarThreeSame(kind, destination: destination, first: first, second: second)
         case .scalarPairwise(let kind, let destination, let source):

@@ -1280,6 +1280,9 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("bfmlalt v0.4s, v1.8h, v14.h[3]"), 0x4ffef020)
         // BFMMLA.
         XCTAssertEqual(try ARM64Assembler.assembleWord("bfmmla v0.4s, v1.8h, v2.8h"), 0x6e42ec20)
+        // BFCVTN / BFCVTN2 (FP32→BF16 narrow).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfcvtn v0.4h, v1.4s"), 0x0ea16820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfcvtn2 v0.8h, v1.4s"), 0x4ea16820)
     }
 
     func testDisassembleVectorBFloat16() throws {
@@ -1289,6 +1292,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6ec2fc20), "bfmlalt v0.4s, v1.8h, v2.8h")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ff2f820), "bfmlalt v0.4s, v1.8h, v2.h[7]")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e42ec20), "bfmmla v0.4s, v1.8h, v2.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0ea16820), "bfcvtn v0.4h, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4ea16820), "bfcvtn2 v0.8h, v1.4s")
     }
 
     func testVectorBFloat16RoundTrip() throws {
@@ -1298,6 +1303,7 @@ final class AssemblerTests: XCTestCase {
             "bfmlalb v0.4s, v1.8h, v2.8h", "bfmlalt v3.4s, v4.8h, v5.8h",
             "bfmlalb v6.4s, v7.8h, v15.h[5]", "bfmlalt v9.4s, v10.8h, v14.h[3]",
             "bfmmla v0.4s, v1.8h, v2.8h",
+            "bfcvtn v0.4h, v1.4s", "bfcvtn2 v12.8h, v13.4s",
         ]
         for source in sources {
             let word = try ARM64Assembler.assembleWord(source)
@@ -1313,6 +1319,9 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfmlalb v0.4s, v1.8h, v16.h[0]")) // bfmlal element Vm <= 15
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfmmla v0.2s, v1.8h, v2.8h"))     // bfmmla dest is .4s
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfdot v0.2s, v1.4h, v2.2h[4]"))   // pair index <= 3
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfcvtn v0.8h, v1.4s"))            // bfcvtn dest is .4h
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfcvtn2 v0.4h, v1.4s"))           // bfcvtn2 dest is .8h
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("bfcvtn v0.4h, v1.2d"))            // source must be .4s
     }
 
     func testVectorIndexedInstructions() throws {

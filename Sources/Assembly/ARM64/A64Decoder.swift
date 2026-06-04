@@ -1019,6 +1019,16 @@ internal enum A64InstructionDecoder {
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
 
+        // BFCVTN/BFCVTN2 (FP32→BF16) reuse opcode 10110 but with the high size
+        // bit set (size=10); the Q bit selects the bottom/top half.
+        if (word >> 23) & 1 == 1 {
+            guard u == 0, sz == 0, opcode == 0b10110 else { return nil }
+            let top = q == 1
+            return .vectorBFConvertNarrow(top: top,
+                destination: VectorRegister(number: rdNum, arrangement: top ? .h8 : .h4),
+                source: VectorRegister(number: rnNum, arrangement: .s4))
+        }
+
         guard opcode == 0b10110 || opcode == 0b10111 else { return nil }
         guard let kind = A64.VectorFPConvertPrecisionKind.decode(u: u, opcode: opcode) else { return nil }
         let upper = q == 1

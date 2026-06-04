@@ -1309,6 +1309,7 @@ internal enum A64 {
         case vectorBFMLAL(top: Bool, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorBFMLALByElement(top: Bool, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
         case vectorBFMatrixMultiply(destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorBFConvertNarrow(top: Bool, destination: VectorRegister, source: VectorRegister)
         case scalarThreeSame(ScalarThreeSameKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case scalarPairwise(ScalarPairwiseKind, destination: FPRegister, source: VectorRegister)
         case scalarTwoRegisterMisc(ScalarTwoRegisterMiscKind, destination: FPRegister, source: FPRegister)

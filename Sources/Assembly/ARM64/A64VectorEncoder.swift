@@ -649,6 +649,17 @@ internal enum A64VectorEncoder {
         return base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func bfConvertNarrow(top: Bool, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(top ? "bfcvtn2" : "bfcvtn") }
+        // FP32→BF16 narrowing: Vn.4s → Vd.4h (bottom) / Vd.8h (top).
+        guard rn.arrangement == .s4, rd.arrangement == (top ? .h8 : .h4) else { throw fail() }
+        // Two-register-misc: bits[28:24]=01110, size=10 (bit23=1), bit21=1,
+        // opcode[16:12]=10110, bits[11:10]=10; the Q bit selects bottom/top.
+        let base: UInt32 = 0x0ea1_6800
+        let q: UInt32 = top ? 1 : 0
+        return (q << 30) | base | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     static func indexed(_ kind: A64.VectorIndexedKind, destination rd: VectorRegister, first rn: VectorRegister, element: A64.VectorElement) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
