@@ -150,8 +150,8 @@ internal enum A64FloatEncoder {
     static func convertToInt(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
         let sf: UInt32 = rd.is64Bit ? 1 : 0
         let type = try ptype(rn, instruction: kind.rawValue)
-        let opcode: UInt32 = kind == .fcvtzs ? 0b000 : 0b001
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22) | (0b11 << 19)
+        let (rmode, opcode) = kind.spec
+        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22) | (rmode << 19)
         return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -179,6 +179,8 @@ internal enum A64FloatEncoder {
     }
 
     static func convertToFixed(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister, fbits: UInt32) throws -> UInt32 {
+        // Only the round-toward-zero forms (`fcvtzs`/`fcvtzu`) have a fixed-point shape.
+        guard kind.hasFixedPointForm else { throw AssemblerError.invalidRegister(kind.rawValue) }
         let sf: UInt32 = rd.is64Bit ? 1 : 0
         let type = try ptype(rn, instruction: kind.rawValue)
         let maxFbits: UInt32 = rd.is64Bit ? 64 : 32

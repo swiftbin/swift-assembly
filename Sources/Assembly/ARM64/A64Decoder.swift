@@ -1531,10 +1531,10 @@ internal enum A64InstructionDecoder {
         let opcode = (word >> 16) & 7
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
-        switch (rmode, opcode) {
-        case (0b11, 0b000), (0b11, 0b001):
-            let kind: A64.FPConvertToIntKind = opcode == 0b000 ? .fcvtzs : .fcvtzu
+        if let kind = A64.FPConvertToIntKind.decode(rmode: rmode, opcode: opcode) {
             return .fpConvertToInt(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width))
+        }
+        switch (rmode, opcode) {
         case (0b00, 0b010), (0b00, 0b011):
             let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
             return .fpConvertFromInt(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))

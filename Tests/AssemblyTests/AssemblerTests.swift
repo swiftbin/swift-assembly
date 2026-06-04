@@ -2261,6 +2261,47 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtzs w0, s1, #65"))  // out of range
     }
 
+    func testFPConvertToIntRoundingInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns w0, s1"), 0x1e200020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtnu w0, s1"), 0x1e210020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtas w0, s1"), 0x1e240020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtau w0, s1"), 0x1e250020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtps w0, s1"), 0x1e280020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtpu w0, s1"), 0x1e290020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtms w0, s1"), 0x1e300020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtmu w0, s1"), 0x1e310020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns x0, d1"), 0x9e600020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtas x2, d3"), 0x9e640062)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtps w4, d5"), 0x1e6800a4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtmu x6, s7"), 0x9e3100e6)
+    }
+
+    func testDisassembleFPConvertToIntRounding() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e200020), "fcvtns w0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e250020), "fcvtau w0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e6800a4), "fcvtps w4, d5")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9e3100e6), "fcvtmu x6, s7")
+    }
+
+    func testFPConvertToIntRoundingRoundTrip() throws {
+        let sources = [
+            "fcvtns w0, s1", "fcvtnu x2, d3", "fcvtas w4, h5", "fcvtau x6, s7",
+            "fcvtps w8, d9", "fcvtpu x10, s11", "fcvtms w12, h13", "fcvtmu x14, d15",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testFPConvertToIntRoundingInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtas w0, s1, #2"))  // no fixed-point form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtns s0, w1"))      // source must be FP
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcvtps w0"))          // too few operands
+    }
+
     func testFMovVectorHighInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x0, v1.d[1]"), 0x9eae0020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov v2.d[1], x3"), 0x9eaf0062)

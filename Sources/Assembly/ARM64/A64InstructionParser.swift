@@ -1762,6 +1762,17 @@ internal enum A64InstructionParser {
             case (.general, .general):
                 throw AssemblerError.invalidRegister("fmov")
             }
+        case "fcvtns", "fcvtnu", "fcvtas", "fcvtau", "fcvtps", "fcvtpu", "fcvtms", "fcvtmu":
+            // Scalar floating-point to general-register convert with directed rounding.
+            // (The scalar-SIMD `Sd, Sn` and vector `Vd.T, Vn.T` shapes are handled by the
+            // two-register-misc prefix blocks above.)
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .fpConvertToInt(
+                A64.FPConvertToIntKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
         case "fcvtzs", "fcvtzu":
             guard parts.count == 1 else { return nil }
             // Vector fixed-point form: `Vd.T, Vn.T, #fbits`.

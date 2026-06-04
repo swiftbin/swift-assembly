@@ -1240,8 +1240,36 @@ internal enum A64 {
         var op: UInt32 { self == .fccmpe ? 1 : 0 }
     }
 
-    enum FPConvertToIntKind: String, Equatable {
-        case fcvtzs, fcvtzu
+    /// Scalar floating-point to general-register integer convert. The rounding
+    /// mode (`rmode` at [20:19]) and signed/unsigned `opcode` at [18:16] select
+    /// the variant. The `fcvtz*` forms additionally support a fixed-point
+    /// (`#fbits`) shape; the directed-rounding forms do not.
+    enum FPConvertToIntKind: String, Equatable, CaseIterable {
+        case fcvtns, fcvtnu, fcvtas, fcvtau
+        case fcvtps, fcvtpu, fcvtms, fcvtmu, fcvtzs, fcvtzu
+
+        /// The `rmode` ([20:19]) and `opcode` ([18:16]) fields.
+        var spec: (rmode: UInt32, opcode: UInt32) {
+            switch self {
+            case .fcvtns: return (0b00, 0b000)
+            case .fcvtnu: return (0b00, 0b001)
+            case .fcvtas: return (0b00, 0b100)
+            case .fcvtau: return (0b00, 0b101)
+            case .fcvtps: return (0b01, 0b000)
+            case .fcvtpu: return (0b01, 0b001)
+            case .fcvtms: return (0b10, 0b000)
+            case .fcvtmu: return (0b10, 0b001)
+            case .fcvtzs: return (0b11, 0b000)
+            case .fcvtzu: return (0b11, 0b001)
+            }
+        }
+
+        /// Whether this form has a fixed-point (`#fbits`) variant (`fcvtzs`/`fcvtzu` only).
+        var hasFixedPointForm: Bool { self == .fcvtzs || self == .fcvtzu }
+
+        static func decode(rmode: UInt32, opcode: UInt32) -> FPConvertToIntKind? {
+            allCases.first { $0.spec == (rmode, opcode) }
+        }
     }
 
     enum FPConvertFromIntKind: String, Equatable {
