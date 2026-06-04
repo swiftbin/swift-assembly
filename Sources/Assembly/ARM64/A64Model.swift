@@ -790,7 +790,8 @@ internal enum A64 {
                  .fminnm, .fmls, .fsub, .fmin, .frsqrts,
                  .fmaxnmp, .faddp, .fmul, .fcmge, .facge, .fmaxp, .fdiv,
                  .fminnmp, .fabd, .fcmgt, .facgt, .fminp:
-                return [.s2, .s4, .d2]
+                // `.4h`/`.8h` use the separate three-same (FP16) encoding.
+                return [.h4, .h8, .s2, .s4, .d2]
             }
         }
     }

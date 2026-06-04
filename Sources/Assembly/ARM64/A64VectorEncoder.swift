@@ -109,6 +109,15 @@ internal enum A64VectorEncoder {
             let head = (arrangement.q << 30) | (spec.u << 29) | base | (spec.variant << 22)
             return head | (spec.opcode << 11) | registers
         case .floatingPoint:
+            if arrangement.elementWidth == 16 {
+                // Three-same (FP16): `.4h`/`.8h`. Base bits[28:24]=01110,
+                // [22:21]=10, [15:14]=00, bit10=1; opcode is the low 3 bits of
+                // the regular 5-bit FP opcode and `a` selects the sub-group at
+                // bit23.
+                let fp16Base: UInt32 = 0x0e40_0400
+                let head = (arrangement.q << 30) | (spec.u << 29) | fp16Base | (spec.variant << 23)
+                return head | ((spec.opcode & 0b111) << 11) | registers
+            }
             // `a` selects the operation sub-group at bit23; `sz` (bit22) is 0 for
             // single precision (`.2s`/`.4s`) and 1 for double precision (`.2d`).
             let sz: UInt32 = arrangement.elementWidth == 64 ? 1 : 0

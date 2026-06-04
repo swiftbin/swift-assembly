@@ -626,6 +626,61 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("faddp v0.2s, v1.2s, v2.2s"), 0x2e22d420)
     }
 
+    func testVectorThreeSameFP16Instructions() throws {
+        // Three-same (FP16): `.4h`/`.8h` element forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fadd v0.4h, v1.4h, v2.4h"), 0x0e421420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fadd v0.8h, v1.8h, v2.8h"), 0x4e421420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fsub v0.4h, v1.4h, v2.4h"), 0x0ec21420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmul v0.4h, v1.4h, v2.4h"), 0x2e421c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fdiv v0.4h, v1.4h, v2.4h"), 0x2e423c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmla v0.4h, v1.4h, v2.4h"), 0x0e420c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmls v0.4h, v1.4h, v2.4h"), 0x0ec20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmax v0.4h, v1.4h, v2.4h"), 0x0e423420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmin v0.4h, v1.4h, v2.4h"), 0x0ec23420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnm v0.4h, v1.4h, v2.4h"), 0x0e420420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnm v0.4h, v1.4h, v2.4h"), 0x0ec20420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmulx v0.4h, v1.4h, v2.4h"), 0x0e421c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq v0.4h, v1.4h, v2.4h"), 0x0e422420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmge v0.4h, v1.4h, v2.4h"), 0x2e422420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt v0.4h, v1.4h, v2.4h"), 0x2ec22420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("facge v0.4h, v1.4h, v2.4h"), 0x2e422c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("facgt v0.4h, v1.4h, v2.4h"), 0x2ec22c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecps v0.4h, v1.4h, v2.4h"), 0x0e423c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrts v0.4h, v1.4h, v2.4h"), 0x0ec23c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fabd v0.4h, v1.4h, v2.4h"), 0x2ec21420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("faddp v0.4h, v1.4h, v2.4h"), 0x2e421420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxp v0.4h, v1.4h, v2.4h"), 0x2e423420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminp v0.4h, v1.4h, v2.4h"), 0x2ec23420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmp v0.4h, v1.4h, v2.4h"), 0x2e420420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmp v0.4h, v1.4h, v2.4h"), 0x2ec20420)
+    }
+
+    func testDisassembleVectorThreeSameFP16() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e421420), "fadd v0.4h, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e421420), "fadd v0.8h, v1.8h, v2.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2e421c20), "fmul v0.4h, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2ec22420), "fcmgt v0.4h, v1.4h, v2.4h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x2ec23420), "fminp v0.4h, v1.4h, v2.4h")
+    }
+
+    func testVectorThreeSameFP16RoundTrip() throws {
+        let sources = [
+            "fadd v0.4h, v1.4h, v2.4h", "fadd v3.8h, v4.8h, v5.8h",
+            "fsub v6.4h, v7.4h, v8.4h", "fmul v9.8h, v10.8h, v11.8h",
+            "fdiv v12.4h, v13.4h, v14.4h", "fmla v15.8h, v16.8h, v17.8h",
+            "fmls v18.4h, v19.4h, v20.4h", "fmax v21.8h, v22.8h, v23.8h",
+            "fminnm v24.4h, v25.4h, v26.4h", "fmulx v27.8h, v28.8h, v29.8h",
+            "fcmeq v30.4h, v31.4h, v0.4h", "facgt v1.8h, v2.8h, v3.8h",
+            "fabd v4.4h, v5.4h, v6.4h", "fmaxnmp v7.8h, v8.8h, v9.8h",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
     func testDisassembleVectorThreeSame() throws {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e228420), "add v0.16b, v1.16b, v2.16b")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e62b420), "sqdmulh v0.4h, v1.4h, v2.4h")
@@ -654,7 +709,6 @@ final class AssemblerTests: XCTestCase {
     func testVectorThreeSameInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("add v0.1d, v1.1d, v2.1d"))
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("pmul v0.4h, v1.4h, v2.4h"))
-        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fadd v0.4h, v1.4h, v2.4h"))
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("mul v0.2d, v1.2d, v2.2d"))
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sqdmulh v0.8b, v1.8b, v2.8b"))
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("shadd v0.2d, v1.2d, v2.2d"))
