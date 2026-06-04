@@ -148,6 +148,10 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatRegister(source))"
         case .fjcvtzs(let destination, let source):
             return "fjcvtzs \(formatRegister(destination)), \(formatFloatRegister(source))"
+        case .fpConditionalSelect(let destination, let first, let second, let condition):
+            return "fcsel \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second)), \(formatCondition(condition))"
+        case .fpConditionalCompare(let kind, let first, let second, let nzcv, let condition):
+            return "\(kind.rawValue) \(formatFloatRegister(first)), \(formatFloatRegister(second)), #\(nzcv), \(formatCondition(condition))"
         case .acrossLanesInteger(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatVectorRegister(source))"
         case .acrossLanesFP(let kind, let destination, let source):

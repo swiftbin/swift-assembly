@@ -144,6 +144,10 @@ internal enum A64InstructionEncoder {
             return try A64FloatEncoder.convertFromInt(kind, destination: destination, source: source)
         case .fjcvtzs(let destination, let source):
             return try A64FloatEncoder.fjcvtzs(destination: destination, source: source)
+        case .fpConditionalSelect(let destination, let first, let second, let condition):
+            return try A64FloatEncoder.conditionalSelect(destination: destination, first: first, second: second, condition: condition)
+        case .fpConditionalCompare(let kind, let first, let second, let nzcv, let condition):
+            return try A64FloatEncoder.conditionalCompare(kind, first: first, second: second, nzcv: nzcv, condition: condition)
         case .acrossLanesInteger(let kind, let destination, let source):
             return try A64VectorEncoder.acrossLanesInteger(kind, destination: destination, source: source)
         case .acrossLanesFP(let kind, let destination, let source):

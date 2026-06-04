@@ -607,6 +607,51 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fjcvtzs w0, s1"))  // source must be double
     }
 
+    func testFPConditionalSelectInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcsel s0, s1, s2, eq"), 0x1e220c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcsel d0, d1, d2, ne"), 0x1e621c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcsel h0, h1, h2, gt"), 0x1ee2cc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcsel s5, s6, s7, al"), 0x1e27ecc5)
+    }
+
+    func testFPConditionalCompareInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fccmp s1, s2, #0, eq"), 0x1e220420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fccmp d1, d2, #15, ne"), 0x1e62142f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fccmpe s1, s2, #0, eq"), 0x1e220430)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fccmpe d3, d4, #5, mi"), 0x1e644475)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fccmp h1, h2, #7, lt"), 0x1ee2b427)
+    }
+
+    func testDisassembleFPConditionalSelectAndCompare() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e220c20), "fcsel s0, s1, s2, eq")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ee2cc20), "fcsel h0, h1, h2, gt")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e220420), "fccmp s1, s2, #0, eq")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e220430), "fccmpe s1, s2, #0, eq")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ee2b427), "fccmp h1, h2, #7, lt")
+    }
+
+    func testFPConditionalRoundTrip() throws {
+        let sources = [
+            "fcsel s0, s1, s2, eq", "fcsel d3, d4, d5, ne", "fcsel h6, h7, h8, gt",
+            "fcsel s9, s10, s11, al",
+            "fccmp s1, s2, #0, eq", "fccmp d1, d2, #15, ne", "fccmpe s3, s4, #3, mi",
+            "fccmpe d5, d6, #5, pl", "fccmp h7, h8, #7, lt",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testFPConditionalInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcsel s0, d1, s2, eq"))   // mixed widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fcsel s0, s1, s2, xy"))   // bad condition
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fccmp s1, s2, #16, eq"))  // nzcv out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fccmp s1, d2, #0, eq"))   // mixed widths
+    }
+
     func testAcrossLanesIntegerInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)

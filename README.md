@@ -27,6 +27,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - scalar floating-point round-to-integral (frintn / frintm / frintp / frintz / frinta / frintx / frinti on `s`/`d`/`h`, and the Armv8.5 frint32z / frint32x / frint64z / frint64x on `s`/`d`)
 - scalar floating-point JavaScript convert to signed fixed-point (fjcvtzs `w<d>, d<n>`)
 - scalar floating-point fused multiply-add three-source (fmadd / fmsub / fnmadd / fnmsub on `s`/`d`/`h`)
+- scalar floating-point conditional select and conditional compare (fcsel, fccmp / fccmpe with `#nzcv` and a condition, on `s`/`d`/`h`)
 - Advanced SIMD across-lanes reductions (addv / saddlv / uaddlv / smaxv / umaxv / sminv / uminv, and fmaxv / fminv / fmaxnmv / fminnmv in both the single-precision `.4s` and half-precision `.4h`/`.8h` forms)
 - Advanced SIMD two-register misc (rev64 / rev32 / rev16 / abs / neg / mvn / rbit / cnt / cls / clz / sqabs / sqneg / suqadd / usqadd / fabs / fneg / fsqrt)
 - Advanced SIMD three-same (add / sub / mul / and / orr / eor / bic / orn / bsl / cmeq / cmgt / smax / umin / sshl / sqadd / sqdmulh / fadd / fsub / fmul / fdiv / fmla / fcmeq / frecps / ...)

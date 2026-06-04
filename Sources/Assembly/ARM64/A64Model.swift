@@ -348,6 +348,14 @@ internal enum A64 {
         case fcmp, fcmpe
     }
 
+    /// Scalar floating-point conditional compare (`fccmp`/`fccmpe`). The `op`
+    /// bit at [4] selects the signalling (`fccmpe`) variant.
+    enum FPConditionalCompareKind: String, Equatable {
+        case fccmp, fccmpe
+
+        var op: UInt32 { self == .fccmpe ? 1 : 0 }
+    }
+
     enum FPConvertToIntKind: String, Equatable {
         case fcvtzs, fcvtzu
     }
@@ -1442,6 +1450,10 @@ internal enum A64 {
         case fpConvertFromInt(FPConvertFromIntKind, destination: FPRegister, source: Register)
         /// Floating-point JavaScript Convert to Signed fixed-point (`fjcvtzs w<d>, d<n>`).
         case fjcvtzs(destination: Register, source: FPRegister)
+        /// Scalar floating-point conditional select (`fcsel <d>, <n>, <m>, <cond>`).
+        case fpConditionalSelect(destination: FPRegister, first: FPRegister, second: FPRegister, condition: Condition)
+        /// Scalar floating-point conditional compare (`fccmp(e) <n>, <m>, #nzcv, <cond>`).
+        case fpConditionalCompare(FPConditionalCompareKind, first: FPRegister, second: FPRegister, nzcv: UInt32, condition: Condition)
         case acrossLanesInteger(AcrossLanesIntegerKind, destination: FPRegister, source: VectorRegister)
         case acrossLanesFP(AcrossLanesFPKind, destination: FPRegister, source: VectorRegister)
         case vectorTwoRegisterMisc(VectorTwoRegisterMiscKind, destination: VectorRegister, source: VectorRegister)

@@ -34,6 +34,8 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeFPDataProcessing2(word) { return instruction }
         if let instruction = decodeFPDataProcessing1(word) { return instruction }
         if let instruction = decodeFPCompare(word) { return instruction }
+        if let instruction = decodeFPConditionalSelect(word) { return instruction }
+        if let instruction = decodeFPConditionalCompare(word) { return instruction }
         if let instruction = decodeFPMoveImmediate(word) { return instruction }
         if let instruction = decodeFPIntegerConversion(word) { return instruction }
         if let instruction = decodeAcrossLanes(word) { return instruction }
@@ -791,6 +793,32 @@ internal enum A64InstructionDecoder {
             second = .register(floatRegister(number: (word >> 16) & 0x1f, width: width))
         }
         return .fpCompare(kind, first: rn, second: second)
+    }
+
+    private static func decodeFPConditionalSelect(_ word: UInt32) -> Instruction? {
+        guard word & 0xff20_0c00 == 0x1e20_0c00 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
+        return .fpConditionalSelect(
+            destination: floatRegister(number: word & 0x1f, width: width),
+            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
+            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
+            condition: condition
+        )
+    }
+
+    private static func decodeFPConditionalCompare(_ word: UInt32) -> Instruction? {
+        guard word & 0xff20_0c00 == 0x1e20_0400 else { return nil }
+        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
+        let kind: A64.FPConditionalCompareKind = ((word >> 4) & 1) == 1 ? .fccmpe : .fccmp
+        return .fpConditionalCompare(
+            kind,
+            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
+            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
+            nzcv: word & 0xf,
+            condition: condition
+        )
     }
 
     private static func decodeFPMoveImmediate(_ word: UInt32) -> Instruction? {

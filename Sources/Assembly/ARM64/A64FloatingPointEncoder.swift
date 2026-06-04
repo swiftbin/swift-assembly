@@ -163,6 +163,21 @@ internal enum A64FloatEncoder {
         return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    static func conditionalSelect(destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, condition: A64.Condition) throws -> UInt32 {
+        try requireSameType(rd, rn, rm, instruction: "fcsel")
+        let type = try ptype(rd, instruction: "fcsel")
+        let head: UInt32 = 0x1e20_0c00 | (type << 22)
+        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func conditionalCompare(_ kind: A64.FPConditionalCompareKind, first rn: FloatRegister, second rm: FloatRegister, nzcv: UInt32, condition: A64.Condition) throws -> UInt32 {
+        try requireSameType(rn, rm, instruction: kind.rawValue)
+        let type = try ptype(rn, instruction: kind.rawValue)
+        guard nzcv <= 0xf else { throw AssemblerError.invalidImmediate("#\(nzcv)") }
+        let head: UInt32 = 0x1e20_0400 | (type << 22)
+        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (rn.encodedNumber << 5) | (kind.op << 4) | nzcv
+    }
+
     static func fjcvtzs(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
         // Fixed form: 32-bit general destination, double-precision source.
         guard !rd.is64Bit, rn.width == 64 else {

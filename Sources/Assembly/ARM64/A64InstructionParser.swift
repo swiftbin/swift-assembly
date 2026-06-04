@@ -1071,6 +1071,29 @@ internal enum A64InstructionParser {
                 second: try A64Parser.floatRegister(instruction.operands[2]),
                 third: try A64Parser.floatRegister(instruction.operands[3])
             )
+        case "fcsel":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            return .fpConditionalSelect(
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                first: try A64Parser.floatRegister(instruction.operands[1]),
+                second: try A64Parser.floatRegister(instruction.operands[2]),
+                condition: try A64Parser.condition(instruction.operands[3])
+            )
+        case "fccmp", "fccmpe":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let nzcvValue = try A64Parser.immediate(instruction.operands[2])
+            guard nzcvValue >= 0, nzcvValue <= 0xf else {
+                throw AssemblerError.invalidImmediate(instruction.operands[2])
+            }
+            return .fpConditionalCompare(
+                A64.FPConditionalCompareKind(rawValue: mnemonic)!,
+                first: try A64Parser.floatRegister(instruction.operands[0]),
+                second: try A64Parser.floatRegister(instruction.operands[1]),
+                nzcv: UInt32(nzcvValue),
+                condition: try A64Parser.condition(instruction.operands[3])
+            )
         case "fcmp", "fcmpe":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
