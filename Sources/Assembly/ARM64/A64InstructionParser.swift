@@ -1044,6 +1044,16 @@ internal enum A64InstructionParser {
                 destination: try A64Parser.floatRegister(instruction.operands[0]),
                 source: try A64Parser.floatRegister(instruction.operands[1])
             )
+        case "frint32z", "frint32x", "frint64z", "frint64x":
+            // The scalar forms are intercepted by the SIMD pre-pass above; this
+            // case handles the vector `.2s`/`.4s`/`.2d` two-register-misc forms.
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            return .vectorTwoRegisterMisc(
+                A64.VectorTwoRegisterMiscKind(rawValue: mnemonic)!,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                source: try A64Parser.vectorRegister(instruction.operands[1])
+            )
         case "fcvt":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

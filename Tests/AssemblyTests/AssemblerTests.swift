@@ -513,6 +513,50 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint64x h0, h1"))   // frint64 has no half form
     }
 
+    func testVectorFRINTToIntegerInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32z v0.2s, v1.2s"), 0x0e21e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32z v0.4s, v1.4s"), 0x4e21e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32z v0.2d, v1.2d"), 0x4e61e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32x v0.2s, v1.2s"), 0x2e21e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32x v0.4s, v1.4s"), 0x6e21e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32x v0.2d, v1.2d"), 0x6e61e820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64z v0.2s, v1.2s"), 0x0e21f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64z v0.4s, v1.4s"), 0x4e21f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64z v0.2d, v1.2d"), 0x4e61f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64x v0.2s, v1.2s"), 0x2e21f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64x v0.4s, v1.4s"), 0x6e21f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64x v0.2d, v1.2d"), 0x6e61f820)
+    }
+
+    func testDisassembleVectorFRINTToInteger() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e21e820), "frint32z v0.2s, v1.2s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e61e820), "frint32x v0.2d, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e21f820), "frint64z v0.4s, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e61f820), "frint64x v0.2d, v1.2d")
+    }
+
+    func testVectorFRINTToIntegerRoundTrip() throws {
+        let sources = [
+            "frint32z v0.2s, v1.2s", "frint32z v2.4s, v3.4s", "frint32z v4.2d, v5.2d",
+            "frint32x v6.2s, v7.2s", "frint32x v8.4s, v9.4s", "frint32x v10.2d, v11.2d",
+            "frint64z v12.2s, v13.2s", "frint64z v14.4s, v15.4s", "frint64z v16.2d, v17.2d",
+            "frint64x v18.2s, v19.2s", "frint64x v20.4s, v21.4s", "frint64x v22.2d, v23.2d",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testVectorFRINTToIntegerInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint32z v0.8b, v1.8b"))  // no byte form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint32z v0.4h, v1.4h"))  // no halfword form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint64x v0.1d, v1.1d"))  // 1d not allowed
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint32z v0.2s, v1.4s"))  // arrangements must match
+    }
+
     func testAcrossLanesIntegerInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)

@@ -815,6 +815,7 @@ internal enum A64 {
         case sqabs, sqneg
         case suqadd, usqadd
         case fabs, fneg, fsqrt
+        case frint32z, frint32x, frint64z, frint64x
     }
 
     /// Advanced SIMD "three same" instructions (`Vd.T, Vn.T, Vm.T`).

@@ -85,6 +85,10 @@ internal enum A64VectorEncoder {
         case .fabs: u = 0; opcode = 0b01111
         case .fneg: u = 1; opcode = 0b01111
         case .fsqrt: u = 1; opcode = 0b11111
+        case .frint32z: u = 0; opcode = 0b11110
+        case .frint32x: u = 1; opcode = 0b11110
+        case .frint64z: u = 0; opcode = 0b11111
+        case .frint64x: u = 1; opcode = 0b11111
         }
 
         let isFloat = kind == .fabs || kind == .fneg || kind == .fsqrt
@@ -92,6 +96,17 @@ internal enum A64VectorEncoder {
             // FP16 form (`.4h`/`.8h`): the FP16 misc page fixes `a` (bit23) = 1.
             let head = (rn.arrangement.q << 30) | (u << 29) | fp16TwoRegisterMiscBase | (1 << 23)
             return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
+
+        // frint32/frint64 carry the FP `sz` at bit22 with size-hi (bit23) = 0,
+        // unlike the rest of the group which encodes the element `size` at [23:22].
+        switch kind {
+        case .frint32z, .frint32x, .frint64z, .frint64x:
+            let sz: UInt32 = rn.arrangement.elementWidth == 64 ? 1 : 0
+            let head = (rn.arrangement.q << 30) | (u << 29) | 0x0e20_0800 | (sz << 22)
+            return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        default:
+            break
         }
 
         let size = kind == .rbit ? UInt32(0b01) : rn.arrangement.elementSize
@@ -1120,6 +1135,8 @@ internal enum A64VectorEncoder {
             return [.b8, .b16, .h4, .h8, .s2, .s4, .d2].contains(arrangement)
         case .fabs, .fneg, .fsqrt:
             return [.h4, .h8, .s2, .s4, .d2].contains(arrangement)
+        case .frint32z, .frint32x, .frint64z, .frint64x:
+            return [.s2, .s4, .d2].contains(arrangement)
         }
     }
 

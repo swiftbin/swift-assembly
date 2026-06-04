@@ -49,6 +49,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCryptoRAX1(word) { return instruction }
         if let instruction = decodeCryptoXAR(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMiscFP16(word) { return instruction }
+        if let instruction = decodeVectorFRINTToInteger(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -1029,6 +1030,42 @@ internal enum A64InstructionDecoder {
         }
 
         return nil
+    }
+
+    private static func decodeVectorFRINTToInteger(_ word: UInt32) -> Instruction? {
+        // Vector frint32/frint64 share the two-register-misc base but encode the
+        // FP `sz` at bit22 with size-hi (bit23) = 0 — which is what distinguishes
+        // frint64x from fsqrt (opcode 11111, but fsqrt has bit23=1). Opcodes
+        // 11110/11111 select frint32/frint64; U selects the z/x rounding mode.
+        guard word & 0x9fa0_0c00 == 0x0e20_0800 else { return nil }
+        let q = (word >> 30) & 1
+        let u = (word >> 29) & 1
+        let sz = (word >> 22) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        let kind: A64.VectorTwoRegisterMiscKind
+        switch (u, opcode) {
+        case (0, 0b11110): kind = .frint32z
+        case (1, 0b11110): kind = .frint32x
+        case (0, 0b11111): kind = .frint64z
+        case (1, 0b11111): kind = .frint64x
+        default: return nil
+        }
+
+        let arrangement: A64.VectorArrangement
+        switch (sz, q) {
+        case (0, 0): arrangement = .s2
+        case (0, 1): arrangement = .s4
+        case (1, 1): arrangement = .d2
+        default: return nil   // sz=1,q=0 would be the reserved scalar `1d`.
+        }
+        return .vectorTwoRegisterMisc(
+            kind,
+            destination: VectorRegister(number: rdNum, arrangement: arrangement),
+            source: VectorRegister(number: rnNum, arrangement: arrangement)
+        )
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {
@@ -2545,7 +2582,8 @@ internal enum A64InstructionDecoder {
             case (0b11, 1): return .d2
             default: return nil
             }
-        case .fabs, .fneg, .fsqrt:
+        case .fabs, .fneg, .fsqrt,
+             .frint32z, .frint32x, .frint64z, .frint64x:
             switch (size, q) {
             case (0b10, 0): return .s2
             case (0b10, 1): return .s4
