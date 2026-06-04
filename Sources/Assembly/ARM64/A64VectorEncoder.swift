@@ -494,6 +494,28 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - Mixed-sign dot product (FEAT_I8MM)
+
+    static func usDotProduct(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister("usdot") }
+        guard let q = dotProductQ(destination: rd, first: rn), rn.arrangement == rm.arrangement else { throw fail() }
+        let head = (q << 30) | 0x0e80_9c00
+        return head | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func mixedDotByElement(_ kind: A64.VectorMixedDotProductKind, destination rd: VectorRegister, first rn: VectorRegister, elementRegister: UInt32, index: UInt32) throws -> UInt32 {
+        func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
+        guard let q = dotProductQ(destination: rd, first: rn) else { throw fail() }
+        guard elementRegister <= 31, index <= 3 else { throw fail() }
+        let l = index & 1
+        let h = (index >> 1) & 1
+        let m = (elementRegister >> 4) & 1
+        let rmLow = elementRegister & 0xf
+        let us: UInt32 = kind == .usdot ? 1 : 0
+        let head = (q << 30) | 0x0f00_f000 | (us << 23)
+        return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     // MARK: - Three-same extra (saturating rounding multiply-accumulate)
 
     static func threeSameExtra(_ kind: A64.VectorThreeSameExtraKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {

@@ -75,6 +75,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorExtract(word) { return instruction }
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
         if let instruction = decodeVectorDotProduct(word) { return instruction }
+        if let instruction = decodeVectorMixedDotProduct(word) { return instruction }
         if let instruction = decodeVectorComplexByElement(word) { return instruction }
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSameExtra(word) { return instruction }
@@ -1903,6 +1904,41 @@ internal enum A64InstructionDecoder {
             let index = (h << 1) | l
             let elementRegister = (m << 4) | rmLow
             return .vectorDotProductByElement(kind,
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                elementRegister: elementRegister, index: index)
+        }
+
+        return nil
+    }
+
+    private static func decodeVectorMixedDotProduct(_ word: UInt32) -> Instruction? {
+        let q = (word >> 30) & 1
+        let destination: A64.VectorArrangement = q == 0 ? .s2 : .s4
+        let source: A64.VectorArrangement = q == 0 ? .b8 : .b16
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        // USDOT (vector): U=0, size=10, bit21=0, bits[15:10]=100111.
+        if word & 0xbfe0_fc00 == 0x0e80_9c00 {
+            let rmNum = (word >> 16) & 0x1f
+            return .vectorUSDotProduct(
+                destination: VectorRegister(number: rdNum, arrangement: destination),
+                first: VectorRegister(number: rnNum, arrangement: source),
+                second: VectorRegister(number: rmNum, arrangement: source))
+        }
+
+        // USDOT/SUDOT (by element): U=0, bits[28:24]=01111, bit22=0,
+        // bits[15:12]=1111, bit10=0; bit23 selects usdot(1)/sudot(0).
+        if word & 0xbf40_f400 == 0x0f00_f000 {
+            let kind: A64.VectorMixedDotProductKind = ((word >> 23) & 1) == 1 ? .usdot : .sudot
+            let l = (word >> 21) & 1
+            let m = (word >> 20) & 1
+            let rmLow = (word >> 16) & 0xf
+            let h = (word >> 11) & 1
+            let index = (h << 1) | l
+            let elementRegister = (m << 4) | rmLow
+            return .vectorMixedDotByElement(kind,
                 destination: VectorRegister(number: rdNum, arrangement: destination),
                 first: VectorRegister(number: rnNum, arrangement: source),
                 elementRegister: elementRegister, index: index)

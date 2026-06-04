@@ -1450,6 +1450,45 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sdot v0.2s, v1.8b, v2.8b[0]")) // element must be 4b
     }
 
+    func testVectorMixedDotProductInstructions() throws {
+        // USDOT vector form (only usdot has a three-register form).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usdot v0.2s, v1.8b, v2.8b"), 0x0e829c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usdot v0.4s, v1.16b, v2.16b"), 0x4e829c20)
+        // USDOT/SUDOT by-element form (Vd.2s/4s, Vn.8b/16b, Vm.4b[index]).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usdot v0.2s, v1.8b, v2.4b[0]"), 0x0f82f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usdot v0.4s, v1.16b, v2.4b[3]"), 0x4fa2f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sudot v0.2s, v1.8b, v2.4b[0]"), 0x0f02f020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sudot v0.4s, v1.16b, v2.4b[2]"), 0x4f02f820)
+    }
+
+    func testDisassembleVectorMixedDotProduct() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e829c20), "usdot v0.2s, v1.8b, v2.8b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e829c20), "usdot v0.4s, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4fa2f820), "usdot v0.4s, v1.16b, v2.4b[3]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0f02f020), "sudot v0.2s, v1.8b, v2.4b[0]")
+    }
+
+    func testVectorMixedDotProductRoundTrip() throws {
+        let sources = [
+            "usdot v0.2s, v1.8b, v2.8b", "usdot v3.4s, v4.16b, v5.16b",
+            "usdot v6.2s, v7.8b, v8.4b[0]", "usdot v9.4s, v10.16b, v11.4b[3]",
+            "sudot v12.2s, v13.8b, v14.4b[1]", "sudot v15.4s, v16.16b, v17.4b[2]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorMixedDotProductInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sudot v0.2s, v1.8b, v2.8b"))   // sudot has no vector form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("usdot v0.2s, v1.16b, v2.16b")) // 2s pairs with 8b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("usdot v0.4h, v1.8b, v2.8b"))   // dest must be 2s/4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("usdot v0.2s, v1.8b, v2.4b[4]")) // index out of range
+    }
+
     func testVectorThreeSameExtraInstructions() throws {
         // Vector non-indexed forms (Vd.T, Vn.T, Vm.T) with T in {4h,8h,2s,4s}.
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.4h, v1.4h, v2.4h"), 0x2e428420)

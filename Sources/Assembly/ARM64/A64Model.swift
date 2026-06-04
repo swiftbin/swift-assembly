@@ -764,6 +764,12 @@ internal enum A64 {
         }
     }
 
+    /// Advanced SIMD mixed-sign dot product (FEAT_I8MM): `usdot` (vector and
+    /// by-element forms) and `sudot` (by-element form only).
+    enum VectorMixedDotProductKind: String, Equatable, CaseIterable {
+        case usdot, sudot
+    }
+
     /// Advanced SIMD three-same-extra saturating rounding multiply-accumulate
     /// instructions (ARMv8.1): the non-indexed `Vd, Vn, Vm` forms. The indexed
     /// forms reuse `VectorIndexedKind`.
@@ -1481,6 +1487,8 @@ internal enum A64 {
         case vectorIndexed(VectorIndexedKind, destination: VectorRegister, first: VectorRegister, element: VectorElement)
         case vectorDotProduct(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorDotProductByElement(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
+        case vectorUSDotProduct(destination: VectorRegister, first: VectorRegister, second: VectorRegister)
+        case vectorMixedDotByElement(VectorMixedDotProductKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
         case vectorThreeSameExtra(VectorThreeSameExtraKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case scalarThreeSameExtra(VectorThreeSameExtraKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case vectorComplexAdd(destination: VectorRegister, first: VectorRegister, second: VectorRegister, rotation: Int)
@@ -1551,6 +1559,7 @@ internal typealias VectorPermuteKind = A64.VectorPermuteKind
 internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias VectorDotProductKind = A64.VectorDotProductKind
+internal typealias VectorMixedDotProductKind = A64.VectorMixedDotProductKind
 internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind
 internal typealias VectorThreeSameExtraKind = A64.VectorThreeSameExtraKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind

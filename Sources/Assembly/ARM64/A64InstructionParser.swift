@@ -1229,6 +1229,22 @@ internal enum A64InstructionParser {
                 return .vectorDotProductByElement(kind, destination: destination, first: first, elementRegister: element.number, index: element.index)
             }
             return .vectorDotProduct(kind, destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "usdot", "sudot":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let destination = try A64Parser.vectorRegister(instruction.operands[0])
+            let first = try A64Parser.vectorRegister(instruction.operands[1])
+            // Indexed form (`Vm.4b[index]`) exists for both usdot and sudot;
+            // the plain vector (three-register) form exists only for usdot.
+            if instruction.operands[2].contains("[") {
+                let element = try A64Parser.dotProductElement(instruction.operands[2])
+                let kind = A64.VectorMixedDotProductKind(rawValue: mnemonic)!
+                return .vectorMixedDotByElement(kind, destination: destination, first: first, elementRegister: element.number, index: element.index)
+            }
+            guard mnemonic == "usdot" else {
+                throw AssemblerError.invalidRegister(instruction.operands[2])
+            }
+            return .vectorUSDotProduct(destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
         case "fcadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 4)

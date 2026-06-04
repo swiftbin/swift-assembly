@@ -207,6 +207,10 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .vectorDotProductByElement(let kind, let destination, let first, let elementRegister, let index):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).4b[\(index)]"
+        case .vectorUSDotProduct(let destination, let first, let second):
+            return "usdot \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
+        case .vectorMixedDotByElement(let kind, let destination, let first, let elementRegister, let index):
+            return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), v\(elementRegister).4b[\(index)]"
         case .vectorThreeSameExtra(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatVectorRegister(destination)), \(formatVectorRegister(first)), \(formatVectorRegister(second))"
         case .scalarThreeSameExtra(let kind, let destination, let first, let second):
