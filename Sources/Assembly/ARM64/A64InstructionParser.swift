@@ -869,6 +869,12 @@ internal enum A64InstructionParser {
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
             return .exceptionReturn
+        case "udf":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 1)
+            let immediate = try A64Parser.immediate(instruction.operands[0])
+            try checkRange(immediate, 0...0xffff, instruction: "udf")
+            return .permanentlyUndefined(UInt32(immediate))
         case "isb":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 0...1)

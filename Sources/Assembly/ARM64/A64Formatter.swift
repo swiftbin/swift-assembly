@@ -49,6 +49,8 @@ internal enum A64InstructionFormatter {
             return "dmb \(formatBarrierOption(option))"
         case .barrier(.speculation, _):
             return "sb"
+        case .permanentlyUndefined(let imm16):
+            return "udf #\(imm16)"
         case .hint(let immediate):
             switch immediate {
             case 17: return "psb csync"

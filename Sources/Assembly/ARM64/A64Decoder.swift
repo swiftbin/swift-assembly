@@ -17,6 +17,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCompareAndBranch(word) { return instruction }
         if let instruction = decodeTestAndBranch(word) { return instruction }
         if let instruction = decodeAddress(word) { return instruction }
+        if let instruction = decodeUDF(word) { return instruction }
         if let instruction = decodeException(word) { return instruction }
         if let instruction = decodeBarrier(word) { return instruction }
         if let instruction = decodeClearExclusive(word) { return instruction }
@@ -222,6 +223,12 @@ internal enum A64InstructionDecoder {
         let immhi = (word >> 5) & 0x7ffff
         let immediate = signExtend((immhi << 2) | immlo, bitCount: 21)
         return .address(page: page, xRegister(number: word & 0x1f), offset: page ? immediate * 4096 : immediate)
+    }
+
+    private static func decodeUDF(_ word: UInt32) -> Instruction? {
+        // UDF (permanently undefined): bits[31:16] are zero, imm16 at [15:0].
+        guard word & 0xffff_0000 == 0 else { return nil }
+        return .permanentlyUndefined(word & 0xffff)
     }
 
     private static func decodeException(_ word: UInt32) -> Instruction? {

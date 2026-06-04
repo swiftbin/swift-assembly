@@ -402,6 +402,33 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("pssbb x0"))   // takes no operand
     }
 
+    func testPermanentlyUndefinedInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udf #0"), 0x00000000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udf #1"), 0x00000001)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("udf #65535"), 0x0000ffff)
+    }
+
+    func testDisassemblePermanentlyUndefined() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x00000000), "udf #0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x00000001), "udf #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0000ffff), "udf #65535")
+    }
+
+    func testPermanentlyUndefinedRoundTrip() throws {
+        for source in ["udf #0", "udf #1", "udf #4660", "udf #65535"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testPermanentlyUndefinedInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("udf #65536"))  // out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("udf #-1"))     // negative
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("udf"))         // missing immediate
+    }
+
     func testHintInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint #128"))  // immediate out of range
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint"))       // missing immediate

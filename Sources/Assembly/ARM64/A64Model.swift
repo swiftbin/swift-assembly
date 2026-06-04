@@ -2316,6 +2316,8 @@ internal enum A64 {
         case address(page: Bool, Register, offset: Int64)
         case exception(ExceptionKind, immediate: Int64)
         case exceptionReturn
+        /// `UDF #imm16` — permanently undefined (bits[31:16] are zero).
+        case permanentlyUndefined(UInt32)
         case barrier(BarrierKind, option: UInt32)
         case hint(UInt32)
         case loadStoreExclusive(LoadStoreExclusiveKind, status: Register?, value: Register, value2: Register?, base: Register)
