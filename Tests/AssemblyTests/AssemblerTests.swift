@@ -1489,6 +1489,38 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("usdot v0.2s, v1.8b, v2.4b[4]")) // index out of range
     }
 
+    func testVectorMatrixMultiplyInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smmla v0.4s, v1.16b, v2.16b"), 0x4e82a420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ummla v0.4s, v1.16b, v2.16b"), 0x6e82a420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("usmmla v0.4s, v1.16b, v2.16b"), 0x4e82ac20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smmla v5.4s, v6.16b, v7.16b"), 0x4e87a4c5)
+    }
+
+    func testDisassembleVectorMatrixMultiply() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e82a420), "smmla v0.4s, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e82a420), "ummla v0.4s, v1.16b, v2.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e82ac20), "usmmla v0.4s, v1.16b, v2.16b")
+    }
+
+    func testVectorMatrixMultiplyRoundTrip() throws {
+        let sources = [
+            "smmla v0.4s, v1.16b, v2.16b", "ummla v3.4s, v4.16b, v5.16b",
+            "usmmla v6.4s, v7.16b, v8.16b", "smmla v29.4s, v30.16b, v31.16b",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testVectorMatrixMultiplyInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smmla v0.2s, v1.8b, v2.8b"))    // must be 4s/16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smmla v0.4s, v1.8b, v2.16b"))   // sources must be 16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smmla v0.4h, v1.16b, v2.16b"))  // dest must be 4s
+    }
+
     func testVectorThreeSameExtraInstructions() throws {
         // Vector non-indexed forms (Vd.T, Vn.T, Vm.T) with T in {4h,8h,2s,4s}.
         XCTAssertEqual(try ARM64Assembler.assembleWord("sqrdmlah v0.4h, v1.4h, v2.4h"), 0x2e428420)

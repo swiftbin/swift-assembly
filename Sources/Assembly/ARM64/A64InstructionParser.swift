@@ -1245,6 +1245,16 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidRegister(instruction.operands[2])
             }
             return .vectorUSDotProduct(destination: destination, first: first, second: try A64Parser.vectorRegister(instruction.operands[2]))
+        case "smmla", "ummla", "usmmla":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let kind = A64.VectorMatrixMultiplyKind(rawValue: mnemonic)!
+            return .vectorMatrixMultiply(
+                kind,
+                destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                first: try A64Parser.vectorRegister(instruction.operands[1]),
+                second: try A64Parser.vectorRegister(instruction.operands[2])
+            )
         case "fcadd":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 4)

@@ -76,6 +76,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorThreeDifferent(word) { return instruction }
         if let instruction = decodeVectorDotProduct(word) { return instruction }
         if let instruction = decodeVectorMixedDotProduct(word) { return instruction }
+        if let instruction = decodeVectorMatrixMultiply(word) { return instruction }
         if let instruction = decodeVectorComplexByElement(word) { return instruction }
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSameExtra(word) { return instruction }
@@ -1945,6 +1946,28 @@ internal enum A64InstructionDecoder {
         }
 
         return nil
+    }
+
+    private static func decodeVectorMatrixMultiply(_ word: UInt32) -> Instruction? {
+        // FEAT_I8MM: Q=1, size=10, bit21=0, bits[15:12]=1010, bit10=0;
+        // U(bit29) and B(bit11) select smmla/ummla/usmmla.
+        guard word & 0xcee0_f400 == 0x4e80_a400 else { return nil }
+        let u = (word >> 29) & 1
+        let b = (word >> 11) & 1
+        let kind: A64.VectorMatrixMultiplyKind
+        switch (u, b) {
+        case (1, 0): kind = .ummla
+        case (0, 1): kind = .usmmla
+        case (0, 0): kind = .smmla
+        default: return nil
+        }
+        let rmNum = (word >> 16) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+        return .vectorMatrixMultiply(kind,
+            destination: VectorRegister(number: rdNum, arrangement: .s4),
+            first: VectorRegister(number: rnNum, arrangement: .b16),
+            second: VectorRegister(number: rmNum, arrangement: .b16))
     }
 
     private static func decodeVectorBFloat16(_ word: UInt32) -> Instruction? {

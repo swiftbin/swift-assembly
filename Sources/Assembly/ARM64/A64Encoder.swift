@@ -196,6 +196,8 @@ internal enum A64InstructionEncoder {
             return try A64VectorEncoder.usDotProduct(destination: destination, first: first, second: second)
         case .vectorMixedDotByElement(let kind, let destination, let first, let elementRegister, let index):
             return try A64VectorEncoder.mixedDotByElement(kind, destination: destination, first: first, elementRegister: elementRegister, index: index)
+        case .vectorMatrixMultiply(let kind, let destination, let first, let second):
+            return try A64VectorEncoder.matrixMultiply(kind, destination: destination, first: first, second: second)
         case .vectorThreeSameExtra(let kind, let destination, let first, let second):
             return try A64VectorEncoder.threeSameExtra(kind, destination: destination, first: first, second: second)
         case .scalarThreeSameExtra(let kind, let destination, let first, let second):

@@ -516,6 +516,16 @@ internal enum A64VectorEncoder {
         return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
+    // MARK: - Int8 matrix multiply-accumulate (FEAT_I8MM)
+
+    static func matrixMultiply(_ kind: A64.VectorMatrixMultiplyKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
+        guard rd.arrangement == .s4, rn.arrangement == .b16, rm.arrangement == .b16 else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
+        let base: UInt32 = 0x4e80_a400
+        return base | (kind.u << 29) | (rm.encodedNumber << 16) | (kind.b << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
     // MARK: - Three-same extra (saturating rounding multiply-accumulate)
 
     static func threeSameExtra(_ kind: A64.VectorThreeSameExtraKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {

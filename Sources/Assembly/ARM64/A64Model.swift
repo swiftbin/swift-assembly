@@ -770,6 +770,17 @@ internal enum A64 {
         case usdot, sudot
     }
 
+    /// Advanced SIMD Int8 matrix multiply-accumulate (FEAT_I8MM): `smmla`,
+    /// `ummla`, `usmmla`. Destination is always `.4s`, sources `.16b`.
+    enum VectorMatrixMultiplyKind: String, Equatable, CaseIterable {
+        case smmla, ummla, usmmla
+
+        /// The `U` bit at [29].
+        var u: UInt32 { self == .ummla ? 1 : 0 }
+        /// The `B` bit at [11] (distinguishes usmmla from smmla).
+        var b: UInt32 { self == .usmmla ? 1 : 0 }
+    }
+
     /// Advanced SIMD three-same-extra saturating rounding multiply-accumulate
     /// instructions (ARMv8.1): the non-indexed `Vd, Vn, Vm` forms. The indexed
     /// forms reuse `VectorIndexedKind`.
@@ -1489,6 +1500,7 @@ internal enum A64 {
         case vectorDotProductByElement(VectorDotProductKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
         case vectorUSDotProduct(destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorMixedDotByElement(VectorMixedDotProductKind, destination: VectorRegister, first: VectorRegister, elementRegister: UInt32, index: UInt32)
+        case vectorMatrixMultiply(VectorMatrixMultiplyKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case vectorThreeSameExtra(VectorThreeSameExtraKind, destination: VectorRegister, first: VectorRegister, second: VectorRegister)
         case scalarThreeSameExtra(VectorThreeSameExtraKind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case vectorComplexAdd(destination: VectorRegister, first: VectorRegister, second: VectorRegister, rotation: Int)
@@ -1560,6 +1572,7 @@ internal typealias VectorThreeDifferentKind = A64.VectorThreeDifferentKind
 internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias VectorDotProductKind = A64.VectorDotProductKind
 internal typealias VectorMixedDotProductKind = A64.VectorMixedDotProductKind
+internal typealias VectorMatrixMultiplyKind = A64.VectorMatrixMultiplyKind
 internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind
 internal typealias VectorThreeSameExtraKind = A64.VectorThreeSameExtraKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind
