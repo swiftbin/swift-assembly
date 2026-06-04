@@ -399,6 +399,31 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fnmsub d0, d1, d2, d3"), 0x1f628c20)
     }
 
+    func testHalfPrecisionThreeSourceInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmadd h0, h1, h2, h3"), 0x1fc20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmsub h0, h1, h2, h3"), 0x1fc28c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fnmadd h0, h1, h2, h3"), 0x1fe20c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fnmsub h0, h1, h2, h3"), 0x1fe28c20)
+    }
+
+    func testDisassembleHalfPrecisionThreeSource() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1fc20c20), "fmadd h0, h1, h2, h3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1fe28c20), "fnmsub h0, h1, h2, h3")
+    }
+
+    func testHalfPrecisionThreeSourceRoundTrip() throws {
+        let sources = [
+            "fmadd h0, h1, h2, h3", "fmsub h4, h5, h6, h7",
+            "fnmadd h8, h9, h10, h11", "fnmsub h12, h13, h14, h15",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
     func testFloatingPointCompareConvertAndMove() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fcvt d0, s1"), 0x1e22c020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fcvt s0, d1"), 0x1e624020)
