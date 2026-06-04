@@ -60,6 +60,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first), formatRegister(second)] + (accumulator.map { [formatRegister($0)] } ?? [])).joined(separator: ", "))"
         case .multiplyWide(let kind, let destination, let first, let second, let accumulator):
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first), formatRegister(second)] + (accumulator.map { [formatRegister($0)] } ?? [])).joined(separator: ", "))"
+        case .bitfield(let kind, let destination, let source, let immr, let imms):
+            return formatBitfield(kind, destination: destination, source: source, immr: immr, imms: imms)
         case .divide(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
         case .dataProcessingOneSource(let kind, let destination, let source):
@@ -417,6 +419,69 @@ internal enum A64InstructionFormatter {
             return register.is64Bit ? "xzr" : "wzr"
         default:
             return "\(register.is64Bit ? "x" : "w")\(register.number)"
+        }
+    }
+
+    private static func formatBitfield(
+        _ kind: BitfieldKind,
+        destination: IntegerRegister,
+        source: IntegerRegister,
+        immr: UInt32,
+        imms: UInt32
+    ) -> String {
+        let rd = formatRegister(destination)
+        let rn = formatRegister(source)
+        let registerSize: UInt32 = destination.is64Bit ? 64 : 32
+        let maxShift = registerSize - 1
+        let wSource = formatRegister(IntegerRegister(number: source.number, width: 32, kind: source.kind))
+
+        switch kind {
+        case .sbfm:
+            if immr == 0 && imms == 7 {
+                return "sxtb \(rd), \(wSource)"
+            }
+            if immr == 0 && imms == 15 {
+                return "sxth \(rd), \(wSource)"
+            }
+            if immr == 0 && imms == 31 && destination.is64Bit {
+                return "sxtw \(rd), \(wSource)"
+            }
+            if imms == maxShift {
+                return "asr \(rd), \(rn), #\(immr)"
+            }
+            if imms < immr {
+                let lsb = (registerSize - immr) % registerSize
+                return "sbfiz \(rd), \(rn), #\(lsb), #\(imms + 1)"
+            }
+            return "sbfx \(rd), \(rn), #\(immr), #\(imms - immr + 1)"
+        case .ubfm:
+            if immr == 0 && imms == 7 && !destination.is64Bit {
+                return "uxtb \(rd), \(wSource)"
+            }
+            if immr == 0 && imms == 15 && !destination.is64Bit {
+                return "uxth \(rd), \(wSource)"
+            }
+            if imms == maxShift {
+                return "lsr \(rd), \(rn), #\(immr)"
+            }
+            if immr == imms + 1 {
+                return "lsl \(rd), \(rn), #\(maxShift - imms)"
+            }
+            if imms < immr {
+                let lsb = (registerSize - immr) % registerSize
+                return "ubfiz \(rd), \(rn), #\(lsb), #\(imms + 1)"
+            }
+            return "ubfx \(rd), \(rn), #\(immr), #\(imms - immr + 1)"
+        case .bfm:
+            if imms < immr {
+                let lsb = (registerSize - immr) % registerSize
+                let width = imms + 1
+                if source.number == 31 {
+                    return "bfc \(rd), #\(lsb), #\(width)"
+                }
+                return "bfi \(rd), \(rn), #\(lsb), #\(width)"
+            }
+            return "bfxil \(rd), \(rn), #\(immr), #\(imms - immr + 1)"
         }
     }
 

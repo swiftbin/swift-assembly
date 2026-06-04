@@ -274,6 +274,63 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz w0"))         // missing source
     }
 
+    func testBitfieldInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbfm w0, w1, #2, #3"), 0x13020c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbfm x0, x1, #2, #3"), 0x93420c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ubfm w0, w1, #2, #3"), 0x53020c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfm w0, w1, #2, #3"), 0x33020c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbfx w0, w1, #2, #4"), 0x13021420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbfx x0, x1, #2, #4"), 0x93421420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ubfx w0, w1, #2, #4"), 0x53021420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbfiz w0, w1, #2, #4"), 0x131e0c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ubfiz w0, w1, #2, #4"), 0x531e0c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfi w0, w1, #2, #4"), 0x331e0c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfxil w0, w1, #2, #4"), 0x33021420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bfc w0, #2, #4"), 0x331e0fe0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sxtb w0, w1"), 0x13001c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sxtb x0, w1"), 0x93401c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sxth w0, w1"), 0x13003c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sxth x0, w1"), 0x93403c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sxtw x0, w1"), 0x93407c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uxtb w0, w1"), 0x53001c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("uxth w0, w1"), 0x53003c20)
+    }
+
+    func testDisassembleBitfield() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x13021420), "sbfx w0, w1, #2, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x531e0c20), "ubfiz w0, w1, #2, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x331e0c20), "bfi w0, w1, #2, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x331e0fe0), "bfc w0, #2, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x13001c20), "sxtb w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x93407c20), "sxtw x0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x53003c20), "uxth w0, w1")
+    }
+
+    func testBitfieldRoundTrip() throws {
+        for source in [
+            "sbfx w0, w1, #2, #4", "sbfx x0, x1, #2, #4", "ubfx w0, w1, #2, #4",
+            "sbfiz w0, w1, #2, #4", "ubfiz w0, w1, #2, #4", "bfi w0, w1, #2, #4",
+            "bfxil w0, w1, #2, #4", "bfc w0, #2, #4",
+            "sxtb w0, w1", "sxtb x0, w1", "sxth w0, w1", "sxth x0, w1",
+            "sxtw x0, w1", "uxtb w0, w1", "uxth w0, w1",
+            "asr w0, w1, #5", "asr x0, x1, #5", "lsr w0, w1, #5",
+            "lsl w0, w1, #5", "lsl x0, x1, #5",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testBitfieldInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sbfm w0, w1, #32, #3"))  // immr out of range for 32-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sbfm w0, w1, #2, #32"))  // imms out of range for 32-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sxtw w0, w1"))            // sxtw requires 64-bit dest
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("uxtb x0, w1"))            // uxtb requires 32-bit dest
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sbfx w0, w1, #2"))        // missing width operand
+    }
+
     func testConditionalSelectInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("csel w0, w1, w2, eq"), 0x1a820020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("csel x0, x1, x2, ne"), 0x9a821020)

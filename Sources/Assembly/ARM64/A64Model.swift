@@ -202,6 +202,27 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// Bitfield move family (`sbfm`/`bfm`/`ubfm`). The many aliases
+    /// (sbfx/ubfx/sbfiz/ubfiz/bfi/bfxil/bfc/sxtb/sxth/sxtw/uxtb/uxth and
+    /// asr/lsl/lsr) all lower to one of these three with computed
+    /// `immr`/`imms` fields.
+    enum BitfieldKind: String, Equatable, CaseIterable {
+        case sbfm, bfm, ubfm
+
+        /// The `opc` field at [30:29].
+        var opc: UInt32 {
+            switch self {
+            case .sbfm: return 0b00
+            case .bfm: return 0b01
+            case .ubfm: return 0b10
+            }
+        }
+
+        static func decode(opc: UInt32) -> BitfieldKind? {
+            allCases.first { $0.opc == opc }
+        }
+    }
+
     /// Wide multiply: 32x32→64 multiply-long variants and 64x64→64 high-half
     /// multiplies (data-processing 3 source).
     enum MultiplyWideKind: String, Equatable, CaseIterable {
@@ -1618,6 +1639,7 @@ internal enum A64 {
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
         case multiplyWide(MultiplyWideKind, destination: Register, first: Register, second: Register, accumulator: Register?)
+        case bitfield(BitfieldKind, destination: Register, source: Register, immr: UInt32, imms: UInt32)
         case dataProcessingOneSource(DataProcessingOneSourceKind, destination: Register, source: Register)
         case crc32(CRC32Kind, destination: Register, first: Register, data: Register)
         case conditionalSelect(ConditionalSelectKind, destination: Register, first: Register, second: Register, condition: Condition)
@@ -1755,6 +1777,7 @@ internal typealias ConditionalCompareKind = A64.ConditionalCompareKind
 internal typealias ConditionalCompareOperand = A64.ConditionalCompareOperand
 internal typealias DataProcessingOneSourceKind = A64.DataProcessingOneSourceKind
 internal typealias MultiplyWideKind = A64.MultiplyWideKind
+internal typealias BitfieldKind = A64.BitfieldKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

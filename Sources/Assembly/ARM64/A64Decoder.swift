@@ -20,6 +20,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeLogicalImmediate(word) { return instruction }
         if let instruction = decodeLogicalShiftedRegister(word) { return instruction }
         if let instruction = decodeBitfieldShiftAlias(word) { return instruction }
+        if let instruction = decodeBitfield(word) { return instruction }
         if let instruction = decodeExtract(word) { return instruction }
         if let instruction = decodeMultiply(word) { return instruction }
         if let instruction = decodeMultiplyWide(word) { return instruction }
@@ -360,6 +361,23 @@ internal enum A64InstructionDecoder {
         default:
             return nil
         }
+    }
+
+    private static func decodeBitfield(_ word: UInt32) -> Instruction? {
+        // Bitfield group fixed field [28:23]=100110. The shift-alias decoder
+        // runs first and claims the asr/lsl/lsr patterns; everything else
+        // (all bfm, plus the remaining sbfm/ubfm forms) lands here.
+        guard word & 0x1f80_0000 == 0x1300_0000 else { return nil }
+        let sf = (word >> 31) & 1
+        let n = (word >> 22) & 1
+        guard n == sf else { return nil }
+        guard let kind = A64.BitfieldKind.decode(opc: (word >> 29) & 3) else { return nil }
+        let width = sf == 1 ? 64 : 32
+        let immr = (word >> 16) & 0x3f
+        let imms = (word >> 10) & 0x3f
+        let rd = integerRegister(number: word & 0x1f, width: width)
+        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        return .bitfield(kind, destination: rd, source: rn, immr: immr, imms: imms)
     }
 
     private static func decodeExtract(_ word: UInt32) -> Instruction? {

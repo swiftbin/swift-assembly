@@ -285,6 +285,35 @@ internal enum A64Parser {
         return parsed
     }
 
+    /// Parses a raw bitfield `immr`/`imms` field, valid in `0..<registerSize`.
+    static func bitfieldField(_ text: String, mnemonic: String, registerSize: Int64) throws -> UInt32 {
+        let value = try immediate(text)
+        guard value >= 0, value < registerSize else { throw AssemblerError.invalidImmediate(mnemonic) }
+        return UInt32(value)
+    }
+
+    /// Computes `(immr, imms)` for the bitfield *extract* aliases
+    /// (`sbfx`/`ubfx`/`bfxil`): `Rd, Rn, #lsb, #width`.
+    static func bitfieldExtract(_ instruction: ParsedInstruction, mnemonic: String, registerSize: Int64) throws -> (UInt32, UInt32) {
+        let lsb = try immediate(instruction.operands[2])
+        let width = try immediate(instruction.operands[3])
+        guard lsb >= 0, lsb < registerSize, width >= 1, lsb + width <= registerSize else {
+            throw AssemblerError.invalidImmediate(mnemonic)
+        }
+        return (UInt32(lsb), UInt32(lsb + width - 1))
+    }
+
+    /// Computes `(immr, imms)` for the bitfield *insert* aliases
+    /// (`sbfiz`/`ubfiz`/`bfi`): `Rd, Rn, #lsb, #width`.
+    static func bitfieldInsert(_ instruction: ParsedInstruction, mnemonic: String, registerSize: Int64) throws -> (UInt32, UInt32) {
+        let lsb = try immediate(instruction.operands[2])
+        let width = try immediate(instruction.operands[3])
+        guard lsb >= 0, lsb < registerSize, width >= 1, lsb + width <= registerSize else {
+            throw AssemblerError.invalidImmediate(mnemonic)
+        }
+        return (UInt32((registerSize - lsb) % registerSize), UInt32(width - 1))
+    }
+
     static func condition(_ text: String) throws -> A64.Condition {
         switch text.lowercased() {
         case "eq": return .eq
@@ -879,6 +908,62 @@ internal enum A64InstructionParser {
                 source: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 shift: try instruction.operands.count == 3 ? shift(instruction.operands[2]) : nil
             )
+        case "sbfm", "bfm", "ubfm":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let rn = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            guard rd.width == rn.width else { throw AssemblerError.invalidRegister(mnemonic) }
+            let registerSize = Int64(rd.width)
+            let immr = try A64Parser.bitfieldField(instruction.operands[2], mnemonic: mnemonic, registerSize: registerSize)
+            let imms = try A64Parser.bitfieldField(instruction.operands[3], mnemonic: mnemonic, registerSize: registerSize)
+            return .bitfield(A64.BitfieldKind(rawValue: mnemonic)!, destination: rd, source: rn, immr: immr, imms: imms)
+        case "sbfx", "ubfx", "bfxil":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let rn = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            guard rd.width == rn.width else { throw AssemblerError.invalidRegister(mnemonic) }
+            let (immr, imms) = try A64Parser.bitfieldExtract(instruction, mnemonic: mnemonic, registerSize: Int64(rd.width))
+            let kind: A64.BitfieldKind = mnemonic == "sbfx" ? .sbfm : (mnemonic == "ubfx" ? .ubfm : .bfm)
+            return .bitfield(kind, destination: rd, source: rn, immr: immr, imms: imms)
+        case "sbfiz", "ubfiz", "bfi":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let rn = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            guard rd.width == rn.width else { throw AssemblerError.invalidRegister(mnemonic) }
+            let (immr, imms) = try A64Parser.bitfieldInsert(instruction, mnemonic: mnemonic, registerSize: Int64(rd.width))
+            let kind: A64.BitfieldKind = mnemonic == "sbfiz" ? .sbfm : (mnemonic == "ubfiz" ? .ubfm : .bfm)
+            return .bitfield(kind, destination: rd, source: rn, immr: immr, imms: imms)
+        case "bfc":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let registerSize = Int64(rd.width)
+            let lsb = try A64Parser.immediate(instruction.operands[1])
+            let width = try A64Parser.immediate(instruction.operands[2])
+            guard lsb >= 0, lsb < registerSize, width >= 1, lsb + width <= registerSize else {
+                throw AssemblerError.invalidImmediate(mnemonic)
+            }
+            let immr = UInt32((registerSize - lsb) % registerSize)
+            let imms = UInt32(width - 1)
+            return .bitfield(.bfm, destination: rd, source: zeroRegister(width: rd.width), immr: immr, imms: imms)
+        case "sxtb", "sxth", "sxtw", "uxtb", "uxth":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let rn = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            let kind: A64.BitfieldKind
+            let imms: UInt32
+            switch mnemonic {
+            case "sxtb": kind = .sbfm; imms = 7
+            case "sxth": kind = .sbfm; imms = 15
+            case "sxtw": kind = .sbfm; imms = 31; guard rd.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) }
+            case "uxtb": kind = .ubfm; imms = 7; guard !rd.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) }
+            default:    kind = .ubfm; imms = 15; guard !rd.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) }
+            }
+            return .bitfield(kind, destination: rd, source: rn, immr: 0, imms: imms)
         case "lsl", "lsr", "asr":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 3)

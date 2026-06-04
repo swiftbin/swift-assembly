@@ -108,6 +108,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
         case .multiplyWide(let kind, let destination, let first, let second, let accumulator):
             return try A64DataProcessingEncoder.multiplyWide(kind, destination: destination, first: first, second: second, accumulator: accumulator)
+        case .bitfield(let kind, let destination, let source, let immr, let imms):
+            return try A64DataProcessingEncoder.bitfield(kind, destination: destination, source: source, immr: immr, imms: imms)
         case .dataProcessingOneSource(let kind, let destination, let source):
             return try A64DataProcessingEncoder.dataProcessingOneSource(kind, destination: destination, source: source)
         case .crc32(let kind, let destination, let first, let data):
@@ -849,6 +851,16 @@ internal enum A64DataProcessingEncoder {
         let o1: UInt32 = kind == .sdiv ? 1 : 0
         let head = (sf << 31) | 0x1ac00800
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func bitfield(_ kind: A64.BitfieldKind, destination rd: IntegerRegister, source rn: IntegerRegister, immr: UInt32, imms: UInt32) throws -> UInt32 {
+        // The destination width drives `sf` (and `N`); the source register
+        // number is taken as-is (the extend aliases pass a 32-bit source).
+        let registerSize: UInt32 = rd.is64Bit ? 64 : 32
+        guard immr < registerSize, imms < registerSize else { throw AssemblerError.invalidImmediate(kind.rawValue) }
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let head = (sf << 31) | (kind.opc << 29) | 0x1300_0000 | (sf << 22)
+        return head | (immr << 16) | (imms << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func multiplyWide(_ kind: A64.MultiplyWideKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, accumulator: IntegerRegister?) throws -> UInt32 {
