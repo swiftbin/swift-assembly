@@ -1076,6 +1076,14 @@ internal enum A64 {
         }
     }
 
+    /// Load register with pointer authentication (`LDRAA`/`LDRAB`). The signed
+    /// 10-bit offset is scaled by 8 and an optional `!` selects writeback.
+    enum PointerAuthLoadKind: String, Equatable, CaseIterable {
+        case ldraa, ldrab
+        /// `true` for the B-key form (`bit23` set in the encoding).
+        var isBKey: Bool { self == .ldrab }
+    }
+
     enum FPDataProcessing2Kind: String, Equatable {
         case fmul, fdiv, fadd, fsub, fmax, fmin, fmaxnm, fminnm, fnmul
     }
@@ -2269,6 +2277,7 @@ internal enum A64 {
         case pointerAuthentication(PointerAuthenticationKind, register: Register?, architecture: ARM64Assembler.Architecture)
         case pointerAuthData(PointerAuthDataKind, destination: Register, source: Register?, modifier: Register?)
         case pointerAuthBranch(PointerAuthBranchKind, target: Register?, modifier: Register?)
+        case pointerAuthLoad(PointerAuthLoadKind, target: Register, memory: MemoryOperand)
         case fpDataProcessing2(FPDataProcessing2Kind, destination: FPRegister, first: FPRegister, second: FPRegister)
         case fpDataProcessing1(FPDataProcessing1Kind, destination: FPRegister, source: FPRegister)
         case fpDataProcessing3(FPDataProcessing3Kind, destination: FPRegister, first: FPRegister, second: FPRegister, third: FPRegister)
@@ -2408,6 +2417,7 @@ internal typealias SystemInstructionAlias = A64.SystemInstructionAlias
 internal typealias RCpcUnscaledKind = A64.RCpcUnscaledKind
 internal typealias PointerAuthDataKind = A64.PointerAuthDataKind
 internal typealias PointerAuthBranchKind = A64.PointerAuthBranchKind
+internal typealias PointerAuthLoadKind = A64.PointerAuthLoadKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

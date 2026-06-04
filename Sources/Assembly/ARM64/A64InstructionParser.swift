@@ -1221,6 +1221,19 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidMemoryOperand(instruction.operands[1...].joined(separator: ", "))
             }
             return .rcpcUnscaled(kind, target: target, base: base, offset: offset)
+        case "ldraa", "ldrab":
+            guard parts.count == 1 else { return nil }
+            try requireARM64E(architecture, instruction: mnemonic)
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = A64.PointerAuthLoadKind(rawValue: mnemonic)!
+            let target = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            switch memory {
+            case .unsignedOffset, .signedUnscaled, .preIndexed:
+                return .pointerAuthLoad(kind, target: target, memory: memory)
+            default:
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[1...].joined(separator: ", "))
+            }
         case "ldaprb", "ldaprh", "ldapr":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

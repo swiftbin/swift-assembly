@@ -819,6 +819,49 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("retaa x0", architecture: arch))     // takes no operands
     }
 
+    func testPointerAuthLoadInstructions() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldraa x0, [x1]", architecture: arch), 0xf8200420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldraa x0, [x1, #8]", architecture: arch), 0xf8201420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldraa x0, [x1, #-8]", architecture: arch), 0xf87ff420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldraa x0, [x1, #4088]", architecture: arch), 0xf83ff420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldraa x0, [x1, #-4096]", architecture: arch), 0xf8600420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldraa x0, [x1, #8]!", architecture: arch), 0xf8201c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldrab x0, [x1]", architecture: arch), 0xf8a00420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldrab x0, [x1, #8]", architecture: arch), 0xf8a01420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldrab x0, [x1, #8]!", architecture: arch), 0xf8a01c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldrab x0, [x1, #-8]!", architecture: arch), 0xf8fffc20)
+    }
+
+    func testDisassemblePointerAuthLoad() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8200420), "ldraa x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf87ff420), "ldraa x0, [x1, #-8]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8201c20), "ldraa x0, [x1, #8]!")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xf8fffc20), "ldrab x0, [x1, #-8]!")
+    }
+
+    func testPointerAuthLoadRoundTrip() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        for mnemonic in ["ldraa", "ldrab"] {
+            for memory in ["[x2]", "[x2, #16]", "[x2, #-4096]", "[x2, #4088]", "[x2, #16]!", "[x2, #-8]!"] {
+                let source = "\(mnemonic) x0, \(memory)"
+                let word = try ARM64Assembler.assembleWord(source, architecture: arch)
+                let text = try ARM64Assembler.disassembleWord(word)
+                XCTAssertEqual(text, source, "round trip failed for \(source)")
+                XCTAssertEqual(try ARM64Assembler.assembleWord(text, architecture: arch), word, "re-assemble failed for \(source)")
+            }
+        }
+    }
+
+    func testPointerAuthLoadInvalidInputsThrow() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldraa x0, [x1]"))                  // requires arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldraa w0, [x1]", architecture: arch))   // 64-bit only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldraa x0, [x1, #4]", architecture: arch))    // not a multiple of 8
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldraa x0, [x1, #4096]", architecture: arch)) // offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldraa x0, [x1], #8", architecture: arch))    // no post-index form
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

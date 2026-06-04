@@ -217,6 +217,8 @@ internal enum A64InstructionFormatter {
             if let target { operands.append(formatRegister(target)) }
             if let modifier { operands.append(formatRegister(modifier)) }
             return operands.isEmpty ? kind.rawValue : "\(kind.rawValue) \(operands.joined(separator: ", "))"
+        case .pointerAuthLoad(let kind, let target, let memory):
+            return "\(kind.rawValue) \(([formatRegister(target)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatFloatRegister(destination)), \(formatFloatRegister(first)), \(formatFloatRegister(second))"
         case .fpDataProcessing1(let kind, let destination, let source):

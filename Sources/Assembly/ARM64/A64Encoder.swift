@@ -190,6 +190,8 @@ internal enum A64InstructionEncoder {
             return try A64PointerAuthenticationEncoder.encodeData(kind, destination: destination, source: source, modifier: modifier)
         case .pointerAuthBranch(let kind, let target, let modifier):
             return try A64PointerAuthenticationEncoder.encodeBranch(kind, target: target, modifier: modifier)
+        case .pointerAuthLoad(let kind, let target, let memory):
+            return try A64PointerAuthenticationEncoder.encodeLoad(kind, target: target, memory: memory)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):
@@ -416,6 +418,30 @@ internal enum A64PointerAuthenticationEncoder {
             }
             return kind.baseWord
         }
+    }
+
+    static func encodeLoad(_ kind: A64.PointerAuthLoadKind, target: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
+        guard target.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let base: IntegerRegister
+        let offset: Int64
+        let writeback: Bool
+        switch memory {
+        case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
+            base = b; offset = o; writeback = false
+        case .preIndexed(let b, let o):
+            base = b; offset = o; writeback = true
+        default:
+            throw AssemblerError.invalidMemoryOperand(kind.rawValue)
+        }
+        guard offset % 8 == 0 else { throw AssemblerError.immediateAlignment(instruction: kind.rawValue, value: offset, alignment: 8) }
+        let scaled = offset / 8
+        try checkRange(scaled, -512...511, instruction: kind.rawValue)
+        let imm10 = UInt32(bitPattern: Int32(scaled)) & 0x3ff
+        let s = (imm10 >> 9) & 1
+        let imm9 = imm10 & 0x1ff
+        let m: UInt32 = kind.isBKey ? 1 : 0
+        let w: UInt32 = writeback ? 1 : 0
+        return 0xf820_0400 | (m << 23) | (s << 22) | (imm9 << 12) | (w << 11) | (base.encodedNumber << 5) | target.encodedNumber
     }
 }
 

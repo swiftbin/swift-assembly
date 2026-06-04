@@ -47,6 +47,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeLoadAcquireRCpc(word) { return instruction }
         if let instruction = decodePrefetch(word) { return instruction }
         if let instruction = decodeRCpcUnscaled(word) { return instruction }
+        if let instruction = decodePointerAuthLoad(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -871,6 +872,22 @@ internal enum A64InstructionDecoder {
         let target = integerRegister(number: word & 0x1f, width: info.width)
         let offset = signExtend((word >> 12) & 0x1ff, bitCount: 9)
         return .rcpcUnscaled(info.kind, target: target, base: base, offset: offset)
+    }
+
+    private static func decodePointerAuthLoad(_ word: UInt32) -> Instruction? {
+        // LDRAA/LDRAB: size=11, bits[29:24]=111000, bit21=1, bit10=1.
+        guard word & 0xff20_0400 == 0xf820_0400 else { return nil }
+        let kind: A64.PointerAuthLoadKind = ((word >> 23) & 1) == 1 ? .ldrab : .ldraa
+        let s = (word >> 22) & 1
+        let imm9 = (word >> 12) & 0x1ff
+        let writeback = ((word >> 11) & 1) == 1
+        let offset = signExtend((s << 9) | imm9, bitCount: 10) * 8
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let target = integerRegister(number: word & 0x1f, width: 64)
+        let memory: MemoryOperand = writeback
+            ? .preIndexed(base: base, offset: offset)
+            : .unsignedOffset(base: base, offset: offset)
+        return .pointerAuthLoad(kind, target: target, memory: memory)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {
