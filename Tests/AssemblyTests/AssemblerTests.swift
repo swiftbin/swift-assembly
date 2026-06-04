@@ -641,6 +641,56 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sys #0, x7, c5, #0")) // CRn must be c<n>
     }
 
+    func testRCpcUnscaledInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlurb w0, [x1]"), 0x19000020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlurb w0, [x1, #4]"), 0x19004020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlurh w0, [x1, #-4]"), 0x591fc020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlur w0, [x1]"), 0x99000020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stlur x0, [x1, #8]"), 0xd9008020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapurb w0, [x1]"), 0x19400020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapurh w0, [x1, #2]"), 0x59402020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapur w0, [x1]"), 0x99400020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapur x0, [x1, #-8]"), 0xd95f8020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapursb w0, [x1]"), 0x19c00020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapursb x0, [x1]"), 0x19800020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapursh w0, [x1]"), 0x59c00020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapursh x0, [x1]"), 0x59800020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldapursw x0, [x1]"), 0x99800020)
+    }
+
+    func testDisassembleRCpcUnscaled() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x19000020), "stlurb w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x591fc020), "stlurh w0, [x1, #-4]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd9008020), "stlur x0, [x1, #8]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x19800020), "ldapursb x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x99800020), "ldapursw x0, [x1]")
+    }
+
+    func testRCpcUnscaledRoundTrip() throws {
+        let regForms: [(String, String)] = [
+            ("stlurb", "w0"), ("stlurh", "w0"), ("stlur", "w0"), ("stlur", "x0"),
+            ("ldapurb", "w0"), ("ldapurh", "w0"), ("ldapur", "w0"), ("ldapur", "x0"),
+            ("ldapursb", "w0"), ("ldapursb", "x0"), ("ldapursh", "w0"), ("ldapursh", "x0"),
+            ("ldapursw", "x0"),
+        ]
+        for (mnemonic, reg) in regForms {
+            for offset in ["[x2]", "[x2, #16]", "[x2, #-256]", "[x2, #255]"] {
+                let source = "\(mnemonic) \(reg), \(offset)"
+                let word = try ARM64Assembler.assembleWord(source)
+                let text = try ARM64Assembler.disassembleWord(word)
+                XCTAssertEqual(text, source, "round trip failed for \(source)")
+                XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+            }
+        }
+    }
+
+    func testRCpcUnscaledInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stlurb x0, [x1]"))    // byte form needs W reg
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldapursw w0, [x1]"))  // ldapursw needs X reg
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldapur w0, [x1, #256]"))  // offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldapur w0, [x1, x2]"))    // no register offset form
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

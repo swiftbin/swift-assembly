@@ -151,6 +151,16 @@ internal enum A64InstructionEncoder {
         case .pstate(let field, let immediate):
             try checkRange(Int64(immediate), 0...0xf, instruction: "msr")
             return 0xd500_401f | (field.op1 << 16) | (immediate << 8) | (field.op2 << 5)
+        case .rcpcUnscaled(let kind, let target, let base, let offset):
+            if let required = kind.requiredWidth, target.width != required {
+                throw AssemblerError.invalidRegister(kind.rawValue)
+            }
+            guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            try checkRange(offset, -256...255, instruction: kind.rawValue)
+            let (size, opc) = kind.fields(is64Bit: target.is64Bit)
+            return (size << 30) | 0x1900_0000 | (opc << 22)
+                | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12)
+                | (base.encodedNumber << 5) | target.encodedNumber
         case .systemInstruction(let read, let op1, let crn, let crm, let op2, let register):
             if let register = register, !register.is64Bit {
                 throw AssemblerError.invalidRegister(read ? "sysl" : "sys")

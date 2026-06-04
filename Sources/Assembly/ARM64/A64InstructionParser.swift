@@ -1200,6 +1200,23 @@ internal enum A64InstructionParser {
             let operation = try prefetchOperation(instruction.operands[0])
             let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
             return .prefetch(kind, operation: operation, memory: memory)
+        case "stlurb", "stlurh", "stlur", "ldapurb", "ldapurh", "ldapur",
+             "ldapursb", "ldapursh", "ldapursw":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let kind = A64.RCpcUnscaledKind(rawValue: mnemonic)!
+            let target = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
+            let base: IntegerRegister
+            let offset: Int64
+            switch memory {
+            case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
+                base = b
+                offset = o
+            default:
+                throw AssemblerError.invalidMemoryOperand(instruction.operands[1...].joined(separator: ", "))
+            }
+            return .rcpcUnscaled(kind, target: target, base: base, offset: offset)
         case "ldaprb", "ldaprh", "ldapr":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

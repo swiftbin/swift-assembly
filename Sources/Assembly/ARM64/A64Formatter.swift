@@ -118,6 +118,9 @@ internal enum A64InstructionFormatter {
         case .loadAcquireRCpc(let kind, let value, let base):
             let mem = formatMemoryOperand(.unsignedOffset(base: base, offset: 0))
             return "\(kind.rawValue) \(([formatRegister(value)] + mem).joined(separator: ", "))"
+        case .rcpcUnscaled(let kind, let target, let base, let offset):
+            let mem = formatMemoryOperand(.signedUnscaled(base: base, offset: offset))
+            return "\(kind.rawValue) \(([formatRegister(target)] + mem).joined(separator: ", "))"
         case .clearExclusive(let immediate):
             return immediate == 15 ? "clrex" : "clrex #\(immediate)"
         case .prefetch(let kind, let operation, let memory):

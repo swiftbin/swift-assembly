@@ -41,6 +41,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeAtomicMemory(word) { return instruction }
         if let instruction = decodeLoadAcquireRCpc(word) { return instruction }
         if let instruction = decodePrefetch(word) { return instruction }
+        if let instruction = decodeRCpcUnscaled(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -802,6 +803,18 @@ internal enum A64InstructionDecoder {
             return .prefetch(.prfum, operation: operation, memory: mem)
         }
         return nil
+    }
+
+    private static func decodeRCpcUnscaled(_ word: UInt32) -> Instruction? {
+        // LDAPUR/STLUR: bits[29:24]=011001, bit21=0, bits[11:10]=00.
+        guard word & 0x3f20_0c00 == 0x1900_0000 else { return nil }
+        let size = (word >> 30) & 3
+        let opc = (word >> 22) & 3
+        guard let info = RCpcUnscaledKind.decode(size: size, opc: opc) else { return nil }
+        let base = xRegister(number: (word >> 5) & 0x1f)
+        let target = integerRegister(number: word & 0x1f, width: info.width)
+        let offset = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        return .rcpcUnscaled(info.kind, target: target, base: base, offset: offset)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {

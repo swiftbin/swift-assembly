@@ -750,6 +750,60 @@ internal enum A64 {
         }
     }
 
+    /// Load-acquire / store-release RCpc with an unscaled immediate offset
+    /// (`LDAPUR` / `STLUR` family, FEAT_LRCPC2).
+    enum RCpcUnscaledKind: String, Equatable, CaseIterable {
+        case stlurb, stlurh, stlur
+        case ldapurb, ldapurh, ldapur
+        case ldapursb, ldapursh, ldapursw
+
+        /// The `size` (bits [31:30]) and `opc` (bits [23:22]) fields for the
+        /// given target register width.
+        func fields(is64Bit: Bool) -> (size: UInt32, opc: UInt32) {
+            switch self {
+            case .stlurb: return (0, 0)
+            case .stlurh: return (1, 0)
+            case .stlur: return (is64Bit ? 3 : 2, 0)
+            case .ldapurb: return (0, 1)
+            case .ldapurh: return (1, 1)
+            case .ldapur: return (is64Bit ? 3 : 2, 1)
+            case .ldapursb: return (0, is64Bit ? 2 : 3)
+            case .ldapursh: return (1, is64Bit ? 2 : 3)
+            case .ldapursw: return (2, 2)
+            }
+        }
+
+        /// The required target register width, or `nil` if either is allowed.
+        var requiredWidth: Int? {
+            switch self {
+            case .stlurb, .stlurh, .ldapurb, .ldapurh: return 32
+            case .ldapursw: return 64
+            case .stlur, .ldapur, .ldapursb, .ldapursh: return nil
+            }
+        }
+
+        /// Recover the mnemonic and target register width from the encoded
+        /// `size`/`opc` fields.
+        static func decode(size: UInt32, opc: UInt32) -> (kind: RCpcUnscaledKind, width: Int)? {
+            switch (opc, size) {
+            case (0, 0): return (.stlurb, 32)
+            case (0, 1): return (.stlurh, 32)
+            case (0, 2): return (.stlur, 32)
+            case (0, 3): return (.stlur, 64)
+            case (1, 0): return (.ldapurb, 32)
+            case (1, 1): return (.ldapurh, 32)
+            case (1, 2): return (.ldapur, 32)
+            case (1, 3): return (.ldapur, 64)
+            case (2, 0): return (.ldapursb, 64)
+            case (2, 1): return (.ldapursh, 64)
+            case (2, 2): return (.ldapursw, 64)
+            case (3, 0): return (.ldapursb, 32)
+            case (3, 1): return (.ldapursh, 32)
+            default: return nil
+            }
+        }
+    }
+
     /// Load-acquire RCpc register (`LDAPR` / `LDAPRB` / `LDAPRH`).
     enum LoadAcquireRCpcKind: String, Equatable, CaseIterable {
         case ldaprb, ldaprh, ldapr
@@ -2080,6 +2134,8 @@ internal enum A64 {
         case compareAndSwapPair(CompareAndSwapPairKind, compare: Register, value: Register, base: Register)
         case atomicMemory(AtomicMemoryKind, source: Register, value: Register?, base: Register)
         case loadAcquireRCpc(LoadAcquireRCpcKind, value: Register, base: Register)
+        /// RCpc load/store with an unscaled immediate offset (`LDAPUR`/`STLUR`).
+        case rcpcUnscaled(RCpcUnscaledKind, target: Register, base: Register, offset: Int64)
         case clearExclusive(UInt32)
         case prefetch(PrefetchKind, operation: UInt32, memory: MemoryOperand)
         /// Move to/from a system register (`MRS Xt, sysreg` / `MSR sysreg, Xt`).
@@ -2250,6 +2306,7 @@ internal typealias PrefetchKind = A64.PrefetchKind
 internal typealias SystemRegister = A64.SystemRegister
 internal typealias PStateField = A64.PStateField
 internal typealias SystemInstructionAlias = A64.SystemInstructionAlias
+internal typealias RCpcUnscaledKind = A64.RCpcUnscaledKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
