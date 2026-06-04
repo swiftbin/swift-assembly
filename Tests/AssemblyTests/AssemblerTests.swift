@@ -2755,6 +2755,50 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sm3tt1a v0.4s, v1.4s, v2.h[1]"))  // element must be .s
     }
 
+    func testCryptoSHA3Instructions() throws {
+        // Four-register SHA3.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("eor3 v0.16b, v1.16b, v2.16b, v3.16b"), 0xce020c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("bcax v0.16b, v1.16b, v2.16b, v3.16b"), 0xce220c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("eor3 v5.16b, v6.16b, v7.16b, v8.16b"), 0xce0720c5)
+        // Three-register RAX1.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rax1 v0.2d, v1.2d, v2.2d"), 0xce628c20)
+        // XAR with imm6.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xar v0.2d, v1.2d, v2.2d, #1"), 0xce820420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xar v0.2d, v1.2d, v2.2d, #63"), 0xce82fc20)
+    }
+
+    func testDisassembleCryptoSHA3() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce020c20), "eor3 v0.16b, v1.16b, v2.16b, v3.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce220c20), "bcax v0.16b, v1.16b, v2.16b, v3.16b")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce628c20), "rax1 v0.2d, v1.2d, v2.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce820420), "xar v0.2d, v1.2d, v2.2d, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xce82fc20), "xar v0.2d, v1.2d, v2.2d, #63")
+    }
+
+    func testCryptoSHA3RoundTrip() throws {
+        let sources = [
+            "eor3 v10.16b, v11.16b, v12.16b, v13.16b",
+            "bcax v14.16b, v15.16b, v16.16b, v17.16b",
+            "rax1 v18.2d, v19.2d, v20.2d",
+            "xar v21.2d, v22.2d, v23.2d, #0",
+            "xar v24.2d, v25.2d, v26.2d, #31",
+            "xar v27.2d, v28.2d, v29.2d, #63",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testCryptoSHA3InvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("eor3 v0.8b, v1.8b, v2.8b, v3.8b"))   // must be .16b
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("rax1 v0.4s, v1.4s, v2.4s"))          // must be .2d
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("xar v0.2d, v1.2d, v2.2d, #64"))      // imm6 0-63
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("xar v0.16b, v1.16b, v2.16b, #1"))    // must be .2d
+    }
+
     func testOverlappingMnemonicsStillResolveToScalarForms() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add x0, x1, x2"), 0x8b020020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fadd s0, s1, s2"), 0x1e222820)

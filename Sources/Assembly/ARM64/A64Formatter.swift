@@ -110,6 +110,12 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) v\(d).4s, v\(n).4s, v\(m).s[\(index)]"
         case .cryptoSM3SS1(let d, let n, let m, let a):
             return "sm3ss1 v\(d).4s, v\(n).4s, v\(m).4s, v\(a).4s"
+        case .cryptoSHA3Four(let kind, let d, let n, let m, let a):
+            return "\(kind.rawValue) v\(d).16b, v\(n).16b, v\(m).16b, v\(a).16b"
+        case .cryptoRAX1(let d, let n, let m):
+            return "rax1 v\(d).2d, v\(n).2d, v\(m).2d"
+        case .cryptoXAR(let d, let n, let m, let imm6):
+            return "xar v\(d).2d, v\(n).2d, v\(m).2d, #\(imm6)"
         case .loadStoreReplicate(let kind, let registers, let address):
             let bytes = registers.count * (registers.arrangement.elementWidth / 8)
             return "\(kind.rawValue) \(formatVectorRegisterList(registers)), \(formatVectorMemoryOperand(address, postImmediateBytes: bytes))"
@@ -309,6 +315,7 @@ internal enum A64InstructionFormatter {
         case .scalarQ:  return "q\(number)"
         case .vector4s: return "v\(number).4s"
         case .vector2d: return "v\(number).2d"
+        case .vector16b: return "v\(number).16b"
         }
     }
 

@@ -129,6 +129,10 @@ internal enum A64Parser {
             let register = try vectorRegister(text)
             guard register.arrangement == .d2 else { throw AssemblerError.invalidRegister(text) }
             return register.number
+        case .vector16b:
+            let register = try vectorRegister(text)
+            guard register.arrangement == .b16 else { throw AssemblerError.invalidRegister(text) }
+            return register.number
         }
     }
 
@@ -1322,6 +1326,36 @@ internal enum A64InstructionParser {
                 n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector4s),
                 m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: .vector4s),
                 a: try A64Parser.cryptoSHAOperandNumber(instruction.operands[3], shape: .vector4s)
+            )
+        case "eor3", "bcax":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let kind = A64.CryptoSHA3FourKind(rawValue: mnemonic)!
+            return .cryptoSHA3Four(
+                kind,
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: .vector16b),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector16b),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: .vector16b),
+                a: try A64Parser.cryptoSHAOperandNumber(instruction.operands[3], shape: .vector16b)
+            )
+        case "rax1":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .cryptoRAX1(
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: .vector2d),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector2d),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: .vector2d)
+            )
+        case "xar":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            let imm6 = try A64Parser.immediate(instruction.operands[3])
+            guard imm6 >= 0, imm6 <= 63 else { throw AssemblerError.invalidImmediate(instruction.operands[3]) }
+            return .cryptoXAR(
+                d: try A64Parser.cryptoSHAOperandNumber(instruction.operands[0], shape: .vector2d),
+                n: try A64Parser.cryptoSHAOperandNumber(instruction.operands[1], shape: .vector2d),
+                m: try A64Parser.cryptoSHAOperandNumber(instruction.operands[2], shape: .vector2d),
+                imm6: UInt32(imm6)
             )
         case "zip1", "zip2", "uzp1", "uzp2", "trn1", "trn2":
             guard parts.count == 1 else { return nil }

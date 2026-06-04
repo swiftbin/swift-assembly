@@ -1141,6 +1141,22 @@ internal enum A64VectorEncoder {
         0xce40_0000 | (m << 16) | (a << 10) | (n << 5) | d
     }
 
+    static func cryptoSHA3Four(_ kind: A64.CryptoSHA3FourKind, d: UInt32, n: UInt32, m: UInt32, a: UInt32) -> UInt32 {
+        // Four-register SHA3: 11001110 0 Op0 Rm 0 Ra Rn Rd.
+        0xce00_0000 | (kind.op0 << 21) | (m << 16) | (a << 10) | (n << 5) | d
+    }
+
+    static func cryptoRAX1(d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
+        // Three-register SHA3 RAX1: 11001110 011 Rm 1 0 0011 Rn Rd.
+        0xce60_8c00 | (m << 16) | (n << 5) | d
+    }
+
+    static func cryptoXAR(d: UInt32, n: UInt32, m: UInt32, imm6: UInt32) throws -> UInt32 {
+        // XAR: 11001110 100 Rm imm6 Rn Rd.
+        guard imm6 <= 63 else { throw AssemblerError.invalidImmediate("xar") }
+        return 0xce80_0000 | (m << 16) | (imm6 << 10) | (n << 5) | d
+    }
+
     static func cryptoAES(_ kind: A64.CryptoAESKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         // Both operands are fixed `16b`.
         guard rd.arrangement == .b16, rn.arrangement == .b16 else { throw AssemblerError.invalidRegister(kind.rawValue) }

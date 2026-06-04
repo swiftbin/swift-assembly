@@ -45,6 +45,9 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeCryptoSM3(word) { return instruction }
         if let instruction = decodeCryptoSM3Indexed(word) { return instruction }
         if let instruction = decodeCryptoSM3SS1(word) { return instruction }
+        if let instruction = decodeCryptoSHA3Four(word) { return instruction }
+        if let instruction = decodeCryptoRAX1(word) { return instruction }
+        if let instruction = decodeCryptoXAR(word) { return instruction }
         if let instruction = decodeVectorTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeVectorCompareZero(word) { return instruction }
         if let instruction = decodeVectorExtractNarrow(word) { return instruction }
@@ -922,6 +925,27 @@ internal enum A64InstructionDecoder {
         // Four-register SM3: 11001110 010 Rm 0 Ra Rn Rd.
         guard word & 0xffe0_8000 == 0xce40_0000 else { return nil }
         return .cryptoSM3SS1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
+    }
+
+    private static func decodeCryptoSHA3Four(_ word: UInt32) -> Instruction? {
+        // Four-register SHA3: 11001110 0 Op0 Rm 0 Ra Rn Rd.
+        guard word & 0xff80_8000 == 0xce00_0000 else { return nil }
+        let op0 = (word >> 21) & 0x3
+        guard let kind = A64.CryptoSHA3FourKind.decode(op0: op0) else { return nil }
+        return .cryptoSHA3Four(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
+    }
+
+    private static func decodeCryptoRAX1(_ word: UInt32) -> Instruction? {
+        // Three-register SHA3 RAX1: 11001110 011 Rm 1 0 0011 Rn Rd.
+        guard word & 0xffe0_fc00 == 0xce60_8c00 else { return nil }
+        return .cryptoRAX1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
+    }
+
+    private static func decodeCryptoXAR(_ word: UInt32) -> Instruction? {
+        // XAR: 11001110 100 Rm imm6 Rn Rd.
+        guard word & 0xffe0_0000 == 0xce80_0000 else { return nil }
+        let imm6 = (word >> 10) & 0x3f
+        return .cryptoXAR(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, imm6: imm6)
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {

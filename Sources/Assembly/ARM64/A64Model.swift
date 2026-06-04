@@ -521,6 +521,7 @@ internal enum A64 {
         case scalarQ   // 128-bit `Qn`
         case vector4s  // `Vn.4s`
         case vector2d  // `Vn.2d`
+        case vector16b // `Vn.16b`
     }
 
     /// Cryptographic three-register SHA1/SHA256 instructions. Operand register
@@ -667,6 +668,24 @@ internal enum A64 {
 
         static func decode(opcode: UInt32) -> CryptoSM3IndexedKind? {
             allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// Cryptographic four-register SHA3 instructions (`Vd.16b, Vn.16b, Vm.16b,
+    /// Va.16b`) — FEAT_SHA3.
+    enum CryptoSHA3FourKind: String, Equatable, CaseIterable {
+        case eor3, bcax
+
+        /// The 2-bit `Op0` field at [23:21] (only [22:21] vary).
+        var op0: UInt32 {
+            switch self {
+            case .eor3: return 0b00
+            case .bcax: return 0b01
+            }
+        }
+
+        static func decode(op0: UInt32) -> CryptoSHA3FourKind? {
+            allCases.first { $0.op0 == op0 }
         }
     }
 
@@ -1428,6 +1447,9 @@ internal enum A64 {
         case cryptoSM3(CryptoSM3Kind, d: UInt32, n: UInt32, m: UInt32)
         case cryptoSM3Indexed(CryptoSM3IndexedKind, d: UInt32, n: UInt32, m: UInt32, index: UInt32)
         case cryptoSM3SS1(d: UInt32, n: UInt32, m: UInt32, a: UInt32)
+        case cryptoSHA3Four(CryptoSHA3FourKind, d: UInt32, n: UInt32, m: UInt32, a: UInt32)
+        case cryptoRAX1(d: UInt32, n: UInt32, m: UInt32)
+        case cryptoXAR(d: UInt32, n: UInt32, m: UInt32, imm6: UInt32)
     }
 }
 
@@ -1481,3 +1503,4 @@ internal typealias CryptoSHA512Kind = A64.CryptoSHA512Kind
 internal typealias CryptoTwoRegKind = A64.CryptoTwoRegKind
 internal typealias CryptoSM3Kind = A64.CryptoSM3Kind
 internal typealias CryptoSM3IndexedKind = A64.CryptoSM3IndexedKind
+internal typealias CryptoSHA3FourKind = A64.CryptoSHA3FourKind
