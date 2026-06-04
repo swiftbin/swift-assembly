@@ -62,6 +62,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
         case .dataProcessingOneSource(let kind, let destination, let source):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(source))"
+        case .crc32(let kind, let destination, let first, let data):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(data))"
         case .conditionalSelect(let kind, let destination, let first, let second, let condition):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second)), \(formatCondition(condition))"
         case .conditionalCompare(let kind, let first, let second, let nzcv, let condition):

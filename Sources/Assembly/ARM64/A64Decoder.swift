@@ -23,6 +23,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeExtract(word) { return instruction }
         if let instruction = decodeMultiply(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
+        if let instruction = decodeCRC32(word) { return instruction }
         if let instruction = decodeDataProcessingOneSource(word) { return instruction }
         if let instruction = decodeConditionalSelect(word) { return instruction }
         if let instruction = decodeConditionalCompare(word) { return instruction }
@@ -402,6 +403,18 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         let rd = integerRegister(number: word & 0x1f, width: width)
         return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+    }
+
+    private static func decodeCRC32(_ word: UInt32) -> Instruction? {
+        // Data-processing 2-source group: bit30=0, S=0, op[28:21]=11010110.
+        guard word & 0x7fe0_0000 == 0x1ac0_0000 else { return nil }
+        let opcode = (word >> 10) & 0x3f
+        guard let kind = A64.CRC32Kind.decode(opcode: opcode) else { return nil }
+        // Rd and Rn are 32-bit; Rm is 64-bit only for the `x` variants.
+        let rd = integerRegister(number: word & 0x1f, width: 32)
+        let rn = integerRegister(number: (word >> 5) & 0x1f, width: 32)
+        let rm = integerRegister(number: (word >> 16) & 0x1f, width: kind.usesDoubleWordSource ? 64 : 32)
+        return .crc32(kind, destination: rd, first: rn, data: rm)
     }
 
     private static func decodeDataProcessingOneSource(_ word: UInt32) -> Instruction? {

@@ -108,6 +108,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
         case .dataProcessingOneSource(let kind, let destination, let source):
             return try A64DataProcessingEncoder.dataProcessingOneSource(kind, destination: destination, source: source)
+        case .crc32(let kind, let destination, let first, let data):
+            return try A64DataProcessingEncoder.crc32(kind, destination: destination, first: first, data: data)
         case .conditionalSelect(let kind, let destination, let first, let second, let condition):
             return try A64DataProcessingEncoder.conditionalSelect(kind, destination: destination, first: first, second: second, condition: condition)
         case .conditionalCompare(let kind, let first, let second, let nzcv, let condition):
@@ -845,6 +847,14 @@ internal enum A64DataProcessingEncoder {
         let o1: UInt32 = kind == .sdiv ? 1 : 0
         let head = (sf << 31) | 0x1ac00800
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func crc32(_ kind: A64.CRC32Kind, destination rd: IntegerRegister, first rn: IntegerRegister, data rm: IntegerRegister) throws -> UInt32 {
+        // Rd and Rn are always 32-bit; Rm is 64-bit only for the `x` variants.
+        guard !rd.is64Bit, !rn.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        guard rm.is64Bit == kind.usesDoubleWordSource else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let head = (kind.sf << 31) | 0x1ac0_0000
+        return head | (rm.encodedNumber << 16) | (kind.opcode << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func dataProcessingOneSource(_ kind: A64.DataProcessingOneSourceKind, destination rd: IntegerRegister, source rn: IntegerRegister) throws -> UInt32 {

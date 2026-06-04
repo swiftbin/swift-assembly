@@ -924,6 +924,15 @@ internal enum A64InstructionParser {
                 first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
             )
+        case "crc32b", "crc32h", "crc32w", "crc32x", "crc32cb", "crc32ch", "crc32cw", "crc32cx":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .crc32(
+                A64.CRC32Kind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                data: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
+            )
         case "rbit", "rev16", "rev32", "rev", "clz", "cls":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

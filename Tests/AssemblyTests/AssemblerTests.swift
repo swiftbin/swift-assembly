@@ -151,6 +151,44 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sdiv x0, x1, x2"), 0x9ac20c20)
     }
 
+    func testCRC32Instructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32b w0, w1, w2"), 0x1ac24020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32h w3, w4, w5"), 0x1ac54483)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32w w6, w7, w8"), 0x1ac848e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32x w9, w10, x11"), 0x9acb4d49)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32cb w12, w13, w14"), 0x1ace51ac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32ch w15, w16, w17"), 0x1ad1560f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32cw w18, w19, w20"), 0x1ad45a72)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("crc32cx w21, w22, x23"), 0x9ad75ed5)
+    }
+
+    func testDisassembleCRC32() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ac24020), "crc32b w0, w1, w2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9acb4d49), "crc32x w9, w10, x11")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ace51ac), "crc32cb w12, w13, w14")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9ad75ed5), "crc32cx w21, w22, x23")
+    }
+
+    func testCRC32RoundTrip() throws {
+        for source in [
+            "crc32b w0, w1, w2", "crc32h w3, w4, w5", "crc32w w6, w7, w8",
+            "crc32x w9, w10, x11", "crc32cb w12, w13, w14", "crc32ch w15, w16, w17",
+            "crc32cw w18, w19, w20", "crc32cx w21, w22, x23",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testCRC32InvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("crc32b x0, w1, w2"))   // dest must be 32-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("crc32b w0, w1, x2"))   // b variant takes w source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("crc32x w0, w1, w2"))   // x variant needs x source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("crc32b w0, w1"))       // missing operand
+    }
+
     func testDataProcessingOneSourceInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("rbit w0, w1"), 0x5ac00020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("rbit x2, x3"), 0xdac00062)

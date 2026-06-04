@@ -202,6 +202,36 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// CRC32 / CRC32C checksum accumulation (data-processing 2 source).
+    enum CRC32Kind: String, Equatable, CaseIterable {
+        case crc32b, crc32h, crc32w, crc32x
+        case crc32cb, crc32ch, crc32cw, crc32cx
+
+        /// Whether the data source register `Rm` is 64-bit (the `x` variants).
+        var usesDoubleWordSource: Bool { self == .crc32x || self == .crc32cx }
+
+        /// The `sf` bit at [31] (set for the 64-bit-source variants).
+        var sf: UInt32 { usesDoubleWordSource ? 1 : 0 }
+
+        /// The `opcode` field at [15:10].
+        var opcode: UInt32 {
+            switch self {
+            case .crc32b: return 0b010000
+            case .crc32h: return 0b010001
+            case .crc32w: return 0b010010
+            case .crc32x: return 0b010011
+            case .crc32cb: return 0b010100
+            case .crc32ch: return 0b010101
+            case .crc32cw: return 0b010110
+            case .crc32cx: return 0b010111
+            }
+        }
+
+        static func decode(opcode: UInt32) -> CRC32Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
     /// Data-processing (1 source): bit/byte reversals and count operations.
     enum DataProcessingOneSourceKind: String, Equatable, CaseIterable {
         case rbit, rev16, rev32, rev, clz, cls
@@ -1538,6 +1568,7 @@ internal enum A64 {
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
         case dataProcessingOneSource(DataProcessingOneSourceKind, destination: Register, source: Register)
+        case crc32(CRC32Kind, destination: Register, first: Register, data: Register)
         case conditionalSelect(ConditionalSelectKind, destination: Register, first: Register, second: Register, condition: Condition)
         case conditionalCompare(ConditionalCompareKind, first: Register, second: ConditionalCompareOperand, nzcv: UInt32, condition: Condition)
         case conditionalSet(ConditionalSetKind, destination: Register, condition: Condition)
@@ -1672,6 +1703,7 @@ internal typealias ConditionalSelectKind = A64.ConditionalSelectKind
 internal typealias ConditionalCompareKind = A64.ConditionalCompareKind
 internal typealias ConditionalCompareOperand = A64.ConditionalCompareOperand
 internal typealias DataProcessingOneSourceKind = A64.DataProcessingOneSourceKind
+internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
 internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind
