@@ -484,6 +484,12 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fminv s0, v1.4s"), 0x6eb0f820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmv s0, v1.4s"), 0x6e30c820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmv s0, v1.4s"), 0x6eb0c820)
+        // Half-precision (FP16) forms (destination `h`).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxv h0, v1.4h"), 0x0e30f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxv h0, v1.8h"), 0x4e30f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminv h0, v1.8h"), 0x4eb0f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmv h0, v1.4h"), 0x0e30c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmv h0, v1.8h"), 0x4eb0c820)
     }
 
     func testDisassembleAcrossLanes() throws {
@@ -495,6 +501,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6eb1a820), "uminv s0, v1.4s")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6e30f820), "fmaxv s0, v1.4s")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6eb0c820), "fminnmv s0, v1.4s")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4e30f820), "fmaxv h0, v1.8h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x0e30c820), "fmaxnmv h0, v1.4h")
     }
 
     func testAcrossLanesRoundTrip() throws {
@@ -505,6 +513,8 @@ final class AssemblerTests: XCTestCase {
             "smaxv b0, v1.8b", "smaxv h0, v1.4h", "smaxv s0, v1.4s",
             "umaxv b0, v1.16b", "sminv h0, v1.8h", "uminv s0, v1.4s",
             "fmaxv s0, v1.4s", "fminv s0, v1.4s", "fmaxnmv s0, v1.4s", "fminnmv s0, v1.4s",
+            "fmaxv h6, v7.4h", "fmaxv h8, v9.8h", "fminv h10, v11.8h",
+            "fmaxnmv h12, v13.4h", "fminnmv h14, v15.8h",
         ]
         for source in sources {
             let word = try ARM64Assembler.assembleWord(source)
@@ -519,7 +529,9 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv d0, v1.2d"))   // D forms invalid
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv h0, v1.8b"))   // dst width mismatch
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("saddlv b0, v1.8b")) // long dst must widen
-        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmaxv s0, v1.2s"))  // FP only .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmaxv s0, v1.2s"))  // FP single only .4s
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmaxv s0, v1.8h"))  // FP16 dst must be `h`
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmaxv h0, v1.4s"))  // `h` dst needs FP16 source
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addv b0, v1.foo"))  // bad arrangement
     }
 

@@ -33,11 +33,6 @@ internal enum A64VectorEncoder {
     }
 
     static func acrossLanesFP(_ kind: A64.AcrossLanesFPKind, destination rd: FloatRegister, source rn: VectorRegister) throws -> UInt32 {
-        // Only the single-precision `.4s` form (sz=0) is supported; `.8h` (FP16) is out of scope.
-        guard rn.arrangement == .s4, rd.width == 32 else {
-            throw AssemblerError.invalidRegister(kind.rawValue)
-        }
-
         let o1: UInt32
         let opcode: UInt32
         switch kind {
@@ -47,6 +42,17 @@ internal enum A64VectorEncoder {
         case .fminnmv: o1 = 1; opcode = 0b01100
         }
 
+        // Half-precision (FP16) form: source `.4h`/`.8h`, destination `h` (U=0).
+        if rn.arrangement == .h4 || rn.arrangement == .h8 {
+            guard rd.width == 16 else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            let head: UInt32 = (rn.arrangement.q << 30) | 0x0e30_0800 | (o1 << 23)
+            return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        }
+
+        // Single-precision `.4s` form (sz=0).
+        guard rn.arrangement == .s4, rd.width == 32 else {
+            throw AssemblerError.invalidRegister(kind.rawValue)
+        }
         let head: UInt32 = 0x6e30_0800 | (o1 << 23)
         return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }

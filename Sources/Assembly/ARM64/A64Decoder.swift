@@ -835,6 +835,23 @@ internal enum A64InstructionDecoder {
             return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 32), source: VectorRegister(number: rnNum, arrangement: .s4))
         }
 
+        // Half-precision (FP16) floating-point across lanes (U=0, opcode 01100 / 01111).
+        if u == 0 && (opcode == 0b01100 || opcode == 0b01111) {
+            let sz = (word >> 22) & 1
+            let o1 = (word >> 23) & 1
+            guard sz == 0 else { return nil }
+            let kind: A64.AcrossLanesFPKind
+            switch (opcode, o1) {
+            case (0b01111, 0): kind = .fmaxv
+            case (0b01111, 1): kind = .fminv
+            case (0b01100, 0): kind = .fmaxnmv
+            case (0b01100, 1): kind = .fminnmv
+            default: return nil
+            }
+            let arrangement: A64.VectorArrangement = q == 1 ? .h8 : .h4
+            return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 16), source: VectorRegister(number: rnNum, arrangement: arrangement))
+        }
+
         let kind: A64.AcrossLanesIntegerKind
         switch (u, opcode) {
         case (0, 0b00011): kind = .saddlv
