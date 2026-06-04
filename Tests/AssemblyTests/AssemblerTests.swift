@@ -301,7 +301,7 @@ final class AssemblerTests: XCTestCase {
     func testHintRoundTrip() throws {
         for source in [
             "yield", "wfe", "wfi", "sev", "sevl", "esb", "csdb",
-            "hint #6", "hint #7", "hint #11", "hint #127",
+            "hint #6", "hint #9", "hint #11", "hint #127",
         ] {
             let word = try ARM64Assembler.assembleWord(source)
             let text = try ARM64Assembler.disassembleWord(word)
@@ -1329,6 +1329,29 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("autibsp", architecture: .arm64e), 0xd50323ff)
         XCTAssertEqual(try ARM64Assembler.assembleWord("xpaci x0", architecture: .arm64e), 0xdac143e0)
         XCTAssertEqual(try ARM64Assembler.assembleWord("xpacd x0", architecture: .arm64e), 0xdac147e0)
+    }
+
+    func testPointerAuthHintInstructions() throws {
+        let arch = ARM64Assembler.Architecture.arm64e
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pacia1716"))  // requires arm64e
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacia1716", architecture: arch), 0xd503211f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pacib1716", architecture: arch), 0xd503215f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autia1716", architecture: arch), 0xd503219f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("autib1716", architecture: arch), 0xd50321df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("xpaclri", architecture: arch), 0xd50320ff)
+
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503211f), "pacia1716")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503215f), "pacib1716")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503219f), "autia1716")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50321df), "autib1716")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50320ff), "xpaclri")
+
+        for source in ["pacia1716", "pacib1716", "autia1716", "autib1716", "xpaclri"] {
+            let word = try ARM64Assembler.assembleWord(source, architecture: arch)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text, architecture: arch), word)
+        }
     }
 
     func testDisassembleAllFamilies() throws {

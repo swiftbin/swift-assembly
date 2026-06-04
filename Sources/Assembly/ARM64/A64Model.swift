@@ -994,6 +994,7 @@ internal enum A64 {
 
     enum PointerAuthenticationKind: String, Equatable {
         case paciasp, autiasp, pacibsp, autibsp, xpaci, xpacd
+        case pacia1716, pacib1716, autia1716, autib1716, xpaclri
     }
 
     /// Data-processing pointer authentication (`PACIA`/`AUTIA`/… `Xd, Xn`, the

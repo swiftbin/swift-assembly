@@ -362,6 +362,11 @@ internal enum A64PointerAuthenticationEncoder {
         case .autiasp: return 0xd50323bf
         case .pacibsp: return 0xd503237f
         case .autibsp: return 0xd50323ff
+        case .pacia1716: return 0xd503211f
+        case .pacib1716: return 0xd503215f
+        case .autia1716: return 0xd503219f
+        case .autib1716: return 0xd50321df
+        case .xpaclri: return 0xd50320ff
         case .xpaci, .xpacd:
             guard let rd = register else {
                 throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "1", actual: 0)

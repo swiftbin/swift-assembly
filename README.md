@@ -42,7 +42,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - RCpc unscaled load/store (ldapur / ldapurb / ldapurh / ldapursb / ldapursh / ldapursw / stlur / stlurb / stlurh)
 - PSTATE flag manipulation (cfinv / axflag / xaflag)
 - branches, labels, and address generation (adr / adrp)
-- pointer authentication on arm64e (paciasp / xpaci / ...)
+- pointer authentication on arm64e (paciasp / xpaci / pacia1716 / xpaclri / ...)
 - data-processing pointer authentication on arm64e (pacia / autia / paciza / pacga / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
 - scalar floating-point round-to-integral (frintn / frintm / frintp / frintz / frinta / frintx / frinti on `s`/`d`/`h`, and the Armv8.5 frint32z / frint32x / frint64z / frint64x on `s`/`d`)

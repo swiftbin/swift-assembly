@@ -277,6 +277,11 @@ internal enum A64InstructionDecoder {
         case 0xd50323bf: return .pointerAuthentication(.autiasp, register: nil, architecture: .arm64e)
         case 0xd503237f: return .pointerAuthentication(.pacibsp, register: nil, architecture: .arm64e)
         case 0xd50323ff: return .pointerAuthentication(.autibsp, register: nil, architecture: .arm64e)
+        case 0xd503211f: return .pointerAuthentication(.pacia1716, register: nil, architecture: .arm64e)
+        case 0xd503215f: return .pointerAuthentication(.pacib1716, register: nil, architecture: .arm64e)
+        case 0xd503219f: return .pointerAuthentication(.autia1716, register: nil, architecture: .arm64e)
+        case 0xd50321df: return .pointerAuthentication(.autib1716, register: nil, architecture: .arm64e)
+        case 0xd50320ff: return .pointerAuthentication(.xpaclri, register: nil, architecture: .arm64e)
         default: break
         }
         if word & 0xffff_ffe0 == 0xdac1_43e0 {

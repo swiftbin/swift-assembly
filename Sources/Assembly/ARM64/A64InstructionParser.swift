@@ -1388,7 +1388,8 @@ internal enum A64InstructionParser {
                 registers: list,
                 address: try A64Parser.vectorMemoryOperand(instruction.operands, baseIndex: 1, expectedPostImmediate: expected)
             )
-        case "paciasp", "autiasp", "pacibsp", "autibsp", "xpaci", "xpacd":
+        case "paciasp", "autiasp", "pacibsp", "autibsp", "xpaci", "xpacd",
+             "pacia1716", "pacib1716", "autia1716", "autib1716", "xpaclri":
             guard parts.count == 1 else { return nil }
             let kind = A64.PointerAuthenticationKind(rawValue: mnemonic)!
             try expectOperandCount(instruction, exactly: (kind == .xpaci || kind == .xpacd) ? 1 : 0)
