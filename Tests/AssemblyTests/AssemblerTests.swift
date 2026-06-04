@@ -274,6 +274,50 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz w0"))         // missing source
     }
 
+    func testAddSubCarryInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("adc w0, w1, w2"), 0x1a020020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("adc x3, x4, x5"), 0x9a050083)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("adcs w6, w7, w8"), 0x3a0800e6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("adcs x9, x10, x11"), 0xba0b0149)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbc w12, w13, w14"), 0x5a0e01ac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbc x15, x16, x17"), 0xda11020f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbcs w18, w19, w20"), 0x7a140272)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sbcs x21, x22, x23"), 0xfa1702d5)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ngc w0, w1"), 0x5a0103e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ngc x2, x3"), 0xda0303e2)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ngcs w4, w5"), 0x7a0503e4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ngcs x6, x7"), 0xfa0703e6)
+    }
+
+    func testDisassembleAddSubCarry() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1a020020), "adc w0, w1, w2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xba0b0149), "adcs x9, x10, x11")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a0e01ac), "sbc w12, w13, w14")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xfa1702d5), "sbcs x21, x22, x23")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a0103e0), "ngc w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xfa0703e6), "ngcs x6, x7")
+    }
+
+    func testAddSubCarryRoundTrip() throws {
+        for source in [
+            "adc w0, w1, w2", "adc x3, x4, x5", "adcs w6, w7, w8", "adcs x9, x10, x11",
+            "sbc w12, w13, w14", "sbc x15, x16, x17", "sbcs w18, w19, w20", "sbcs x21, x22, x23",
+            "ngc w0, w1", "ngc x2, x3", "ngcs w4, w5", "ngcs x6, x7",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testAddSubCarryInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("adc w0, x1, w2"))   // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("adc w0, w1"))       // missing operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ngc w0"))           // missing source
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ngc w0, x1"))       // mismatched widths
+    }
+
     func testBitfieldInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sbfm w0, w1, #2, #3"), 0x13020c20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("sbfm x0, x1, #2, #3"), 0x93420c20)

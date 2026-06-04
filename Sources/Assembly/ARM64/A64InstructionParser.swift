@@ -1009,6 +1009,27 @@ internal enum A64InstructionParser {
                 first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
             )
+        case "adc", "adcs", "sbc", "sbcs":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .addSubCarry(
+                A64.AddSubCarryKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
+            )
+        case "ngc", "ngcs":
+            // Alias: `ngc Rd, Rm` == `sbc Rd, ZR, Rm` (likewise ngcs/sbcs).
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 2)
+            let rd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            let rm = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)
+            return .addSubCarry(
+                mnemonic == "ngc" ? .sbc : .sbcs,
+                destination: rd,
+                first: zeroRegister(width: rd.width),
+                second: rm
+            )
         case "smull", "umull", "smaddl", "umaddl", "smsubl", "umsubl", "smnegl", "umnegl", "smulh", "umulh":
             guard parts.count == 1 else { return nil }
             // `smull`/`umull` are also SIMD widening multiplies

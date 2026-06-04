@@ -202,6 +202,27 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// Add/subtract with carry (`adc`/`adcs`/`sbc`/`sbcs`). The `ngc`/`ngcs`
+    /// aliases lower to `sbc`/`sbcs` with the zero register as first source.
+    enum AddSubCarryKind: String, Equatable {
+        case adc, adcs, sbc, sbcs
+
+        /// The `op` field at bit 30 (1 for the subtract variants).
+        var op: UInt32 { (self == .sbc || self == .sbcs) ? 1 : 0 }
+
+        /// The `S` (set-flags) field at bit 29.
+        var setsFlags: UInt32 { (self == .adcs || self == .sbcs) ? 1 : 0 }
+
+        static func decode(op: UInt32, setsFlags: UInt32) -> AddSubCarryKind {
+            switch (op, setsFlags) {
+            case (0, 0): return .adc
+            case (0, _): return .adcs
+            case (_, 0): return .sbc
+            default: return .sbcs
+            }
+        }
+    }
+
     /// Bitfield move family (`sbfm`/`bfm`/`ubfm`). The many aliases
     /// (sbfx/ubfx/sbfiz/ubfiz/bfi/bfxil/bfc/sxtb/sxth/sxtw/uxtb/uxth and
     /// asr/lsl/lsr) all lower to one of these three with computed
@@ -1638,6 +1659,7 @@ internal enum A64 {
         case extractOrRotateAlias(ExtractKind, destination: Register, first: Register, operand: ExtractOperand)
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
+        case addSubCarry(AddSubCarryKind, destination: Register, first: Register, second: Register)
         case multiplyWide(MultiplyWideKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case bitfield(BitfieldKind, destination: Register, source: Register, immr: UInt32, imms: UInt32)
         case dataProcessingOneSource(DataProcessingOneSourceKind, destination: Register, source: Register)
@@ -1778,6 +1800,7 @@ internal typealias ConditionalCompareOperand = A64.ConditionalCompareOperand
 internal typealias DataProcessingOneSourceKind = A64.DataProcessingOneSourceKind
 internal typealias MultiplyWideKind = A64.MultiplyWideKind
 internal typealias BitfieldKind = A64.BitfieldKind
+internal typealias AddSubCarryKind = A64.AddSubCarryKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

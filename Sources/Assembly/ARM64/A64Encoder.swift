@@ -106,6 +106,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.multiply(kind, destination: destination, first: first, second: second, accumulator: accumulator)
         case .divide(let kind, let destination, let first, let second):
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
+        case .addSubCarry(let kind, let destination, let first, let second):
+            return try A64DataProcessingEncoder.addSubCarry(kind, destination: destination, first: first, second: second)
         case .multiplyWide(let kind, let destination, let first, let second, let accumulator):
             return try A64DataProcessingEncoder.multiplyWide(kind, destination: destination, first: first, second: second, accumulator: accumulator)
         case .bitfield(let kind, let destination, let source, let immr, let imms):
@@ -851,6 +853,13 @@ internal enum A64DataProcessingEncoder {
         let o1: UInt32 = kind == .sdiv ? 1 : 0
         let head = (sf << 31) | 0x1ac00800
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func addSubCarry(_ kind: A64.AddSubCarryKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
+        guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let head = (sf << 31) | (kind.op << 30) | (kind.setsFlags << 29) | 0x1a00_0000
+        return head | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func bitfield(_ kind: A64.BitfieldKind, destination rd: IntegerRegister, source rn: IntegerRegister, immr: UInt32, imms: UInt32) throws -> UInt32 {

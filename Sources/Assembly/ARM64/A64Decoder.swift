@@ -25,6 +25,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMultiply(word) { return instruction }
         if let instruction = decodeMultiplyWide(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
+        if let instruction = decodeAddSubCarry(word) { return instruction }
         if let instruction = decodeCRC32(word) { return instruction }
         if let instruction = decodeDataProcessingOneSource(word) { return instruction }
         if let instruction = decodeConditionalSelect(word) { return instruction }
@@ -442,6 +443,20 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         let rd = integerRegister(number: word & 0x1f, width: width)
         return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+    }
+
+    private static func decodeAddSubCarry(_ word: UInt32) -> Instruction? {
+        // op[28:21]=11010000 and the fixed opcode field [15:10]=000000.
+        guard word & 0x1fe0_fc00 == 0x1a00_0000 else { return nil }
+        let sf = (word >> 31) & 1
+        let op = (word >> 30) & 1
+        let setsFlags = (word >> 29) & 1
+        let kind = A64.AddSubCarryKind.decode(op: op, setsFlags: setsFlags)
+        let width = sf == 1 ? 64 : 32
+        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
+        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let rd = integerRegister(number: word & 0x1f, width: width)
+        return .addSubCarry(kind, destination: rd, first: rn, second: rm)
     }
 
     private static func decodeCRC32(_ word: UInt32) -> Instruction? {
