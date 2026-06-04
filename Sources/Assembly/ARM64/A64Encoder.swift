@@ -106,6 +106,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.multiply(kind, destination: destination, first: first, second: second, accumulator: accumulator)
         case .divide(let kind, let destination, let first, let second):
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
+        case .conditionalSelect(let kind, let destination, let first, let second, let condition):
+            return try A64DataProcessingEncoder.conditionalSelect(kind, destination: destination, first: first, second: second, condition: condition)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):
@@ -835,5 +837,12 @@ internal enum A64DataProcessingEncoder {
         let o1: UInt32 = kind == .sdiv ? 1 : 0
         let head = (sf << 31) | 0x1ac00800
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func conditionalSelect(_ kind: A64.ConditionalSelectKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, condition: A64.Condition) throws -> UInt32 {
+        guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        let sf: UInt32 = rd.is64Bit ? 1 : 0
+        let head = (sf << 31) | (kind.op << 30) | 0x1a80_0000
+        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (kind.o2 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 }

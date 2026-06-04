@@ -924,6 +924,16 @@ internal enum A64InstructionParser {
                 first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
             )
+        case "csel", "csinc", "csinv", "csneg":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 4)
+            return .conditionalSelect(
+                A64.ConditionalSelectKind(rawValue: mnemonic)!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false),
+                condition: try A64Parser.condition(instruction.operands[3])
+            )
         case "ldr", "ldrb", "ldrh", "ldrsb", "ldrsh", "ldrsw", "str", "strb", "strh", "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw", "stur", "sturb", "sturh":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)

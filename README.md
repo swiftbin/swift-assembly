@@ -20,6 +20,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - logical (and / orr / eor / bic / orn / ...) and mvn
 - shifts (lsl / lsr / asr), extract and rotate (extr / ror)
 - multiply / divide (mul / madd / msub / udiv / sdiv)
+- conditional select (csel / csinc / csinv / csneg, with a condition operand)
 - load / store (single and pair, including pre/post-indexed)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)

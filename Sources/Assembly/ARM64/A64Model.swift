@@ -202,6 +202,20 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// Conditional select family (`csel`/`csinc`/`csinv`/`csneg`).
+    enum ConditionalSelectKind: String, Equatable, CaseIterable {
+        case csel, csinc, csinv, csneg
+
+        /// The `op` bit at [30].
+        var op: UInt32 { (self == .csinv || self == .csneg) ? 1 : 0 }
+        /// The `o2` bit at [10].
+        var o2: UInt32 { (self == .csinc || self == .csneg) ? 1 : 0 }
+
+        static func decode(op: UInt32, o2: UInt32) -> ConditionalSelectKind? {
+            allCases.first { $0.op == op && $0.o2 == o2 }
+        }
+    }
+
     enum LoadStoreSingleKind: String, Equatable {
         case ldr, ldrb, ldrh, ldrsb, ldrsh, ldrsw
         case str, strb, strh
@@ -1447,6 +1461,7 @@ internal enum A64 {
         case extractOrRotateAlias(ExtractKind, destination: Register, first: Register, operand: ExtractOperand)
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
+        case conditionalSelect(ConditionalSelectKind, destination: Register, first: Register, second: Register, condition: Condition)
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
@@ -1573,6 +1588,7 @@ internal typealias VectorIndexedKind = A64.VectorIndexedKind
 internal typealias VectorDotProductKind = A64.VectorDotProductKind
 internal typealias VectorMixedDotProductKind = A64.VectorMixedDotProductKind
 internal typealias VectorMatrixMultiplyKind = A64.VectorMatrixMultiplyKind
+internal typealias ConditionalSelectKind = A64.ConditionalSelectKind
 internal typealias VectorFPMultiplyLongKind = A64.VectorFPMultiplyLongKind
 internal typealias VectorThreeSameExtraKind = A64.VectorThreeSameExtraKind
 internal typealias ScalarThreeSameKind = A64.ScalarThreeSameKind

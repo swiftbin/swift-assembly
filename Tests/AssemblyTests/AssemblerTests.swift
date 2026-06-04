@@ -151,6 +151,48 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sdiv x0, x1, x2"), 0x9ac20c20)
     }
 
+    func testConditionalSelectInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csel w0, w1, w2, eq"), 0x1a820020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csel x0, x1, x2, ne"), 0x9a821020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csinc w0, w1, w2, ge"), 0x1a82a420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csinc x0, x1, x2, lt"), 0x9a82b420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csinv w0, w1, w2, gt"), 0x5a82c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csinv x0, x1, x2, le"), 0xda82d020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csneg w0, w1, w2, mi"), 0x5a824420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csneg x0, x1, x2, pl"), 0xda825420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csel x5, x6, x7, al"), 0x9a87e0c5)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csneg x3, x4, x5, vs"), 0xda856483)
+    }
+
+    func testDisassembleConditionalSelect() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1a820020), "csel w0, w1, w2, eq")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9a821020), "csel x0, x1, x2, ne")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1a82a420), "csinc w0, w1, w2, ge")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5a82c020), "csinv w0, w1, w2, gt")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xda825420), "csneg x0, x1, x2, pl")
+    }
+
+    func testConditionalSelectRoundTrip() throws {
+        let sources = [
+            "csel w0, w1, w2, eq", "csel x3, x4, x5, ne",
+            "csinc w6, w7, w8, ge", "csinc x9, x10, x11, lt",
+            "csinv w12, w13, w14, gt", "csinv x15, x16, x17, le",
+            "csneg w18, w19, w20, mi", "csneg x21, x22, x23, pl",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word)
+        }
+    }
+
+    func testConditionalSelectInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("csel w0, x1, w2, eq"))  // mismatched widths
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("csel w0, w1, w2, zz"))  // bad condition
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("csel w0, w1, w2"))      // missing condition
+    }
+
     func testAdrAndAdrp() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("adr x0, #0"), 0x10000000)
         XCTAssertEqual(try ARM64Assembler.assembleWord("adr x0, #4"), 0x10000020)
