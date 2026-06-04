@@ -1584,6 +1584,12 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmp d0, v1.2d"), 0x7e70c820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmp s0, v1.2s"), 0x7eb0c820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmp d0, v1.2d"), 0x7ef0c820)
+        // Half-precision (`.2h` source reducing into a scalar `h`).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("faddp h0, v1.2h"), 0x5e30d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxp h0, v1.2h"), 0x5e30f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminp h0, v1.2h"), 0x5eb0f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmaxnmp h0, v1.2h"), 0x5e30c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fminnmp h0, v1.2h"), 0x5eb0c820)
     }
 
     func testDisassembleScalarPairwise() throws {
@@ -1591,6 +1597,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e30d820), "faddp s0, v1.2s")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7ef0f820), "fminp d0, v1.2d")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e70c820), "fmaxnmp d0, v1.2d")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e30d820), "faddp h0, v1.2h")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5eb0f820), "fminp h0, v1.2h")
     }
 
     func testScalarPairwiseRoundTrip() throws {
@@ -1601,6 +1609,8 @@ final class AssemblerTests: XCTestCase {
             "fminp s10, v11.2s", "fminp d12, v13.2d",
             "fmaxnmp s14, v15.2s", "fmaxnmp d16, v17.2d",
             "fminnmp s18, v19.2s", "fminnmp d20, v21.2d",
+            "faddp h22, v23.2h", "fmaxp h24, v25.2h", "fminp h26, v27.2h",
+            "fmaxnmp h28, v29.2h", "fminnmp h30, v31.2h",
         ]
         for source in sources {
             let word = try ARM64Assembler.assembleWord(source)
@@ -1615,6 +1625,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("addp d0, v1.4s"))    // source must be 2d
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("faddp d0, v1.2s"))   // dest width must match source
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("faddp s0, v1.4s"))   // unsupported source arrangement
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("faddp s0, v1.2h"))   // dest width must match source (h)
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("addp h0, v1.2h"))    // addp has no FP16 form
     }
 
     func testScalarTwoRegisterMiscInstructions() throws {

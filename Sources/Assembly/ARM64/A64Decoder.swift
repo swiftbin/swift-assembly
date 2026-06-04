@@ -73,6 +73,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeVectorIndexed(word) { return instruction }
         if let instruction = decodeScalarThreeSameExtra(word) { return instruction }
         if let instruction = decodeScalarThreeSame(word) { return instruction }
+        if let instruction = decodeScalarPairwiseFP16(word) { return instruction }
         if let instruction = decodeScalarPairwise(word) { return instruction }
         if let instruction = decodeScalarTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeScalarShiftImmediate(word) { return instruction }
@@ -2354,6 +2355,26 @@ internal enum A64InstructionDecoder {
         return .scalarTwoRegisterMisc(kind,
             destination: floatRegister(number: rdNum, width: width),
             source: floatRegister(number: rnNum, width: width))
+    }
+
+    private static func decodeScalarPairwiseFP16(_ word: UInt32) -> Instruction? {
+        // Half-precision scalar pairwise: like the FP32/64 form but with U=0 and
+        // sz=0, reducing a `.2h` source into a scalar `h`. Distinguished by
+        // (o1=bit23, opcode[16:12]).
+        guard word & 0xff7e_0c00 == 0x5e30_0800 else { return nil }
+        let o1 = (word >> 23) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarPairwiseKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.fp && spec.o1 == o1 && spec.opcode == opcode
+        }) else { return nil }
+
+        return .scalarPairwise(kind,
+            destination: floatRegister(number: rdNum, width: 16),
+            source: VectorRegister(number: rnNum, arrangement: .h2))
     }
 
     private static func decodeScalarPairwise(_ word: UInt32) -> Instruction? {

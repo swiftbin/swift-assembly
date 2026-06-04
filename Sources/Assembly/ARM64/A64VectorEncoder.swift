@@ -1077,6 +1077,12 @@ internal enum A64VectorEncoder {
         let base: UInt32 = 0x5e30_0800
 
         if spec.fp {
+            // Half-precision form: `.2h` source reducing into a scalar `h`. This
+            // variant clears U (the FP32/64 forms set it) and uses sz=0.
+            if rn.arrangement == .h2 {
+                guard rd.width == 16 else { throw fail() }
+                return base | (spec.o1 << 23) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            }
             let sz: UInt32
             switch rn.arrangement {
             case .s2: guard rd.width == 32 else { throw fail() }; sz = 0
