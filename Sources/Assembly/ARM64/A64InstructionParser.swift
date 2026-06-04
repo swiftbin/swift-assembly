@@ -650,6 +650,21 @@ internal enum A64InstructionParser {
             )
         }
 
+        // Scalar floating-point round-to-integral (`Sd, Sn` / `Dd, Dn` / `Hd, Hn`),
+        // including the Armv8.5 frint32/frint64 forms (single/double only).
+        if parts.count == 1,
+           instruction.operands.count == 2,
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[0]),
+           A64Parser.isScalarFloatRegisterOperand(instruction.operands[1]),
+           let kind = A64.FPDataProcessing1Kind(rawValue: mnemonic),
+           kind.isRoundToIntegral {
+            return .fpDataProcessing1(
+                kind,
+                destination: try A64Parser.floatRegister(instruction.operands[0]),
+                source: try A64Parser.floatRegister(instruction.operands[1])
+            )
+        }
+
         // Advanced SIMD scalar FP two-register misc compare-against-zero (`Vd, Vn, #0.0`).
         if parts.count == 1,
            instruction.operands.count == 3,

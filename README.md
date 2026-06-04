@@ -24,6 +24,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
+- scalar floating-point round-to-integral (frintn / frintm / frintp / frintz / frinta / frintx / frinti on `s`/`d`/`h`, and the Armv8.5 frint32z / frint32x / frint64z / frint64x on `s`/`d`)
 - Advanced SIMD across-lanes reductions (addv / saddlv / uaddlv / smaxv / umaxv / sminv / uminv, and fmaxv / fminv / fmaxnmv / fminnmv in both the single-precision `.4s` and half-precision `.4h`/`.8h` forms)
 - Advanced SIMD two-register misc (rev64 / rev32 / rev16 / abs / neg / mvn / rbit / cnt / cls / clz / sqabs / sqneg / suqadd / usqadd / fabs / fneg / fsqrt)
 - Advanced SIMD three-same (add / sub / mul / and / orr / eor / bic / orn / bsl / cmeq / cmgt / smax / umin / sshl / sqadd / sqdmulh / fadd / fsub / fmul / fdiv / fmla / fcmeq / frecps / ...)

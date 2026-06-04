@@ -298,6 +298,46 @@ internal enum A64 {
 
     enum FPDataProcessing1Kind: String, Equatable {
         case fmov, fabs, fneg, fsqrt
+        case frintn, frintp, frintm, frintz, frinta, frintx, frinti
+        case frint32z, frint32x, frint64z, frint64x
+
+        /// The 6-bit opcode field at [20:15].
+        var opcode: UInt32 {
+            switch self {
+            case .fmov:     return 0b000000
+            case .fabs:     return 0b000001
+            case .fneg:     return 0b000010
+            case .fsqrt:    return 0b000011
+            case .frintn:   return 0b001000
+            case .frintp:   return 0b001001
+            case .frintm:   return 0b001010
+            case .frintz:   return 0b001011
+            case .frinta:   return 0b001100
+            case .frintx:   return 0b001110
+            case .frinti:   return 0b001111
+            case .frint32z: return 0b010000
+            case .frint32x: return 0b010001
+            case .frint64z: return 0b010010
+            case .frint64x: return 0b010011
+            }
+        }
+
+        /// `frint32*` / `frint64*` exist only for single and double precision.
+        var allowsHalf: Bool {
+            switch self {
+            case .frint32z, .frint32x, .frint64z, .frint64x: return false
+            default: return true
+            }
+        }
+
+        /// The round-to-integral forms (everything except fmov/fabs/fneg/fsqrt);
+        /// the parser uses this to route bare scalar operands here.
+        var isRoundToIntegral: Bool {
+            switch self {
+            case .fmov, .fabs, .fneg, .fsqrt: return false
+            default: return true
+            }
+        }
     }
 
     enum FPDataProcessing3Kind: String, Equatable {

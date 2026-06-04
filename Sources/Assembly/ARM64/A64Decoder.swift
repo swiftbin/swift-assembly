@@ -729,6 +729,17 @@ internal enum A64InstructionDecoder {
         case 0b000001: kind = .fabs
         case 0b000010: kind = .fneg
         case 0b000011: kind = .fsqrt
+        case 0b001000: kind = .frintn
+        case 0b001001: kind = .frintp
+        case 0b001010: kind = .frintm
+        case 0b001011: kind = .frintz
+        case 0b001100: kind = .frinta
+        case 0b001110: kind = .frintx
+        case 0b001111: kind = .frinti
+        case 0b010000: kind = .frint32z
+        case 0b010001: kind = .frint32x
+        case 0b010010: kind = .frint64z
+        case 0b010011: kind = .frint64x
         case 0b000100, 0b000101, 0b000111:
             guard let target = floatWidth(forPtype: opcode & 3), target != width else { return nil }
             return .fpConvertPrecision(
@@ -738,6 +749,8 @@ internal enum A64InstructionDecoder {
         default:
             return nil
         }
+        // frint32*/frint64* have no half-precision form.
+        if !kind.allowsHalf, width == 16 { return nil }
         return .fpDataProcessing1(kind, destination: floatRegister(number: word & 0x1f, width: width), source: rn)
     }
 

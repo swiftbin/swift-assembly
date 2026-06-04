@@ -462,6 +462,57 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("fmov w0, x1"))
     }
 
+    func testScalarFloatingPointRoundToIntegralInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintn s0, s1"), 0x1e244020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintp s0, s1"), 0x1e24c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintm s0, s1"), 0x1e254020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintz s0, s1"), 0x1e25c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinta s0, s1"), 0x1e264020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintx s0, s1"), 0x1e274020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinti s0, s1"), 0x1e27c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintn d0, d1"), 0x1e644020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frinta h0, h1"), 0x1ee64020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frintx h0, h1"), 0x1ee74020)
+        // Armv8.5 frint32/frint64 (single/double only).
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32z s0, s1"), 0x1e284020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32x s0, s1"), 0x1e28c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64z s0, s1"), 0x1e294020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64x s0, s1"), 0x1e29c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32z d0, d1"), 0x1e684020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint32x d0, d1"), 0x1e68c020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64z d0, d1"), 0x1e694020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frint64x d0, d1"), 0x1e69c020)
+    }
+
+    func testDisassembleScalarFloatingPointRoundToIntegral() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e244020), "frintn s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e27c020), "frinti s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ee64020), "frinta h0, h1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e284020), "frint32z s0, s1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1e69c020), "frint64x d0, d1")
+    }
+
+    func testScalarFloatingPointRoundToIntegralRoundTrip() throws {
+        let sources = [
+            "frintn s0, s1", "frintp d2, d3", "frintm s4, s5", "frintz d6, d7",
+            "frinta s8, s9", "frintx d10, d11", "frinti s12, s13",
+            "frinta h14, h15", "frintx h16, h17", "frinti h18, h19",
+            "frint32z s20, s21", "frint32x d22, d23", "frint64z s24, s25", "frint64x d26, d27",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            let reassembled = try ARM64Assembler.assembleWord(text)
+            XCTAssertEqual(reassembled, word, "round-trip failed for \(source) -> \(text)")
+        }
+    }
+
+    func testScalarFloatingPointRoundToIntegralInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frintn s0, d1"))     // widths must match
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint32z h0, h1"))   // frint32 has no half form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("frint64x h0, h1"))   // frint64 has no half form
+    }
+
     func testAcrossLanesIntegerInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv b0, v1.8b"), 0x0e31b820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("addv h0, v1.4h"), 0x0e71b820)

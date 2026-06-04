@@ -81,15 +81,10 @@ internal enum A64FloatEncoder {
     static func dataProcessing1(_ kind: A64.FPDataProcessing1Kind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
         try requireSameType(rd, rn, instruction: kind.rawValue)
         let type = try ptype(rd, instruction: kind.rawValue)
-        let opcode: UInt32
-        switch kind {
-        case .fmov: opcode = 0b000000
-        case .fabs: opcode = 0b000001
-        case .fneg: opcode = 0b000010
-        case .fsqrt: opcode = 0b000011
-        }
+        // frint32*/frint64* have no half-precision form.
+        if !kind.allowsHalf, rd.width == 16 { throw AssemblerError.invalidRegister(kind.rawValue) }
         let head: UInt32 = 0x1e20_4000 | (type << 22)
-        return head | (opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return head | (kind.opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func dataProcessing3(_ kind: A64.FPDataProcessing3Kind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, third ra: FloatRegister) throws -> UInt32 {
