@@ -1082,12 +1082,21 @@ internal enum A64InstructionDecoder {
         let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: width)
         let base = xRegister(number: (word >> 5) & 0x1f)
         let rt = integerRegister(number: word & 0x1f, width: width)
-        let kind: A64.LoadStorePairKind = l == 1 ? .ldp : .stp
         let memory: MemoryOperand
+        let kind: A64.LoadStorePairKind
         switch (word >> 23) & 3 {
-        case 1: memory = .postIndexed(base: base, offset: offset)
-        case 2: memory = .unsignedOffset(base: base, offset: offset)
-        case 3: memory = .preIndexed(base: base, offset: offset)
+        case 0:
+            kind = l == 1 ? .ldnp : .stnp
+            memory = .unsignedOffset(base: base, offset: offset)
+        case 1:
+            kind = l == 1 ? .ldp : .stp
+            memory = .postIndexed(base: base, offset: offset)
+        case 2:
+            kind = l == 1 ? .ldp : .stp
+            memory = .unsignedOffset(base: base, offset: offset)
+        case 3:
+            kind = l == 1 ? .ldp : .stp
+            memory = .preIndexed(base: base, offset: offset)
         default: return nil
         }
         return .loadStorePair(kind, first: rt, second: rt2, memory: memory)
@@ -1168,12 +1177,21 @@ internal enum A64InstructionDecoder {
         let rt2 = floatRegister(number: (word >> 10) & 0x1f, width: width)
         let base = xRegister(number: (word >> 5) & 0x1f)
         let rt = floatRegister(number: word & 0x1f, width: width)
-        let kind: A64.LoadStorePairKind = l == 1 ? .ldp : .stp
         let memory: MemoryOperand
+        let kind: A64.LoadStorePairKind
         switch (word >> 23) & 3 {
-        case 1: memory = .postIndexed(base: base, offset: offset)
-        case 2: memory = .unsignedOffset(base: base, offset: offset)
-        case 3: memory = .preIndexed(base: base, offset: offset)
+        case 0:
+            kind = l == 1 ? .ldnp : .stnp
+            memory = .unsignedOffset(base: base, offset: offset)
+        case 1:
+            kind = l == 1 ? .ldp : .stp
+            memory = .postIndexed(base: base, offset: offset)
+        case 2:
+            kind = l == 1 ? .ldp : .stp
+            memory = .unsignedOffset(base: base, offset: offset)
+        case 3:
+            kind = l == 1 ? .ldp : .stp
+            memory = .preIndexed(base: base, offset: offset)
         default: return nil
         }
         return .loadStorePairFP(kind, first: rt, second: rt2, memory: memory)

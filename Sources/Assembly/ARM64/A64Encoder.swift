@@ -889,15 +889,19 @@ internal enum A64LoadStoreEncoder {
         let base: IntegerRegister
         let offset: Int64
         switch memory {
-        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): modeBase = 0x29000000; base = b; offset = o
-        case .postIndexed(let b, let o): modeBase = 0x28800000; base = b; offset = o
-        case .preIndexed(let b, let o): modeBase = 0x29800000; base = b; offset = o
+        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): modeBase = kind.isNoAllocate ? 0x28000000 : 0x29000000; base = b; offset = o
+        case .postIndexed(let b, let o):
+            guard !kind.isNoAllocate else { throw AssemblerError.unsupportedOperand(mnemonic) }
+            modeBase = 0x28800000; base = b; offset = o
+        case .preIndexed(let b, let o):
+            guard !kind.isNoAllocate else { throw AssemblerError.unsupportedOperand(mnemonic) }
+            modeBase = 0x29800000; base = b; offset = o
         case .registerOffset: throw AssemblerError.unsupportedOperand(mnemonic)
         }
         guard offset % scale == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: scale) }
         let imm7 = offset / scale
         try checkRange(imm7, -64...63, instruction: mnemonic)
-        let head = ((rt.is64Bit ? UInt32(2) : 0) << 30) | modeBase | ((kind == .ldp ? UInt32(1) : 0) << 22)
+        let head = ((rt.is64Bit ? UInt32(2) : 0) << 30) | modeBase | ((kind.isLoad ? UInt32(1) : 0) << 22)
         return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
     }
 
@@ -953,15 +957,19 @@ internal enum A64LoadStoreEncoder {
         let base: IntegerRegister
         let offset: Int64
         switch memory {
-        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): modeBase = 0x2d000000; base = b; offset = o
-        case .postIndexed(let b, let o): modeBase = 0x2c800000; base = b; offset = o
-        case .preIndexed(let b, let o): modeBase = 0x2d800000; base = b; offset = o
+        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): modeBase = kind.isNoAllocate ? 0x2c000000 : 0x2d000000; base = b; offset = o
+        case .postIndexed(let b, let o):
+            guard !kind.isNoAllocate else { throw AssemblerError.unsupportedOperand(mnemonic) }
+            modeBase = 0x2c800000; base = b; offset = o
+        case .preIndexed(let b, let o):
+            guard !kind.isNoAllocate else { throw AssemblerError.unsupportedOperand(mnemonic) }
+            modeBase = 0x2d800000; base = b; offset = o
         case .registerOffset: throw AssemblerError.unsupportedOperand(mnemonic)
         }
         guard offset % scale == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: scale) }
         let imm7 = offset / scale
         try checkRange(imm7, -64...63, instruction: mnemonic)
-        let head = (opc << 30) | modeBase | ((kind == .ldp ? UInt32(1) : 0) << 22)
+        let head = (opc << 30) | modeBase | ((kind.isLoad ? UInt32(1) : 0) << 22)
         return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
     }
 

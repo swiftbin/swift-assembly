@@ -452,7 +452,12 @@ internal enum A64 {
     }
 
     enum LoadStorePairKind: String, Equatable {
-        case ldp, stp
+        case ldp, stp, ldnp, stnp
+
+        /// Whether this is a load (sets the `L` bit).
+        var isLoad: Bool { self == .ldp || self == .ldnp }
+        /// Whether this is a no-allocate pair (offset addressing only).
+        var isNoAllocate: Bool { self == .ldnp || self == .stnp }
     }
 
     /// Load/store exclusive and load-acquire/store-release instructions.

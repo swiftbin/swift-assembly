@@ -1405,7 +1405,7 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidMemoryOperand(instruction.operands[4...].joined(separator: ", "))
             }
             return .compareAndSwapPair(kind, compare: compare, value: value, base: base)
-        case "ldp", "stp":
+        case "ldp", "stp", "ldnp", "stnp":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 3...4)
             // SIMD&FP form (`ldp q0, q1, [x2]`, …): paired floating-point registers.

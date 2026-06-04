@@ -429,6 +429,49 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("udf"))         // missing immediate
     }
 
+    func testNoAllocatePairInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp w0, w1, [x2]"), 0x28400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp x0, x1, [x2]"), 0xa8400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stnp w0, w1, [x2]"), 0x28000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stnp x0, x1, [x2]"), 0xa8000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp w0, w1, [x2, #8]"), 0x28410440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp x0, x1, [x2, #16]"), 0xa8410440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp s0, s1, [x2]"), 0x2c400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp d0, d1, [x2]"), 0x6c400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp q0, q1, [x2]"), 0xac400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stnp s0, s1, [x2]"), 0x2c000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stnp d0, d1, [x2]"), 0x6c000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stnp q0, q1, [x2]"), 0xac000440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldnp q0, q1, [x2, #32]"), 0xac410440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stnp d0, d1, [x2, #-16]"), 0x6c3f0440)
+    }
+
+    func testDisassembleNoAllocatePair() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x28400440), "ldnp w0, w1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xa8000440), "stnp x0, x1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xac400440), "ldnp q0, q1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6c3f0440), "stnp d0, d1, [x2, #-16]")
+    }
+
+    func testNoAllocatePairRoundTrip() throws {
+        let sources = [
+            "ldnp w0, w1, [x2]", "stnp x3, x4, [x5, #16]",
+            "ldnp s0, s1, [x2, #8]", "stnp d2, d3, [x4]",
+            "ldnp q0, q1, [x2, #-32]", "stnp q5, q6, [sp]",
+        ]
+        for source in sources {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "round trip failed for \(source)")
+        }
+    }
+
+    func testNoAllocatePairInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldnp w0, w1, [x2, #16]!"))  // no writeback
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stnp x0, x1, [x2], #16"))   // no post-index
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldnp w0, w1, [x2, #6]"))    // misaligned
+    }
+
     func testHintInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint #128"))  // immediate out of range
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint"))       // missing immediate
