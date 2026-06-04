@@ -1870,6 +1870,27 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt s0, s1, #0.0"), 0x5ea0c820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fcmle s0, s1, #0.0"), 0x7ea0d820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fcmlt s0, s1, #0.0"), 0x5ea0e820)
+        // Half-precision (`h` register) forms.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtns h0, h1"), 0x5e79a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtnu h0, h1"), 0x7e79a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtms h0, h1"), 0x5e79b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtmu h0, h1"), 0x7e79b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtas h0, h1"), 0x5e79c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtau h0, h1"), 0x7e79c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("scvtf h0, h1"), 0x5e79d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ucvtf h0, h1"), 0x7e79d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtps h0, h1"), 0x5ef9a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtpu h0, h1"), 0x7ef9a820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzs h0, h1"), 0x5ef9b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcvtzu h0, h1"), 0x7ef9b820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpe h0, h1"), 0x5ef9d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frsqrte h0, h1"), 0x7ef9d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("frecpx h0, h1"), 0x5ef9f820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmgt h0, h1, #0.0"), 0x5ef8c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmge h0, h1, #0.0"), 0x7ef8c820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmeq h0, h1, #0.0"), 0x5ef8d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmle h0, h1, #0.0"), 0x7ef8d820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fcmlt h0, h1, #0.0"), 0x5ef8e820)
     }
 
     func testDisassembleScalarFPTwoRegisterMisc() throws {
@@ -1879,6 +1900,9 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7e616820), "fcvtxn s0, d1")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea0d820), "fcmeq s0, s1, #0.0")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ea0e820), "fcmlt s0, s1, #0.0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5e79a820), "fcvtns h0, h1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ef9f820), "frecpx h0, h1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5ef8d820), "fcmeq h0, h1, #0.0")
     }
 
     func testScalarFPTwoRegisterMiscRoundTrip() throws {
@@ -1890,6 +1914,12 @@ final class AssemblerTests: XCTestCase {
             "fcvtxn s0, d1",
             "fcmgt s2, s3, #0.0", "fcmge d4, d5, #0.0", "fcmeq s6, s7, #0.0",
             "fcmle d8, d9, #0.0", "fcmlt s10, s11, #0.0",
+            "fcvtns h0, h1", "fcvtnu h2, h3", "fcvtms h4, h5", "fcvtmu h6, h7",
+            "fcvtas h8, h9", "fcvtau h10, h11", "scvtf h12, h13", "ucvtf h14, h15",
+            "fcvtps h16, h17", "fcvtpu h18, h19", "fcvtzs h20, h21", "fcvtzu h22, h23",
+            "frecpe h24, h25", "frsqrte h26, h27", "frecpx h28, h29",
+            "fcmgt h0, h1, #0.0", "fcmge h2, h3, #0.0", "fcmeq h4, h5, #0.0",
+            "fcmle h6, h7, #0.0", "fcmlt h8, h9, #0.0",
         ]
         for source in sources {
             let word = try ARM64Assembler.assembleWord(source)

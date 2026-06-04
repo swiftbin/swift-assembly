@@ -79,6 +79,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeScalarThreeDifferent(word) { return instruction }
         if let instruction = decodeScalarIndexed(word) { return instruction }
         if let instruction = decodeScalarCopy(word) { return instruction }
+        if let instruction = decodeScalarFPTwoRegisterMiscFP16(word) { return instruction }
         if let instruction = decodeScalarFPTwoRegisterMisc(word) { return instruction }
         if let instruction = decodeScalarThreeSameFP16(word) { return instruction }
         if let instruction = decodeScalarThreeSameFP(word) { return instruction }
@@ -2155,6 +2156,27 @@ internal enum A64InstructionDecoder {
             destination: floatRegister(number: rdNum, width: width),
             first: floatRegister(number: rnNum, width: width),
             second: floatRegister(number: rmNum, width: width))
+    }
+
+    private static func decodeScalarFPTwoRegisterMiscFP16(_ word: UInt32) -> Instruction? {
+        // Half-precision scalar two-register misc: bit30=1, bits[28:24]=11110,
+        // bit22=1, bits[21:17]=11100, bits[11:10]=10. Distinguished by
+        // (U, bit23, opcode[16:12]); the narrow `fcvtxn` has no FP16 form.
+        guard word & 0xdf7e_0c00 == 0x5e78_0800 else { return nil }
+        let u = (word >> 29) & 1
+        let hi = (word >> 23) & 1
+        let opcode = (word >> 12) & 0x1f
+        let rnNum = (word >> 5) & 0x1f
+        let rdNum = word & 0x1f
+
+        guard let kind = A64.ScalarFPTwoRegisterMiscKind.allCases.first(where: {
+            let spec = $0.spec
+            return spec.category != .narrow && spec.u == u && spec.hi == hi && spec.opcode == opcode
+        }) else { return nil }
+
+        return .scalarFPTwoRegisterMisc(kind,
+            destination: floatRegister(number: rdNum, width: 16),
+            source: floatRegister(number: rnNum, width: 16))
     }
 
     private static func decodeScalarFPTwoRegisterMisc(_ word: UInt32) -> Instruction? {

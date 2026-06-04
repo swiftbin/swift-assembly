@@ -830,6 +830,20 @@ internal enum A64VectorEncoder {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
 
+        // Half-precision (`h` register) forms exist for the convert and
+        // compare-against-#0.0 categories; `fcvtxn` (narrow) has no FP16 form.
+        if rd.width == 16 {
+            switch spec.category {
+            case .convert, .compareZero:
+                guard rn.width == 16 else { throw fail() }
+                // Base: bit30=1, bits[28:24]=11110, bit22=1, bits[21:17]=11100, bits[11:10]=10.
+                let base: UInt32 = 0x5e78_0800
+                return base | (spec.u << 29) | (spec.hi << 23) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            case .narrow:
+                throw fail()
+            }
+        }
+
         let sz: UInt32
         switch spec.category {
         case .convert, .compareZero:
