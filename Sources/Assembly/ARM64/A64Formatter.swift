@@ -127,6 +127,8 @@ internal enum A64InstructionFormatter {
             return read
                 ? "mrs \(formatRegister(value)), \(register.name)"
                 : "msr \(register.name), \(formatRegister(value))"
+        case .pstate(let field, let immediate):
+            return "msr \(field.rawValue), #\(immediate)"
         case .loadStorePair(let kind, let first, let second, let memory):
             return "\(kind.rawValue) \(([formatRegister(first), formatRegister(second)] + formatMemoryOperand(memory)).joined(separator: ", "))"
         case .loadStoreSingleFP(let kind, let target, let memory):

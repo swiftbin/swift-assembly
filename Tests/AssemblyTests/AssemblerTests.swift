@@ -551,6 +551,42 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("mrs x0"))            // missing operand
     }
 
+    func testPStateImmediateInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr spsel, #1"), 0xd50041bf)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr daifset, #2"), 0xd50342df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr daifclr, #15"), 0xd5034fff)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr uao, #1"), 0xd500417f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr pan, #1"), 0xd500419f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr dit, #1"), 0xd503415f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr ssbs, #1"), 0xd503413f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr daifset, #0"), 0xd50340df)
+    }
+
+    func testDisassemblePStateImmediate() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50041bf), "msr spsel, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50342df), "msr daifset, #2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5034fff), "msr daifclr, #15")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503413f), "msr ssbs, #1")
+    }
+
+    func testPStateImmediateRoundTrip() throws {
+        for field in ["spsel", "daifset", "daifclr", "uao", "pan", "dit", "ssbs"] {
+            for imm in [0, 1, 2, 7, 15] {
+                let source = "msr \(field), #\(imm)"
+                let word = try ARM64Assembler.assembleWord(source)
+                let text = try ARM64Assembler.disassembleWord(word)
+                XCTAssertEqual(text, source, "round trip failed for \(source)")
+                XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+            }
+        }
+    }
+
+    func testPStateImmediateInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("msr daifset, #16"))  // immediate out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("msr spsel, x0"))     // requires an immediate
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("msr daifset"))       // missing operand
+    }
+
     func testLoadAcquireRCpcAndClearExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprb w0, [x1]"), 0x38bfc020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldaprh w0, [x1]"), 0x78bfc020)

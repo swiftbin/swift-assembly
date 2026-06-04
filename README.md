@@ -37,6 +37,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - load-acquire RCpc registers (ldapr / ldaprb / ldaprh) and clear-exclusive (clrex)
 - prefetch memory (prfm / prfum with pld/pli/pst × l1/l2/l3 × keep/strm operations, immediate / register / unscaled addressing)
 - system register moves (mrs / msr with named registers such as nzcv / fpcr / tpidr_el0 and the generic S<op0>_<op1>_C<n>_C<m>_<op2> form)
+- PSTATE field writes (msr immediate: spsel / daifset / daifclr / uao / pan / dit / ssbs)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)

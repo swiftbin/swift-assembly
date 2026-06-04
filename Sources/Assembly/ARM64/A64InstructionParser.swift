@@ -1227,6 +1227,11 @@ internal enum A64InstructionParser {
         case "msr":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)
+            if let field = A64.PStateField(rawValue: instruction.operands[0].lowercased()) {
+                let immediate = try A64Parser.immediate(instruction.operands[1])
+                try checkRange(immediate, 0...0xf, instruction: "msr")
+                return .pstate(field, immediate: UInt32(immediate))
+            }
             guard let register = A64.SystemRegister.parse(instruction.operands[0]) else {
                 throw AssemblerError.unsupportedOperand(instruction.operands[0])
             }

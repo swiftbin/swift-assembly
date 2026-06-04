@@ -148,6 +148,9 @@ internal enum A64InstructionEncoder {
             let o0 = register.op0 - 2
             return base | (o0 << 19) | (register.op1 << 16) | (register.crn << 12)
                 | (register.crm << 8) | (register.op2 << 5) | value.encodedNumber
+        case .pstate(let field, let immediate):
+            try checkRange(Int64(immediate), 0...0xf, instruction: "msr")
+            return 0xd500_401f | (field.op1 << 16) | (immediate << 8) | (field.op2 << 5)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStorePair(let kind, let first, let second, let memory):

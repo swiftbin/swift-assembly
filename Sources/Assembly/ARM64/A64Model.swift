@@ -590,6 +590,36 @@ internal enum A64 {
         case prfm, prfum
     }
 
+    /// A PSTATE field written by `MSR <field>, #imm` (MSR immediate).
+    enum PStateField: String, Equatable, CaseIterable {
+        case spsel, daifset, daifclr, uao, pan, dit, ssbs
+
+        /// The `op1` field at bits [18:16].
+        var op1: UInt32 {
+            switch self {
+            case .spsel, .uao, .pan: return 0
+            case .daifset, .daifclr, .dit, .ssbs: return 3
+            }
+        }
+
+        /// The `op2` field at bits [7:5].
+        var op2: UInt32 {
+            switch self {
+            case .ssbs: return 1
+            case .dit: return 2
+            case .uao: return 3
+            case .pan: return 4
+            case .spsel: return 5
+            case .daifset: return 6
+            case .daifclr: return 7
+            }
+        }
+
+        static func decode(op1: UInt32, op2: UInt32) -> PStateField? {
+            allCases.first { $0.op1 == op1 && $0.op2 == op2 }
+        }
+    }
+
     /// A system register accessed via `MRS` / `MSR` (register).
     ///
     /// Encoded as the `o0` (`op0 - 2`), `op1`, `CRn`, `CRm`, and `op2` fields.
@@ -1998,6 +2028,8 @@ internal enum A64 {
         case prefetch(PrefetchKind, operation: UInt32, memory: MemoryOperand)
         /// Move to/from a system register (`MRS Xt, sysreg` / `MSR sysreg, Xt`).
         case systemRegisterMove(read: Bool, register: SystemRegister, value: Register)
+        /// Write a PSTATE field with an immediate (`MSR <field>, #imm`).
+        case pstate(PStateField, immediate: UInt32)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -2158,6 +2190,7 @@ internal typealias AtomicMemoryKind = A64.AtomicMemoryKind
 internal typealias LoadAcquireRCpcKind = A64.LoadAcquireRCpcKind
 internal typealias PrefetchKind = A64.PrefetchKind
 internal typealias SystemRegister = A64.SystemRegister
+internal typealias PStateField = A64.PStateField
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind
