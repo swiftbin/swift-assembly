@@ -882,6 +882,18 @@ internal enum A64InstructionParser {
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 1)
             return .barrier(.dataMemory, option: try A64Parser.barrierOption(instruction.operands[0]))
+        case "sb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 0)
+            return .barrier(.speculation, option: 0)
+        case "ssbb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 0)
+            return .barrier(.dataSynchronization, option: 0)
+        case "pssbb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 0)
+            return .barrier(.dataSynchronization, option: 4)
         case "mov":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 2)

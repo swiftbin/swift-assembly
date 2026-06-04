@@ -168,6 +168,7 @@ internal enum A64 {
         case instructionSynchronization
         case dataSynchronization
         case dataMemory
+        case speculation
     }
 
     /// Named `HINT #imm` instructions. Unrecognised immediates round-trip

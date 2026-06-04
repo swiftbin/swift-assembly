@@ -259,6 +259,9 @@ internal enum A64InstructionDecoder {
             return .barrier(.dataSynchronization, option: option)
         case 0xd50330bf:
             return .barrier(.dataMemory, option: option)
+        case 0xd50330ff:
+            // SB (speculation barrier): op2=111, CRm fixed at 0.
+            return .barrier(.speculation, option: 0)
         default:
             return nil
         }

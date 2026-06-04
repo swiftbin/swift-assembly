@@ -42,9 +42,13 @@ internal enum A64InstructionFormatter {
         case .barrier(.instructionSynchronization, let option):
             return option == 0xf ? "isb" : "isb \(formatBarrierOption(option))"
         case .barrier(.dataSynchronization, let option):
+            if option == 0 { return "ssbb" }
+            if option == 4 { return "pssbb" }
             return "dsb \(formatBarrierOption(option))"
         case .barrier(.dataMemory, let option):
             return "dmb \(formatBarrierOption(option))"
+        case .barrier(.speculation, _):
+            return "sb"
         case .hint(let immediate):
             switch immediate {
             case 17: return "psb csync"

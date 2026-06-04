@@ -99,6 +99,8 @@ internal enum A64InstructionEncoder {
             return 0xd503309f | (option << 8)
         case .barrier(.dataMemory, let option):
             return 0xd50330bf | (option << 8)
+        case .barrier(.speculation, _):
+            return 0xd50330ff
         case .moveAlias(let destination, let source):
             return try A64MoveEncoder.movAlias(destination: destination, source: source)
         case .moveWide(let kind, let destination, let immediate, let shift):

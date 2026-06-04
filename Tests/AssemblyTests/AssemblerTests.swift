@@ -375,6 +375,33 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("chkfeat x0"))  // only x16 allowed
     }
 
+    func testSpeculationBarrierInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sb"), 0xd50330ff)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ssbb"), 0xd503309f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("pssbb"), 0xd503349f)
+    }
+
+    func testDisassembleSpeculationBarrier() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50330ff), "sb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503309f), "ssbb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503349f), "pssbb")
+    }
+
+    func testSpeculationBarrierRoundTrip() throws {
+        for source in ["sb", "ssbb", "pssbb"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testSpeculationBarrierInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("sb sy"))      // takes no operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ssbb #1"))    // takes no operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("pssbb x0"))   // takes no operand
+    }
+
     func testHintInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint #128"))  // immediate out of range
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint"))       // missing immediate
