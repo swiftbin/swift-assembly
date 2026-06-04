@@ -49,10 +49,13 @@ internal enum A64InstructionFormatter {
             switch immediate {
             case 17: return "psb csync"
             case 18: return "tsb csync"
+            case 19: return "gcsb dsync"
+            case 22: return "clrbhb"
             case 32: return "bti"
             case 34: return "bti c"
             case 36: return "bti j"
             case 38: return "bti jc"
+            case 40: return "chkfeat x16"
             default: break
             }
             if let kind = HintKind.decode(immediate: immediate) { return kind.rawValue }

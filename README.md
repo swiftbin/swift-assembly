@@ -52,6 +52,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - exception generation (hvc / smc / dcps1 / dcps2 / dcps3, alongside the existing svc / brk / hlt)
 - branch target identification and hint barriers (bti / bti c / bti j / bti jc / dgh / psb csync / tsb csync)
 - wait for event/interrupt with timeout (wfet / wfit)
+- system hint aliases (clrbhb / gcsb dsync / chkfeat x16)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
 - scalar floating-point round-to-integral (frintn / frintm / frintp / frintz / frinta / frintx / frinti on `s`/`d`/`h`, and the Armv8.5 frint32z / frint32x / frint64z / frint64x on `s`/`d`)
 - scalar floating-point JavaScript convert to signed fixed-point (fjcvtzs `w<d>, d<n>`)

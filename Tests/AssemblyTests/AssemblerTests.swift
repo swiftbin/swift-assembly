@@ -346,6 +346,35 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("dgh #0"))      // dgh takes no operand
     }
 
+    func testSystemHintAliasInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("clrbhb"), 0xd50322df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("gcsb dsync"), 0xd503227f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("chkfeat x16"), 0xd503251f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("chkfeat"), 0xd503251f)
+    }
+
+    func testDisassembleSystemHintAlias() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50322df), "clrbhb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503227f), "gcsb dsync")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503251f), "chkfeat x16")
+    }
+
+    func testSystemHintAliasRoundTrip() throws {
+        for source in ["clrbhb", "gcsb dsync", "chkfeat x16"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testSystemHintAliasInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("clrbhb x0"))   // takes no operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("gcsb"))        // missing dsync
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("gcsb foo"))    // invalid operand
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("chkfeat x0"))  // only x16 allowed
+    }
+
     func testHintInvalidInputsThrow() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint #128"))  // immediate out of range
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint"))       // missing immediate

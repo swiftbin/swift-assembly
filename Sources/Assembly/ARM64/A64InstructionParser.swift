@@ -802,6 +802,26 @@ internal enum A64InstructionParser {
                 throw AssemblerError.unsupportedOperand(instruction.operands[0])
             }
             return .hint(mnemonic == "psb" ? 17 : 18)
+        case "clrbhb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 0)
+            return .hint(22)
+        case "gcsb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 1)
+            guard instruction.operands[0].trimmingCharacters(in: .whitespaces).lowercased() == "dsync" else {
+                throw AssemblerError.unsupportedOperand(instruction.operands[0])
+            }
+            return .hint(19)
+        case "chkfeat":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 0...1)
+            if let operand = instruction.operands.first {
+                guard operand.trimmingCharacters(in: .whitespaces).lowercased() == "x16" else {
+                    throw AssemblerError.unsupportedOperand(operand)
+                }
+            }
+            return .hint(40)
         case "cfinv", "axflag", "xaflag":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
