@@ -106,6 +106,8 @@ internal enum A64InstructionEncoder {
             return try A64DataProcessingEncoder.multiply(kind, destination: destination, first: first, second: second, accumulator: accumulator)
         case .divide(let kind, let destination, let first, let second):
             return try A64DataProcessingEncoder.divide(kind, destination: destination, first: first, second: second)
+        case .multiplyWide(let kind, let destination, let first, let second, let accumulator):
+            return try A64DataProcessingEncoder.multiplyWide(kind, destination: destination, first: first, second: second, accumulator: accumulator)
         case .dataProcessingOneSource(let kind, let destination, let source):
             return try A64DataProcessingEncoder.dataProcessingOneSource(kind, destination: destination, source: source)
         case .crc32(let kind, let destination, let first, let data):
@@ -847,6 +849,29 @@ internal enum A64DataProcessingEncoder {
         let o1: UInt32 = kind == .sdiv ? 1 : 0
         let head = (sf << 31) | 0x1ac00800
         return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+    }
+
+    static func multiplyWide(_ kind: A64.MultiplyWideKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, accumulator: IntegerRegister?) throws -> UInt32 {
+        // The destination is always 64-bit. High-half multiplies take 64-bit
+        // multiplicands; the long forms take 32-bit multiplicands.
+        guard rd.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        if kind.isHigh {
+            guard rn.is64Bit, rm.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        } else {
+            guard !rn.is64Bit, !rm.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
+        }
+        let ra: UInt32
+        if kind.hasAccumulator {
+            guard let accumulator, accumulator.is64Bit else {
+                throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "4", actual: 3)
+            }
+            ra = accumulator.encodedNumber
+        } else {
+            guard accumulator == nil else { throw AssemblerError.invalidRegister(kind.rawValue) }
+            ra = 31
+        }
+        let head: UInt32 = 0x9b00_0000
+        return head | (kind.op31 << 21) | (rm.encodedNumber << 16) | (kind.o0 << 15) | (ra << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
     static func crc32(_ kind: A64.CRC32Kind, destination rd: IntegerRegister, first rn: IntegerRegister, data rm: IntegerRegister) throws -> UInt32 {

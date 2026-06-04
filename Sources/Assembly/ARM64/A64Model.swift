@@ -202,6 +202,56 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// Wide multiply: 32x32→64 multiply-long variants and 64x64→64 high-half
+    /// multiplies (data-processing 3 source).
+    enum MultiplyWideKind: String, Equatable, CaseIterable {
+        case smull, umull, smaddl, umaddl, smsubl, umsubl, smnegl, umnegl
+        case smulh, umulh
+
+        /// The `op31` field at [23:21].
+        var op31: UInt32 {
+            switch self {
+            case .smull, .smaddl, .smsubl, .smnegl: return 0b001
+            case .umull, .umaddl, .umsubl, .umnegl: return 0b101
+            case .smulh: return 0b010
+            case .umulh: return 0b110
+            }
+        }
+
+        /// The `o0` bit at [15] (set for the subtracting variants).
+        var o0: UInt32 {
+            switch self {
+            case .smsubl, .umsubl, .smnegl, .umnegl: return 1
+            default: return 0
+            }
+        }
+
+        /// Whether this is a 64x64→64 high-half multiply (all operands 64-bit,
+        /// three operands, no accumulator).
+        var isHigh: Bool { self == .smulh || self == .umulh }
+
+        /// Whether the mnemonic takes an explicit accumulator operand (the
+        /// `maddl`/`msubl` forms). The `mull`/`negl`/`mulh` forms use XZR.
+        var hasAccumulator: Bool {
+            switch self {
+            case .smaddl, .umaddl, .smsubl, .umsubl: return true
+            default: return false
+            }
+        }
+
+        static func decode(op31: UInt32, o0: UInt32, hasAccumulator: Bool) -> MultiplyWideKind? {
+            switch (op31, o0) {
+            case (0b010, 0): return .smulh
+            case (0b110, 0): return .umulh
+            case (0b001, 0): return hasAccumulator ? .smaddl : .smull
+            case (0b001, 1): return hasAccumulator ? .smsubl : .smnegl
+            case (0b101, 0): return hasAccumulator ? .umaddl : .umull
+            case (0b101, 1): return hasAccumulator ? .umsubl : .umnegl
+            default: return nil
+            }
+        }
+    }
+
     /// CRC32 / CRC32C checksum accumulation (data-processing 2 source).
     enum CRC32Kind: String, Equatable, CaseIterable {
         case crc32b, crc32h, crc32w, crc32x
@@ -1567,6 +1617,7 @@ internal enum A64 {
         case extractOrRotateAlias(ExtractKind, destination: Register, first: Register, operand: ExtractOperand)
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
+        case multiplyWide(MultiplyWideKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case dataProcessingOneSource(DataProcessingOneSourceKind, destination: Register, source: Register)
         case crc32(CRC32Kind, destination: Register, first: Register, data: Register)
         case conditionalSelect(ConditionalSelectKind, destination: Register, first: Register, second: Register, condition: Condition)
@@ -1703,6 +1754,7 @@ internal typealias ConditionalSelectKind = A64.ConditionalSelectKind
 internal typealias ConditionalCompareKind = A64.ConditionalCompareKind
 internal typealias ConditionalCompareOperand = A64.ConditionalCompareOperand
 internal typealias DataProcessingOneSourceKind = A64.DataProcessingOneSourceKind
+internal typealias MultiplyWideKind = A64.MultiplyWideKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

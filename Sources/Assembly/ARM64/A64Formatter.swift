@@ -58,6 +58,8 @@ internal enum A64InstructionFormatter {
             }
         case .multiply(let kind, let destination, let first, let second, let accumulator):
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first), formatRegister(second)] + (accumulator.map { [formatRegister($0)] } ?? [])).joined(separator: ", "))"
+        case .multiplyWide(let kind, let destination, let first, let second, let accumulator):
+            return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first), formatRegister(second)] + (accumulator.map { [formatRegister($0)] } ?? [])).joined(separator: ", "))"
         case .divide(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
         case .dataProcessingOneSource(let kind, let destination, let source):

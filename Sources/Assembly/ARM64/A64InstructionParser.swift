@@ -924,6 +924,31 @@ internal enum A64InstructionParser {
                 first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
                 second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
             )
+        case "smull", "umull", "smaddl", "umaddl", "smsubl", "umsubl", "smnegl", "umnegl", "smulh", "umulh":
+            guard parts.count == 1 else { return nil }
+            // `smull`/`umull` are also SIMD widening multiplies
+            // (`smull v0.8h, v1.8b, v2.8b`); route those by operand type.
+            if (mnemonic == "smull" || mnemonic == "umull"), allOperandsAreVectorRegisters(instruction) {
+                try expectOperandCount(instruction, exactly: 3)
+                return .vectorThreeDifferent(
+                    A64.VectorThreeDifferentKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.vectorRegister(instruction.operands[0]),
+                    first: try A64Parser.vectorRegister(instruction.operands[1]),
+                    second: try A64Parser.vectorRegister(instruction.operands[2])
+                )
+            }
+            let kind = A64.MultiplyWideKind(rawValue: mnemonic)!
+            try expectOperandCount(instruction, exactly: kind.hasAccumulator ? 4 : 3)
+            let accumulator = kind.hasAccumulator
+                ? try A64Parser.integerRegister(instruction.operands[3], allowSP: false)
+                : nil
+            return .multiplyWide(
+                kind,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false),
+                accumulator: accumulator
+            )
         case "crc32b", "crc32h", "crc32w", "crc32x", "crc32cb", "crc32ch", "crc32cw", "crc32cx":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 3)

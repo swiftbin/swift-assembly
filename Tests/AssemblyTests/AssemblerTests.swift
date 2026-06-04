@@ -151,6 +151,48 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sdiv x0, x1, x2"), 0x9ac20c20)
     }
 
+    func testMultiplyWideInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smulh x0, x1, x2"), 0x9b427c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umulh x3, x4, x5"), 0x9bc57c83)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smull x6, w7, w8"), 0x9b287ce6)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umull x9, w10, w11"), 0x9bab7d49)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smaddl x12, w13, w14, x15"), 0x9b2e3dac)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umaddl x16, w17, w18, x19"), 0x9bb24e30)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smsubl x20, w21, w22, x23"), 0x9b36deb4)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umsubl x24, w25, w26, x27"), 0x9bbaef38)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("smnegl x0, w1, w2"), 0x9b22fc20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("umnegl x3, w4, w5"), 0x9ba5fc83)
+    }
+
+    func testDisassembleMultiplyWide() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9b427c20), "smulh x0, x1, x2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9bab7d49), "umull x9, w10, w11")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9b2e3dac), "smaddl x12, w13, w14, x15")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9b36deb4), "smsubl x20, w21, w22, x23")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9b22fc20), "smnegl x0, w1, w2")
+    }
+
+    func testMultiplyWideRoundTrip() throws {
+        for source in [
+            "smulh x0, x1, x2", "umulh x3, x4, x5", "smull x6, w7, w8",
+            "umull x9, w10, w11", "smaddl x12, w13, w14, x15", "umaddl x16, w17, w18, x19",
+            "smsubl x20, w21, w22, x23", "umsubl x24, w25, w26, x27",
+            "smnegl x0, w1, w2", "umnegl x3, w4, w5",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testMultiplyWideInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smull w0, w1, w2"))     // dest must be 64-bit
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smull x0, x1, x2"))     // long form takes 32-bit sources
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smulh x0, w1, w2"))     // high form takes 64-bit sources
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("smaddl x0, w1, w2"))    // missing accumulator
+    }
+
     func testCRC32Instructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("crc32b w0, w1, w2"), 0x1ac24020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("crc32h w3, w4, w5"), 0x1ac54483)

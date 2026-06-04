@@ -22,6 +22,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeBitfieldShiftAlias(word) { return instruction }
         if let instruction = decodeExtract(word) { return instruction }
         if let instruction = decodeMultiply(word) { return instruction }
+        if let instruction = decodeMultiplyWide(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
         if let instruction = decodeCRC32(word) { return instruction }
         if let instruction = decodeDataProcessingOneSource(word) { return instruction }
@@ -377,6 +378,26 @@ internal enum A64InstructionDecoder {
             return .extractOrRotateAlias(.ror, destination: rd, first: rn, operand: .rotate(amount: Int64(imms)))
         }
         return .extractOrRotateAlias(.extr, destination: rd, first: rn, operand: .extract(integerRegister(number: rmNum, width: width), amount: Int64(imms)))
+    }
+
+    private static func decodeMultiplyWide(_ word: UInt32) -> Instruction? {
+        // Data-processing 3-source group, bits[30:24]=0011011; the wide forms
+        // are always 64-bit (sf=1).
+        guard word & 0x7f00_0000 == 0x1b00_0000, ((word >> 31) & 1) == 1 else { return nil }
+        let op31 = (word >> 21) & 0x7
+        let o0 = (word >> 15) & 1
+        let ra = (word >> 10) & 0x1f
+        // High-half multiplies ignore Ra (always XZR); the long forms treat an
+        // XZR accumulator as the no-accumulator (`mull`/`negl`) mnemonic.
+        let isHighOpcode = op31 == 0b010 || op31 == 0b110
+        let hasAccumulator = !isHighOpcode && ra != 31
+        guard let kind = A64.MultiplyWideKind.decode(op31: op31, o0: o0, hasAccumulator: hasAccumulator) else { return nil }
+        let sourceWidth = kind.isHigh ? 64 : 32
+        let rd = integerRegister(number: word & 0x1f, width: 64)
+        let rn = integerRegister(number: (word >> 5) & 0x1f, width: sourceWidth)
+        let rm = integerRegister(number: (word >> 16) & 0x1f, width: sourceWidth)
+        let accumulator = hasAccumulator ? integerRegister(number: ra, width: 64) : nil
+        return .multiplyWide(kind, destination: rd, first: rn, second: rm, accumulator: accumulator)
     }
 
     private static func decodeMultiply(_ word: UInt32) -> Instruction? {
