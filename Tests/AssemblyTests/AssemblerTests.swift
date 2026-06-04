@@ -274,6 +274,48 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("clz w0"))         // missing source
     }
 
+    func testHintInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("yield"), 0xd503203f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("wfe"), 0xd503205f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("wfi"), 0xd503207f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sev"), 0xd503209f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("sevl"), 0xd50320bf)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("esb"), 0xd503221f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("csdb"), 0xd503229f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("hint #6"), 0xd50320df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("hint #11"), 0xd503217f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("hint #127"), 0xd5032fff)
+    }
+
+    func testDisassembleHint() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503203f), "yield")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503221f), "esb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503229f), "csdb")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50320df), "hint #6")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5032fff), "hint #127")
+        // nop (#0) and the paciasp-family hints are not misdecoded as plain hints.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503201f), "nop")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503233f), "paciasp")
+    }
+
+    func testHintRoundTrip() throws {
+        for source in [
+            "yield", "wfe", "wfi", "sev", "sevl", "esb", "csdb",
+            "hint #6", "hint #7", "hint #11", "hint #127",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testHintInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint #128"))  // immediate out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("hint"))       // missing immediate
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("yield x0"))   // takes no operands
+    }
+
     func testAddSubExtendedRegisterInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxtb"), 0x0b220020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("add w0, w1, w2, uxth"), 0x0b222020)

@@ -14,6 +14,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeAddress(word) { return instruction }
         if let instruction = decodeException(word) { return instruction }
         if let instruction = decodeBarrier(word) { return instruction }
+        if let instruction = decodeHint(word) { return instruction }
         if let instruction = decodeMoveWide(word) { return instruction }
         if let instruction = decodeAddSubImmediate(word) { return instruction }
         if let instruction = decodeAddSubShiftedRegister(word) { return instruction }
@@ -202,6 +203,13 @@ internal enum A64InstructionDecoder {
         default:
             return nil
         }
+    }
+
+    private static func decodeHint(_ word: UInt32) -> Instruction? {
+        // HINT space (CRn=0010): only the 7-bit CRm:op2 immediate at [11:5] varies.
+        // nop (#0) and the paciasp-family hints are claimed earlier in the chain.
+        guard word & 0xffff_f01f == 0xd503_201f else { return nil }
+        return .hint((word >> 5) & 0x7f)
     }
 
     private static func decodePointerAuthentication(_ word: UInt32) -> Instruction? {

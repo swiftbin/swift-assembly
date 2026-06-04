@@ -14,6 +14,9 @@ internal enum A64InstructionEncoder {
         switch instruction {
         case .nop:
             return 0xd503201f
+        case .hint(let immediate):
+            try checkRange(Int64(immediate), 0...0x7f, instruction: "hint")
+            return 0xd503201f | (immediate << 5)
         case .branchRegister(.ret, let rn):
             return 0xd65f0000 | (rn.encodedNumber << 5)
         case .branchRegister(.br, let rn):

@@ -29,6 +29,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - bitfield moves and aliases (sbfm / bfm / ubfm, plus sbfx / ubfx / sbfiz / ubfiz / bfi / bfxil / bfc / sxtb / sxth / sxtw / uxtb / uxth)
 - add / subtract with carry (adc / adcs / sbc / sbcs, with the ngc / ngcs aliases)
 - add / subtract extended register (uxtb / uxth / uxtw / uxtx / sxtb / sxth / sxtw / sxtx with an optional shift, including stack-pointer operands)
+- hint instructions (yield / wfe / wfi / sev / sevl / esb / csdb and the generic hint #imm)
 - load / store (single and pair, including pre/post-indexed)
 - branches, labels, and address generation (adr / adrp)
 - pointer authentication on arm64e (paciasp / xpaci / ...)

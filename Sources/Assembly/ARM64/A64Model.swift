@@ -165,6 +165,29 @@ internal enum A64 {
         case dataMemory
     }
 
+    /// Named `HINT #imm` instructions. Unrecognised immediates round-trip
+    /// through the generic `hint #imm` form.
+    enum HintKind: String, Equatable, CaseIterable {
+        case yield, wfe, wfi, sev, sevl, esb, csdb
+
+        /// The 7-bit `CRm:op2` immediate.
+        var immediate: UInt32 {
+            switch self {
+            case .yield: return 1
+            case .wfe: return 2
+            case .wfi: return 3
+            case .sev: return 4
+            case .sevl: return 5
+            case .esb: return 16
+            case .csdb: return 20
+            }
+        }
+
+        static func decode(immediate: UInt32) -> HintKind? {
+            allCases.first { $0.immediate == immediate }
+        }
+    }
+
     struct Shift: Equatable {
         var kind: ShiftKind
         var amount: Int
@@ -1650,6 +1673,7 @@ internal enum A64 {
         case exception(ExceptionKind, immediate: Int64)
         case exceptionReturn
         case barrier(BarrierKind, option: UInt32)
+        case hint(UInt32)
         case moveAlias(destination: Register, source: MoveAliasSource)
         case moveWide(MoveWideKind, destination: Register, immediate: Int64, shift: Int?)
         case addSub(AddSubKind, destination: Register, first: Register, operand: AddSubOperand)
@@ -1802,6 +1826,7 @@ internal typealias DataProcessingOneSourceKind = A64.DataProcessingOneSourceKind
 internal typealias MultiplyWideKind = A64.MultiplyWideKind
 internal typealias BitfieldKind = A64.BitfieldKind
 internal typealias AddSubCarryKind = A64.AddSubCarryKind
+internal typealias HintKind = A64.HintKind
 internal typealias CRC32Kind = A64.CRC32Kind
 internal typealias ConditionalSetKind = A64.ConditionalSetKind
 internal typealias ConditionalSelectAliasKind = A64.ConditionalSelectAliasKind

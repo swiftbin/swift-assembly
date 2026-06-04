@@ -35,6 +35,9 @@ internal enum A64InstructionFormatter {
             return "dsb \(formatBarrierOption(option))"
         case .barrier(.dataMemory, let option):
             return "dmb \(formatBarrierOption(option))"
+        case .hint(let immediate):
+            if let kind = HintKind.decode(immediate: immediate) { return kind.rawValue }
+            return "hint #\(immediate)"
         case .moveAlias(let destination, let source):
             return "mov \(formatRegister(destination)), \(formatMoveAliasSource(source))"
         case .moveWide(let kind, let destination, let immediate, let shift):

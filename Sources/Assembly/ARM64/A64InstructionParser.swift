@@ -777,6 +777,16 @@ internal enum A64InstructionParser {
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 0)
             return .nop
+        case "yield", "wfe", "wfi", "sev", "sevl", "esb", "csdb":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 0)
+            return .hint(A64.HintKind(rawValue: mnemonic)!.immediate)
+        case "hint":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 1)
+            let immediate = try A64Parser.immediate(instruction.operands[0])
+            guard immediate >= 0, immediate <= 0x7f else { throw AssemblerError.invalidImmediate("hint") }
+            return .hint(UInt32(immediate))
         case "ret":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 0...1)
