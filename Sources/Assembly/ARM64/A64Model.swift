@@ -775,23 +775,25 @@ internal enum A64 {
 
     /// A PSTATE field written by `MSR <field>, #imm` (MSR immediate).
     enum PStateField: String, Equatable, CaseIterable {
-        case spsel, daifset, daifclr, uao, pan, dit, ssbs
+        case spsel, daifset, daifclr, uao, pan, dit, ssbs, tco, allint
 
         /// The `op1` field at bits [18:16].
         var op1: UInt32 {
             switch self {
             case .spsel, .uao, .pan: return 0
-            case .daifset, .daifclr, .dit, .ssbs: return 3
+            case .allint: return 1
+            case .daifset, .daifclr, .dit, .ssbs, .tco: return 3
             }
         }
 
         /// The `op2` field at bits [7:5].
         var op2: UInt32 {
             switch self {
+            case .allint: return 0
             case .ssbs: return 1
             case .dit: return 2
             case .uao: return 3
-            case .pan: return 4
+            case .pan, .tco: return 4
             case .spsel: return 5
             case .daifset: return 6
             case .daifclr: return 7

@@ -786,6 +786,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("msr dit, #1"), 0xd503415f)
         XCTAssertEqual(try ARM64Assembler.assembleWord("msr ssbs, #1"), 0xd503413f)
         XCTAssertEqual(try ARM64Assembler.assembleWord("msr daifset, #0"), 0xd50340df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr tco, #1"), 0xd503419f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("msr allint, #0"), 0xd501401f)
     }
 
     func testDisassemblePStateImmediate() throws {
@@ -793,10 +795,12 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50342df), "msr daifset, #2")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd5034fff), "msr daifclr, #15")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503413f), "msr ssbs, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd503419f), "msr tco, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd501401f), "msr allint, #0")
     }
 
     func testPStateImmediateRoundTrip() throws {
-        for field in ["spsel", "daifset", "daifclr", "uao", "pan", "dit", "ssbs"] {
+        for field in ["spsel", "daifset", "daifclr", "uao", "pan", "dit", "ssbs", "tco", "allint"] {
             for imm in [0, 1, 2, 7, 15] {
                 let source = "msr \(field), #\(imm)"
                 let word = try ARM64Assembler.assembleWord(source)
