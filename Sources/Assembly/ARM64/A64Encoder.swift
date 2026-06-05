@@ -145,18 +145,24 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.loadAcquireRCpc(kind, value: value, base: base)
         case .clearExclusive(let immediate):
             try checkRange(Int64(immediate), 0...0xf, instruction: "clrex")
-            return 0xd503_305f | (immediate << 8)
+            return A64.ClearExclusive.baseWord | A64.ClearExclusive.crm.insert(immediate)
         case .prefetch(let kind, let operation, let memory):
             return try A64LoadStoreEncoder.prefetch(kind, operation: operation, memory: memory)
         case .systemRegisterMove(let read, let register, let value):
             guard value.is64Bit else { throw AssemblerError.invalidRegister(read ? "mrs" : "msr") }
-            let base: UInt32 = read ? 0xd530_0000 : 0xd510_0000
-            let o0 = register.op0 - 2
-            return base | (o0 << 19) | (register.op1 << 16) | (register.crn << 12)
-                | (register.crm << 8) | (register.op2 << 5) | value.encodedNumber
+            typealias F = A64.SystemRegisterMove
+            return F.baseWord
+                | F.l.insert(read ? 1 : 0)
+                | F.o0.insert(register.op0 - 2)
+                | F.op1.insert(register.op1)
+                | F.crn.insert(register.crn)
+                | F.crm.insert(register.crm)
+                | F.op2.insert(register.op2)
+                | F.rt.insert(value.encodedNumber)
         case .pstate(let field, let immediate):
             try checkRange(Int64(immediate), 0...0xf, instruction: "msr")
-            return 0xd500_401f | (field.op1 << 16) | (immediate << 8) | (field.op2 << 5)
+            typealias F = A64.PStateImmediate
+            return F.baseWord | F.op1.insert(field.op1) | F.crm.insert(immediate) | F.op2.insert(field.op2)
         case .pstateFlag(let kind):
             return kind.word
         case .rcpcUnscaled(let kind, let target, let base, let offset):
@@ -173,9 +179,15 @@ internal enum A64InstructionEncoder {
             if let register = register, !register.is64Bit {
                 throw AssemblerError.invalidRegister(read ? "sysl" : "sys")
             }
-            let base: UInt32 = read ? 0xd528_0000 : 0xd508_0000
+            typealias F = A64.SystemInstruction
             let rt = register?.encodedNumber ?? 31
-            return base | (op1 << 16) | (crn << 12) | (crm << 8) | (op2 << 5) | rt
+            return F.baseWord
+                | F.l.insert(read ? 1 : 0)
+                | F.op1.insert(op1)
+                | F.crn.insert(crn)
+                | F.crm.insert(crm)
+                | F.op2.insert(op2)
+                | F.rt.insert(rt)
         case .loadStoreSingle(let kind, let target, let memory):
             return try A64LoadStoreEncoder.single(kind, target: target, memory: memory)
         case .loadStoreUnprivileged(let kind, let target, let memory):
@@ -224,7 +236,8 @@ internal enum A64InstructionEncoder {
             return try A64FlagManipulationEncoder.evaluateIntoFlags(kind, source: source)
         case .waitWithTimeout(let isEvent, let register):
             guard register.is64Bit else { throw AssemblerError.invalidRegister(isEvent ? "wfet" : "wfit") }
-            return (isEvent ? 0xd503_1000 : 0xd503_1020) | register.encodedNumber
+            typealias F = A64.WaitWithTimeout
+            return F.baseWord | F.op2.insert(isEvent ? 0 : 1) | F.rt.insert(register.encodedNumber)
         case .fpDataProcessing2(let kind, let destination, let first, let second):
             return try A64FloatEncoder.dataProcessing2(kind, destination: destination, first: first, second: second)
         case .fpDataProcessing1(let kind, let destination, let source):

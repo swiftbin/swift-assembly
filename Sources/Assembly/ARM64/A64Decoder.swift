@@ -233,16 +233,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeClearExclusive(_ word: UInt32) -> Instruction? {
-        // CLREX (CRn=0011, op2=010, Rt=11111); only the CRm immediate at [11:8] varies.
-        guard word & 0xffff_f0ff == 0xd503_305f else { return nil }
-        return .clearExclusive((word >> 8) & 0xf)
+        typealias F = A64.ClearExclusive
+        guard word & F.classMask == F.baseWord else { return nil }
+        return .clearExclusive(F.crm.extract(word))
     }
 
     private static func decodeWaitWithTimeout(_ word: UInt32) -> Instruction? {
-        // WFET/WFIT: fixed bits[31:6]=0xd503_1000>>6, op2 (bit5) selects, Rt at [4:0].
-        guard word & 0xffff_ffc0 == 0xd503_1000 else { return nil }
-        let isEvent = ((word >> 5) & 1) == 0
-        return .waitWithTimeout(isEvent: isEvent, register: xRegister(number: word & 0x1f))
+        typealias F = A64.WaitWithTimeout
+        guard word & F.classMask == F.baseWord else { return nil }
+        let isEvent = F.op2.extract(word) == 0
+        return .waitWithTimeout(isEvent: isEvent, register: xRegister(number: F.rt.extract(word)))
     }
 
     private static func decodeHint(_ word: UInt32) -> Instruction? {
@@ -253,42 +253,39 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeSystemRegisterMove(_ word: UInt32) -> Instruction? {
-        // MRS/MSR (register): bits[31:22]=1101010100, bit20=1; bit21=L (read), bit19=o0.
-        guard word & 0xffd0_0000 == 0xd510_0000 else { return nil }
-        let read = (word >> 21) & 1 == 1
-        let op0 = ((word >> 19) & 1) + 2
+        typealias F = A64.SystemRegisterMove
+        guard word & F.classMask == F.baseWord else { return nil }
         let register = SystemRegister(
-            op0: op0,
-            op1: (word >> 16) & 0x7,
-            crn: (word >> 12) & 0xf,
-            crm: (word >> 8) & 0xf,
-            op2: (word >> 5) & 0x7
+            op0: F.o0.extract(word) + 2,
+            op1: F.op1.extract(word),
+            crn: F.crn.extract(word),
+            crm: F.crm.extract(word),
+            op2: F.op2.extract(word)
         )
-        let value = integerRegister(number: word & 0x1f, width: 64)
-        return .systemRegisterMove(read: read, register: register, value: value)
+        let value = integerRegister(number: F.rt.extract(word), width: 64)
+        return .systemRegisterMove(read: F.l.extract(word) == 1, register: register, value: value)
     }
 
     private static func decodePStateImmediate(_ word: UInt32) -> Instruction? {
-        // MSR (immediate): bits[31:19]=1101010100000, CRn=0100, Rt=11111.
-        guard word & 0xfff8_f01f == 0xd500_401f else { return nil }
-        let op1 = (word >> 16) & 0x7
-        let op2 = (word >> 5) & 0x7
-        guard let field = PStateField.decode(op1: op1, op2: op2) else { return nil }
-        let immediate = (word >> 8) & 0xf
-        return .pstate(field, immediate: immediate)
+        typealias F = A64.PStateImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let field = PStateField.decode(op1: F.op1.extract(word), op2: F.op2.extract(word)) else { return nil }
+        return .pstate(field, immediate: F.crm.extract(word))
     }
 
     private static func decodeSystemInstruction(_ word: UInt32) -> Instruction? {
-        // SYS/SYSL: bits[31:22]=1101010100, bits[20:19]=01; bit21=L selects SYSL.
-        guard word & 0xffd8_0000 == 0xd508_0000 else { return nil }
-        let read = (word >> 21) & 1 == 1
-        let op1 = (word >> 16) & 0x7
-        let crn = (word >> 12) & 0xf
-        let crm = (word >> 8) & 0xf
-        let op2 = (word >> 5) & 0x7
-        let rt = word & 0x1f
+        typealias F = A64.SystemInstruction
+        guard word & F.classMask == F.baseWord else { return nil }
+        let rt = F.rt.extract(word)
         let register: IntegerRegister? = rt == 31 ? nil : integerRegister(number: rt, width: 64)
-        return .systemInstruction(read: read, op1: op1, crn: crn, crm: crm, op2: op2, register: register)
+        return .systemInstruction(
+            read: F.l.extract(word) == 1,
+            op1: F.op1.extract(word),
+            crn: F.crn.extract(word),
+            crm: F.crm.extract(word),
+            op2: F.op2.extract(word),
+            register: register
+        )
     }
 
     private static func decodePointerAuthentication(_ word: UInt32) -> Instruction? {

@@ -352,4 +352,60 @@ extension A64 {
         static let imm14 = BitField(offset: 5, width: 14)
         static let rt = BitField(offset: 0, width: 5)
     }
+
+    /// `MRS`/`MSR` (register). `l` selects read (MRS); `o0`/`op1`/`crn`/`crm`/
+    /// `op2` identify the system register.
+    enum SystemRegisterMove {
+        static let baseWord: UInt32 = 0xd510_0000
+        static let classMask: UInt32 = 0xffd0_0000
+
+        static let l = BitField(offset: 21, width: 1)
+        static let o0 = BitField(offset: 19, width: 1)
+        static let op1 = BitField(offset: 16, width: 3)
+        static let crn = BitField(offset: 12, width: 4)
+        static let crm = BitField(offset: 8, width: 4)
+        static let op2 = BitField(offset: 5, width: 3)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// `SYS`/`SYSL`. `l` selects SYSL (read).
+    enum SystemInstruction {
+        static let baseWord: UInt32 = 0xd508_0000
+        static let classMask: UInt32 = 0xffd8_0000
+
+        static let l = BitField(offset: 21, width: 1)
+        static let op1 = BitField(offset: 16, width: 3)
+        static let crn = BitField(offset: 12, width: 4)
+        static let crm = BitField(offset: 8, width: 4)
+        static let op2 = BitField(offset: 5, width: 3)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// `MSR` (immediate) — write a PSTATE field. `crm` carries the immediate.
+    enum PStateImmediate {
+        static let baseWord: UInt32 = 0xd500_401f
+        static let classMask: UInt32 = 0xfff8_f01f
+
+        static let op1 = BitField(offset: 16, width: 3)
+        static let crm = BitField(offset: 8, width: 4)
+        static let op2 = BitField(offset: 5, width: 3)
+    }
+
+    /// `CLREX` — clear exclusive monitor. `crm` carries the (usually 0xf) imm.
+    enum ClearExclusive {
+        static let baseWord: UInt32 = 0xd503_305f
+        static let classMask: UInt32 = 0xffff_f0ff
+
+        static let crm = BitField(offset: 8, width: 4)
+    }
+
+    /// `WFET`/`WFIT` — wait for event/interrupt with timeout. `op2` (bit5)
+    /// selects WFIT.
+    enum WaitWithTimeout {
+        static let baseWord: UInt32 = 0xd503_1000
+        static let classMask: UInt32 = 0xffff_ffc0
+
+        static let op2 = BitField(offset: 5, width: 1)
+        static let rt = BitField(offset: 0, width: 5)
+    }
 }
