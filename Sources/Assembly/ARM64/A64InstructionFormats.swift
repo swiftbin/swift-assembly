@@ -61,4 +61,55 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// Byte-level format descriptor for the conditional-select class
+    /// (`CSEL`/`CSINC`/`CSINV`/`CSNEG` and the cset/cinc/... aliases).
+    /// The concrete instruction is selected by `op`/`o2` via
+    /// `ConditionalSelectKind`.
+    enum ConditionalSelect {
+        static let baseWord: UInt32 = 0x1a80_0000
+        static let classMask: UInt32 = 0x3fe0_0800
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 30, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let cond = BitField(offset: 12, width: 4)
+        static let o2 = BitField(offset: 10, width: 1)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Byte-level format descriptor for the conditional-compare class
+    /// (`CCMN`/`CCMP`, register and immediate forms). `op` selects ccmn/ccmp;
+    /// `immFlag` selects the immediate form.
+    enum ConditionalCompare {
+        static let baseWord: UInt32 = 0x3a40_0000
+        static let classMask: UInt32 = 0x3fe0_0410
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 30, width: 1)
+        /// Rm (register form) or imm5 (immediate form), both at [20:16].
+        static let imm5OrRm = BitField(offset: 16, width: 5)
+        static let cond = BitField(offset: 12, width: 4)
+        static let immFlag = BitField(offset: 11, width: 1)
+        static let rn = BitField(offset: 5, width: 5)
+        static let nzcv = BitField(offset: 0, width: 4)
+    }
+
+    /// Byte-level format descriptor for the data-processing (3-source) class:
+    /// `MADD`/`MSUB` (op31=000) and the wide `SMADDL`/`UMULH`/... multiplies
+    /// (op31 ≠ 000). `op31`/`o0` select the variant; `Ra` is the accumulator.
+    enum DataProcessing3Source {
+        static let baseWord: UInt32 = 0x1b00_0000
+        /// Class bits [30:24]=0011011 (op31/o0/registers excluded).
+        static let classMask: UInt32 = 0x7f00_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op31 = BitField(offset: 21, width: 3)
+        static let rm = BitField(offset: 16, width: 5)
+        static let o0 = BitField(offset: 15, width: 1)
+        static let ra = BitField(offset: 10, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
 }

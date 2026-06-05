@@ -611,34 +611,35 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMultiplyWide(_ word: UInt32) -> Instruction? {
-        // Data-processing 3-source group, bits[30:24]=0011011; the wide forms
-        // are always 64-bit (sf=1).
-        guard word & 0x7f00_0000 == 0x1b00_0000, ((word >> 31) & 1) == 1 else { return nil }
-        let op31 = (word >> 21) & 0x7
-        let o0 = (word >> 15) & 1
-        let ra = (word >> 10) & 0x1f
+        // Data-processing 3-source group; the wide forms are always 64-bit (sf=1).
+        typealias F = A64.DataProcessing3Source
+        guard word & F.classMask == F.baseWord, F.sf.extract(word) == 1 else { return nil }
+        let op31 = F.op31.extract(word)
+        let o0 = F.o0.extract(word)
+        let ra = F.ra.extract(word)
         // High-half multiplies ignore Ra (always XZR); the long forms treat an
         // XZR accumulator as the no-accumulator (`mull`/`negl`) mnemonic.
         let isHighOpcode = op31 == 0b010 || op31 == 0b110
         let hasAccumulator = !isHighOpcode && ra != 31
         guard let kind = A64.MultiplyWideKind.decode(op31: op31, o0: o0, hasAccumulator: hasAccumulator) else { return nil }
         let sourceWidth = kind.isHigh ? 64 : 32
-        let rd = integerRegister(number: word & 0x1f, width: 64)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: sourceWidth)
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: sourceWidth)
+        let rd = integerRegister(number: F.rd.extract(word), width: 64)
+        let rn = integerRegister(number: F.rn.extract(word), width: sourceWidth)
+        let rm = integerRegister(number: F.rm.extract(word), width: sourceWidth)
         let accumulator = hasAccumulator ? integerRegister(number: ra, width: 64) : nil
         return .multiplyWide(kind, destination: rd, first: rn, second: rm, accumulator: accumulator)
     }
 
     private static func decodeMultiply(_ word: UInt32) -> Instruction? {
-        guard word & 0x7fe0_0000 == 0x1b00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let o0 = (word >> 15) & 1
-        let width = sf == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let ra = (word >> 10) & 0x1f
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        // Data-processing 3-source with op31=000 (the MADD/MSUB/MUL/MNEG forms).
+        typealias F = A64.DataProcessing3Source
+        guard word & F.classMask == F.baseWord, F.op31.extract(word) == 0 else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let o0 = F.o0.extract(word)
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let ra = F.ra.extract(word)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         if ra == 31 {
             return .multiply(o0 == 1 ? .mneg : .mul, destination: rd, first: rn, second: rm, accumulator: nil)
         }
@@ -764,16 +765,17 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeConditionalSelect(_ word: UInt32) -> Instruction? {
-        guard word & 0x3fe0_0800 == 0x1a80_0000 else { return nil }
-        let op = (word >> 30) & 1
-        let o2 = (word >> 10) & 1
+        typealias F = A64.ConditionalSelect
+        guard word & F.classMask == F.baseWord else { return nil }
+        let op = F.op.extract(word)
+        let o2 = F.o2.extract(word)
         guard let kind = A64.ConditionalSelectKind.decode(op: op, o2: o2),
-              let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rawCond = (word >> 12) & 0xf
-        let rd = integerRegister(number: word & 0x1f, width: width)
+              let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rawCond = F.cond.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
 
         // Prefer the conditional-set / conditional-select aliases when the
         // register pattern and condition (not AL/NV) match. The displayed
@@ -800,18 +802,19 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeConditionalCompare(_ word: UInt32) -> Instruction? {
-        guard word & 0x3fe0_0410 == 0x3a40_0000 else { return nil }
-        let kind: A64.ConditionalCompareKind = ((word >> 30) & 1) == 1 ? .ccmp : .ccmn
-        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let nzcv = word & 0xf
+        typealias F = A64.ConditionalCompare
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind: A64.ConditionalCompareKind = F.op.extract(word) == 1 ? .ccmp : .ccmn
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let nzcv = F.nzcv.extract(word)
         let second: A64.ConditionalCompareOperand
-        if (word >> 11) & 1 == 1 {
-            second = .immediate((word >> 16) & 0x1f)
+        if F.immFlag.extract(word) == 1 {
+            second = .immediate(F.imm5OrRm.extract(word))
         } else {
-            second = .register(integerRegister(number: (word >> 16) & 0x1f, width: width))
+            second = .register(integerRegister(number: F.imm5OrRm.extract(word), width: width))
         }
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .conditionalCompare(kind, first: rn, second: second, nzcv: nzcv, condition: condition)
     }
 

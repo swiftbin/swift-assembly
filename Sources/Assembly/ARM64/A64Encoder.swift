@@ -1350,9 +1350,14 @@ internal enum A64DataProcessingEncoder {
             ra = accumulator; o0 = 1
         }
         guard ra.width == rd.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | 0x1b000000
-        return head | (rm.encodedNumber << 16) | (o0 << 15) | (ra.encodedNumber << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing3Source
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.rm.insert(rm.encodedNumber)
+            | F.o0.insert(o0)
+            | F.ra.insert(ra.encodedNumber)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func divide(_ kind: A64.DivideKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
@@ -1439,8 +1444,15 @@ internal enum A64DataProcessingEncoder {
             guard accumulator == nil else { throw AssemblerError.invalidRegister(kind.rawValue) }
             ra = 31
         }
-        let head: UInt32 = 0x9b00_0000
-        return head | (kind.op31 << 21) | (rm.encodedNumber << 16) | (kind.o0 << 15) | (ra << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing3Source
+        return F.baseWord
+            | F.sf.insert(1)
+            | F.op31.insert(kind.op31)
+            | F.rm.insert(rm.encodedNumber)
+            | F.o0.insert(kind.o0)
+            | F.ra.insert(ra)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func crc32(_ kind: A64.CRC32Kind, destination rd: IntegerRegister, first rn: IntegerRegister, data rm: IntegerRegister) throws -> UInt32 {
@@ -1469,24 +1481,30 @@ internal enum A64DataProcessingEncoder {
 
     static func conditionalSelect(_ kind: A64.ConditionalSelectKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, condition: A64.Condition) throws -> UInt32 {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (kind.op << 30) | 0x1a80_0000
-        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (kind.o2 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ConditionalSelect
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.op.insert(kind.op)
+            | F.rm.insert(rm.encodedNumber)
+            | F.cond.insert(condition.rawValue)
+            | F.o2.insert(kind.o2)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalCompare(_ kind: A64.ConditionalCompareKind, first rn: IntegerRegister, second: A64.ConditionalCompareOperand, nzcv: UInt32, condition: A64.Condition) throws -> UInt32 {
         guard nzcv <= 0xf else { throw AssemblerError.invalidImmediate("#\(nzcv)") }
-        let sf: UInt32 = rn.is64Bit ? 1 : 0
-        var word = (sf << 31) | (kind.op << 30) | 0x3a40_0000
+        typealias F = A64.ConditionalCompare
+        var word = F.baseWord | F.sf.insert(rn.is64Bit ? 1 : 0) | F.op.insert(kind.op)
         switch second {
         case .register(let rm):
             guard rm.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-            word |= (rm.encodedNumber << 16)
+            word |= F.imm5OrRm.insert(rm.encodedNumber)
         case .immediate(let imm5):
             guard imm5 <= 31 else { throw AssemblerError.invalidImmediate("#\(imm5)") }
-            word |= (1 << 11) | (imm5 << 16)
+            word |= F.immFlag.insert(1) | F.imm5OrRm.insert(imm5)
         }
-        return word | (condition.rawValue << 12) | (rn.encodedNumber << 5) | nzcv
+        return word | F.cond.insert(condition.rawValue) | F.rn.insert(rn.encodedNumber) | F.nzcv.insert(nzcv)
     }
 
     static func conditionalSet(_ kind: A64.ConditionalSetKind, destination rd: IntegerRegister, condition: A64.Condition) throws -> UInt32 {
