@@ -1030,12 +1030,12 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadLiteral(_ word: UInt32) -> Instruction? {
-        // Load register (literal): bits[29:27]=011, bits[25:24]=00; bit26=V selects FP.
-        guard word & 0x3b00_0000 == 0x1800_0000 else { return nil }
-        let opc = (word >> 30) & 3
-        let v = (word >> 26) & 1
-        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
-        let rt = word & 0x1f
+        typealias F = A64.LoadLiteral
+        guard word & F.classMask == F.baseWord else { return nil }
+        let opc = F.opc.extract(word)
+        let v = F.v.extract(word)
+        let offset = signExtend(F.imm19.extract(word), bitCount: 19) * F.scale
+        let rt = F.rt.extract(word)
         if v == 1 {
             let width: Int
             switch opc {

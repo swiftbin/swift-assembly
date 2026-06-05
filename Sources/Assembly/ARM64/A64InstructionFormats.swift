@@ -511,4 +511,19 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rt = BitField(offset: 0, width: 5)
     }
+
+    /// Load register (literal): integer `LDR`/`LDRSW`, the FP `LDR` (`v`=1) and
+    /// `PRFM` (literal, `opc`=11). `opc`/`v` select the variant; `imm19` is the
+    /// PC-relative word offset.
+    enum LoadLiteral {
+        static let baseWord: UInt32 = 0x1800_0000
+        static let classMask: UInt32 = 0x3b00_0000
+
+        static let opc = BitField(offset: 30, width: 2)
+        static let v = BitField(offset: 26, width: 1)
+        static let imm19 = BitField(offset: 5, width: 19)
+        static let rt = BitField(offset: 0, width: 5)
+        static let scale: Int64 = 4
+        static let imm19Range: ClosedRange<Int64> = -262144...262143
+    }
 }

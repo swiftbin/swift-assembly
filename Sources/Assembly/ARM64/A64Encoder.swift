@@ -986,10 +986,11 @@ internal enum A64LoadStoreEncoder {
             guard rt.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) }
             opc = 0b10
         }
-        guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: 4) }
-        let imm19 = offset / 4
-        try checkRange(imm19, -262144...262143, instruction: mnemonic)
-        return (opc << 30) | 0x1800_0000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | rt.encodedNumber
+        typealias F = A64.LoadLiteral
+        guard offset % F.scale == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: F.scale) }
+        let imm19 = offset / F.scale
+        try checkRange(imm19, F.imm19Range, instruction: mnemonic)
+        return F.baseWord | F.opc.insert(opc) | F.imm19.insert(UInt32(bitPattern: Int32(imm19))) | F.rt.insert(rt.encodedNumber)
     }
 
     static func literalFP(target rt: A64.FPRegister, offset: Int64) throws -> UInt32 {
@@ -1000,18 +1001,20 @@ internal enum A64LoadStoreEncoder {
         case 128: opc = 0b10
         default: throw AssemblerError.invalidRegister("ldr")
         }
-        guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: "ldr", value: offset, alignment: 4) }
-        let imm19 = offset / 4
-        try checkRange(imm19, -262144...262143, instruction: "ldr")
-        return (opc << 30) | 0x1c00_0000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | rt.encodedNumber
+        typealias F = A64.LoadLiteral
+        guard offset % F.scale == 0 else { throw AssemblerError.immediateAlignment(instruction: "ldr", value: offset, alignment: F.scale) }
+        let imm19 = offset / F.scale
+        try checkRange(imm19, F.imm19Range, instruction: "ldr")
+        return F.baseWord | F.opc.insert(opc) | F.v.insert(1) | F.imm19.insert(UInt32(bitPattern: Int32(imm19))) | F.rt.insert(rt.encodedNumber)
     }
 
     static func prefetchLiteral(operation: UInt32, offset: Int64) throws -> UInt32 {
         guard operation <= 0x1f else { throw AssemblerError.invalidImmediate("prfm") }
-        guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: "prfm", value: offset, alignment: 4) }
-        let imm19 = offset / 4
-        try checkRange(imm19, -262144...262143, instruction: "prfm")
-        return 0xd800_0000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | operation
+        typealias F = A64.LoadLiteral
+        guard offset % F.scale == 0 else { throw AssemblerError.immediateAlignment(instruction: "prfm", value: offset, alignment: F.scale) }
+        let imm19 = offset / F.scale
+        try checkRange(imm19, F.imm19Range, instruction: "prfm")
+        return F.baseWord | F.opc.insert(0b11) | F.imm19.insert(UInt32(bitPattern: Int32(imm19))) | F.rt.insert(operation)
     }
 
     static func pair(_ kind: A64.LoadStorePairKind, first rt: IntegerRegister, second rt2: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {
