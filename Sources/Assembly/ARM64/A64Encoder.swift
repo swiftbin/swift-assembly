@@ -1365,9 +1365,13 @@ internal enum A64DataProcessingEncoder {
 
     static func variableShift(_ kind: A64.VariableShiftKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | 0x1ac0_0000
-        return head | (rm.encodedNumber << 16) | (kind.opcode << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing2Source
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.rm.insert(rm.encodedNumber)
+            | F.opcode.insert(kind.opcode)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func minMaxRegister(_ kind: A64.MinMaxKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {

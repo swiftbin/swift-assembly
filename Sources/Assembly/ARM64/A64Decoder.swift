@@ -657,15 +657,17 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVariableShift(_ word: UInt32) -> Instruction? {
-        // Data-processing-2-source, opcode[15:12]=0010 (LSLV/LSRV/ASRV/RORV).
-        guard word & 0x7fe0_f000 == 0x1ac0_2000 else { return nil }
-        guard let kind = A64.VariableShiftKind.decode(opcode: (word >> 10) & 0x3f) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        // Data-processing-2-source class; the LSLV/LSRV/ASRV/RORV variants are
+        // selected by decoding the `opcode` field (other opcodes fall through).
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.VariableShiftKind.decode(opcode: F.opcode.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
         return .variableShift(
             kind,
-            destination: integerRegister(number: word & 0x1f, width: width),
-            first: integerRegister(number: (word >> 5) & 0x1f, width: width),
-            second: integerRegister(number: (word >> 16) & 0x1f, width: width)
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            first: integerRegister(number: F.rn.extract(word), width: width),
+            second: integerRegister(number: F.rm.extract(word), width: width)
         )
     }
 
