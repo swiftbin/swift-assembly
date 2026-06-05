@@ -909,7 +909,9 @@ internal enum A64LoadStoreEncoder {
     static func pair(_ kind: A64.LoadStorePairKind, first rt: IntegerRegister, second rt2: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {
         let mnemonic = kind.rawValue
         guard rt.width == rt2.width else { throw AssemblerError.invalidRegister(mnemonic) }
-        let scale: Int64 = rt.is64Bit ? 8 : 4
+        // LDPSW always uses 64-bit destinations with a word (4-byte) scale.
+        if kind.isSignedWord { guard rt.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) } }
+        let scale: Int64 = kind.isSignedWord ? 4 : (rt.is64Bit ? 8 : 4)
         let modeBase: UInt32
         let base: IntegerRegister
         let offset: Int64
@@ -926,7 +928,9 @@ internal enum A64LoadStoreEncoder {
         guard offset % scale == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: scale) }
         let imm7 = offset / scale
         try checkRange(imm7, -64...63, instruction: mnemonic)
-        let head = ((rt.is64Bit ? UInt32(2) : 0) << 30) | modeBase | ((kind.isLoad ? UInt32(1) : 0) << 22)
+        // `opc`: 00=word, 10=doubleword, 01=signed word (LDPSW).
+        let opc: UInt32 = kind.isSignedWord ? 1 : (rt.is64Bit ? 2 : 0)
+        let head = (opc << 30) | modeBase | ((kind.isLoad ? UInt32(1) : 0) << 22)
         return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
     }
 

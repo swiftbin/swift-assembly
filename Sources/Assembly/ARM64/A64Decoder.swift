@@ -1119,10 +1119,27 @@ internal enum A64InstructionDecoder {
     private static func decodeLoadStorePair(_ word: UInt32) -> Instruction? {
         guard word & 0x3e00_0000 == 0x2800_0000 else { return nil }
         let opc2 = (word >> 30) & 3
+        let l = (word >> 22) & 1
+        // opc=01 is LDPSW (load-only, signed word into 64-bit registers).
+        if opc2 == 1 {
+            guard l == 1 else { return nil }
+            let scale: Int64 = 4
+            let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
+            let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: 64)
+            let base = xRegister(number: (word >> 5) & 0x1f)
+            let rt = integerRegister(number: word & 0x1f, width: 64)
+            let memory: MemoryOperand
+            switch (word >> 23) & 3 {
+            case 1: memory = .postIndexed(base: base, offset: offset)
+            case 2: memory = .unsignedOffset(base: base, offset: offset)
+            case 3: memory = .preIndexed(base: base, offset: offset)
+            default: return nil
+            }
+            return .loadStorePair(.ldpsw, first: rt, second: rt2, memory: memory)
+        }
         guard opc2 == 0 || opc2 == 2 else { return nil }
         let is64 = opc2 == 2
         let width = is64 ? 64 : 32
-        let l = (word >> 22) & 1
         let scale: Int64 = is64 ? 8 : 4
         let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
         let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: width)

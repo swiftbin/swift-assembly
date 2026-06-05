@@ -56,6 +56,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - speculation barriers (sb / ssbb / pssbb)
 - permanently undefined (udf #imm16)
 - no-allocate load/store pair, integer and SIMD&FP (ldnp / stnp)
+- load pair of signed words (ldpsw, signed 32-bit loads into 64-bit registers)
 - scalar floating-point (fmov / fadd / fsub / fmul / fdiv / fabs / fneg / fsqrt / fcmp / fcvt / scvtf / fcvtzs / ...)
 - scalar floating-point round-to-integral (frintn / frintm / frintp / frintz / frinta / frintx / frinti on `s`/`d`/`h`, and the Armv8.5 frint32z / frint32x / frint64z / frint64x on `s`/`d`)
 - scalar floating-point JavaScript convert to signed fixed-point (fjcvtzs `w<d>, d<n>`)

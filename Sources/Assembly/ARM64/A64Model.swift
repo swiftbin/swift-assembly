@@ -542,12 +542,14 @@ internal enum A64 {
     }
 
     enum LoadStorePairKind: String, Equatable {
-        case ldp, stp, ldnp, stnp
+        case ldp, stp, ldnp, stnp, ldpsw
 
         /// Whether this is a load (sets the `L` bit).
-        var isLoad: Bool { self == .ldp || self == .ldnp }
+        var isLoad: Bool { self == .ldp || self == .ldnp || self == .ldpsw }
         /// Whether this is a no-allocate pair (offset addressing only).
         var isNoAllocate: Bool { self == .ldnp || self == .stnp }
+        /// `LDPSW` loads signed words into 64-bit registers (`opc`=01, scale 4).
+        var isSignedWord: Bool { self == .ldpsw }
     }
 
     /// Load/store exclusive and load-acquire/store-release instructions.

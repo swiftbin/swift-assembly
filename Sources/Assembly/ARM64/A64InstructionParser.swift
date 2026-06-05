@@ -1414,11 +1414,13 @@ internal enum A64InstructionParser {
                 throw AssemblerError.invalidMemoryOperand(instruction.operands[4...].joined(separator: ", "))
             }
             return .compareAndSwapPair(kind, compare: compare, value: value, base: base)
-        case "ldp", "stp", "ldnp", "stnp":
+        case "ldp", "stp", "ldnp", "stnp", "ldpsw":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 3...4)
             // SIMD&FP form (`ldp q0, q1, [x2]`, …): paired floating-point registers.
-            if let first = try? A64Parser.floatRegister(instruction.operands[0]),
+            // LDPSW has no SIMD&FP form.
+            if mnemonic != "ldpsw",
+               let first = try? A64Parser.floatRegister(instruction.operands[0]),
                let second = try? A64Parser.floatRegister(instruction.operands[1]) {
                 return .loadStorePairFP(
                     A64.LoadStorePairKind(rawValue: mnemonic)!,

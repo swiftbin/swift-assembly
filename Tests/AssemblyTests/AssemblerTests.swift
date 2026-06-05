@@ -1987,6 +1987,39 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldp x0, x1, [sp, #16]"), 0xa94107e0)
     }
 
+    func testLoadPairSignedWordInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldpsw x0, x1, [x2]"), 0x69400440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldpsw x0, x1, [x2, #8]"), 0x69410440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldpsw x0, x1, [x2, #16]!"), 0x69c20440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldpsw x0, x1, [x2], #16"), 0x68c20440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldpsw x3, x4, [x5, #-8]"), 0x697f10a3)
+    }
+
+    func testDisassembleLoadPairSignedWord() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x69400440), "ldpsw x0, x1, [x2]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x69c20440), "ldpsw x0, x1, [x2, #16]!")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x68c20440), "ldpsw x0, x1, [x2], #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x697f10a3), "ldpsw x3, x4, [x5, #-8]")
+    }
+
+    func testLoadPairSignedWordRoundTrip() throws {
+        for source in [
+            "ldpsw x0, x1, [x2]", "ldpsw x3, x4, [x5, #12]", "ldpsw x6, x7, [x8, #-16]!",
+            "ldpsw x9, x10, [x11], #20", "ldpsw x12, x13, [sp, #252]",
+        ] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testLoadPairSignedWordInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldpsw w0, w1, [x2]"))     // 64-bit registers only
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldpsw x0, x1, [x2, #6]")) // offset must be word-aligned
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldpsw x0, x1, [x2, #256]")) // out of range
+    }
+
     func testARM64EInstructionsRequireARM64EArchitecture() throws {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("paciasp"))
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("autiasp"))
