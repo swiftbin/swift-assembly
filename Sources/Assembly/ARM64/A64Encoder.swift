@@ -16,7 +16,7 @@ internal enum A64InstructionEncoder {
             return 0xd503201f
         case .hint(let immediate):
             try checkRange(Int64(immediate), 0...0x7f, instruction: "hint")
-            return 0xd503201f | (immediate << 5)
+            return A64.Hint.baseWord | A64.Hint.imm.insert(immediate)
         case .branchRegister(let kind, let rn):
             return kind.baseWord | (rn.encodedNumber << 5)
         case .unconditionalBranch(let link, let offset):
@@ -88,7 +88,7 @@ internal enum A64InstructionEncoder {
         case .barrier(let kind, let option):
             return kind.baseWord | (option << 8)
         case .permanentlyUndefined(let imm16):
-            return imm16 & 0xffff
+            return A64.PermanentlyUndefined.baseWord | A64.PermanentlyUndefined.imm16.insert(imm16)
         case .moveAlias(let destination, let source):
             return try A64MoveEncoder.movAlias(destination: destination, source: source)
         case .moveWide(let kind, let destination, let immediate, let shift):

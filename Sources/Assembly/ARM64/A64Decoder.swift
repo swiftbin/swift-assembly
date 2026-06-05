@@ -215,9 +215,9 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeUDF(_ word: UInt32) -> Instruction? {
-        // UDF (permanently undefined): bits[31:16] are zero, imm16 at [15:0].
-        guard word & 0xffff_0000 == 0 else { return nil }
-        return .permanentlyUndefined(word & 0xffff)
+        typealias F = A64.PermanentlyUndefined
+        guard word & F.classMask == F.baseWord else { return nil }
+        return .permanentlyUndefined(F.imm16.extract(word))
     }
 
     private static func decodeException(_ word: UInt32) -> Instruction? {
@@ -246,10 +246,10 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeHint(_ word: UInt32) -> Instruction? {
-        // HINT space (CRn=0010): only the 7-bit CRm:op2 immediate at [11:5] varies.
         // nop (#0) and the paciasp-family hints are claimed earlier in the chain.
-        guard word & 0xffff_f01f == 0xd503_201f else { return nil }
-        return .hint((word >> 5) & 0x7f)
+        typealias F = A64.Hint
+        guard word & F.classMask == F.baseWord else { return nil }
+        return .hint(F.imm.extract(word))
     }
 
     private static func decodeSystemRegisterMove(_ word: UInt32) -> Instruction? {

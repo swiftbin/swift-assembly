@@ -408,4 +408,21 @@ extension A64 {
         static let op2 = BitField(offset: 5, width: 1)
         static let rt = BitField(offset: 0, width: 5)
     }
+
+    /// `HINT` space — the 7-bit CRm:op2 immediate at [11:5] selects the hint
+    /// (`#0` is NOP).
+    enum Hint {
+        static let baseWord: UInt32 = 0xd503_201f
+        static let classMask: UInt32 = 0xffff_f01f
+
+        static let imm = BitField(offset: 5, width: 7)
+    }
+
+    /// `UDF` — permanently undefined; `imm16` at [15:0].
+    enum PermanentlyUndefined {
+        static let baseWord: UInt32 = 0x0000_0000
+        static let classMask: UInt32 = 0xffff_0000
+
+        static let imm16 = BitField(offset: 0, width: 16)
+    }
 }
