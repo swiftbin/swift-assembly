@@ -1459,9 +1459,12 @@ internal enum A64DataProcessingEncoder {
     static func dataProcessingOneSource(_ kind: A64.DataProcessingOneSourceKind, destination rd: IntegerRegister, source rn: IntegerRegister) throws -> UInt32 {
         guard rd.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
         if kind.is64BitOnly, !rd.is64Bit { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | 0x5ac0_0000
-        return head | (kind.opcode(is64Bit: rd.is64Bit) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing1Source
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.opcode.insert(kind.opcode(is64Bit: rd.is64Bit))
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalSelect(_ kind: A64.ConditionalSelectKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, condition: A64.Condition) throws -> UInt32 {

@@ -753,14 +753,13 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeDataProcessingOneSource(_ word: UInt32) -> Instruction? {
-        // Fix bit30=1, S=0, op[28:21]=11010110, opcode2[20:16]=00000.
-        guard word & 0x7fff_0000 == 0x5ac0_0000 else { return nil }
-        let is64Bit = ((word >> 31) & 1) == 1
-        let opcode = (word >> 10) & 0x3f
-        guard let kind = A64.DataProcessingOneSourceKind.decode(opcode: opcode, is64Bit: is64Bit) else { return nil }
+        typealias F = A64.DataProcessing1Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        let is64Bit = F.sf.extract(word) == 1
+        guard let kind = A64.DataProcessingOneSourceKind.decode(opcode: F.opcode.extract(word), is64Bit: is64Bit) else { return nil }
         let width = is64Bit ? 64 : 32
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         return .dataProcessingOneSource(kind, destination: rd, source: rn)
     }
 

@@ -46,4 +46,19 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// Byte-level format descriptor for the data-processing (1-source) class
+    /// (`RBIT`/`REV*`/`CLZ`/`CLS`, and the FEAT_CSSC `CTZ`/`CNT`/`ABS`).
+    /// The concrete instruction is selected by the `opcode` field, carried by
+    /// `DataProcessingOneSourceKind`.
+    enum DataProcessing1Source {
+        /// Fixed bits: `sf 1 0 11010110 00000 ...` (includes `opcode2[20:16]=0`).
+        static let baseWord: UInt32 = 0x5ac0_0000
+        static let classMask: UInt32 = 0x7fff_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let opcode = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
 }
