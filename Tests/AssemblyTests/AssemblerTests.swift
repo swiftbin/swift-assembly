@@ -832,6 +832,28 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sysl x7, #0, c7, c5, #0"), 0xd5287507)
     }
 
+    func testDataCacheTagOpInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc cvadp, x0"), 0xd50b7d20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc igvac, x0"), 0xd5087660)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc gva, x0"), 0xd50b7460)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc gzva, x0"), 0xd50b7480)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc cgvac, x0"), 0xd50b7a60)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dc cigdvac, x0"), 0xd50b7ea0)
+    }
+
+    func testDataCacheTagOpRoundTrip() throws {
+        let ops = ["cvadp", "igvac", "igsw", "igdvac", "igdsw", "cgsw", "cgdsw",
+                   "cigsw", "cigdsw", "gva", "gzva", "cgvac", "cgdvac", "cgvap",
+                   "cgdvap", "cgvadp", "cgdvadp", "cigvac", "cigdvac"]
+        for op in ops {
+            let source = "dc \(op), x2"
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
     func testDisassembleSystemInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50b7e20), "dc civac, x0")
         XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd508711f), "ic ialluis")
