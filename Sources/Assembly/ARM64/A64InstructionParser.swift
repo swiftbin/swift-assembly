@@ -956,6 +956,16 @@ internal enum A64InstructionParser {
                 first: addSubRn,
                 operand: addSubOp
             )
+        case "negs":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            let negsRd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            return .addSub(
+                .subs,
+                destination: negsRd,
+                first: zeroRegister(width: negsRd.width),
+                operand: try addSubOperand(instruction, startIndex: 1)
+            )
         case "cmp", "cmn":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)
@@ -2030,6 +2040,18 @@ internal enum A64InstructionParser {
             )
         case "rev64", "abs", "neg", "not", "cnt", "sqabs", "sqneg", "suqadd", "usqadd":
             guard parts.count == 1 else { return nil }
+            // GP-register `neg` is the sub-from-zero alias (2 or 3 operands with an
+            // optional shift); the vector form takes two vector registers.
+            if mnemonic == "neg", !operandsAreVectorRegisters(instruction) {
+                try expectOperandCount(instruction, 2...3)
+                let negRd = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+                return .addSub(
+                    .sub,
+                    destination: negRd,
+                    first: zeroRegister(width: negRd.width),
+                    operand: try addSubOperand(instruction, startIndex: 1)
+                )
+            }
             try expectOperandCount(instruction, exactly: 2)
             // FEAT_CSSC scalar `abs`/`cnt` on general registers (vector forms take
             // vector operands and fall through to the two-register-misc encoding).

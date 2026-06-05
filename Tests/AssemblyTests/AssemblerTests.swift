@@ -142,6 +142,33 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ror x0, x1, #8"), 0x93c12020)
     }
 
+    func testNegateAliasInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("neg w0, w1"), 0x4b0103e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("neg x0, x1"), 0xcb0103e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("negs w0, w1"), 0x6b0103e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("neg x0, x1, lsl #2"), 0xcb010be0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("neg w0, w1, asr #3"), 0x4b810fe0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("negs x0, x1, lsl #4"), 0xeb0113e0)
+    }
+
+    func testDisassembleNegateAlias() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4b0103e0), "neg w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6b0103e0), "negs w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xcb010be0), "neg x0, x1, lsl #2")
+        // A non-zero first source keeps the plain sub form.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x4b020020), "sub w0, w1, w2")
+    }
+
+    func testNegateAliasRoundTrip() throws {
+        for source in ["neg w0, w1", "neg x2, x3", "negs w4, w5", "neg x6, x7, lsl #5",
+                       "neg w8, w9, lsr #2", "negs x10, x11, asr #7"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
     func testVariableShiftInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("lslv w0, w1, w2"), 0x1ac22020)
         XCTAssertEqual(try ARM64Assembler.assembleWord("lsrv w0, w1, w2"), 0x1ac22420)

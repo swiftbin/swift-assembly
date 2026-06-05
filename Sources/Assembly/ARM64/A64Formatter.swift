@@ -71,6 +71,13 @@ internal enum A64InstructionFormatter {
         case .moveWide(let kind, let destination, let immediate, let shift):
             return "\(kind.rawValue) \(([formatRegister(destination), formatImmediate(immediate)] + (shift.map { [formatLSL($0)] } ?? [])).joined(separator: ", "))"
         case .addSub(let kind, let destination, let first, let operand):
+            // `sub`/`subs` of a shifted register from the zero register prefer the
+            // neg/negs aliases.
+            if (kind == .sub || kind == .subs), first.kind == .zero,
+               case .shiftedRegister = operand {
+                let alias = kind == .sub ? "neg" : "negs"
+                return "\(alias) \(([formatRegister(destination)] + formatAddSubOperand(operand)).joined(separator: ", "))"
+            }
             let spInvolved = destination.kind == .stackPointer || first.kind == .stackPointer
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first)] + formatAddSubOperand(operand, stackPointerInvolved: spInvolved, is64Bit: first.is64Bit)).joined(separator: ", "))"
         case .compareAlias(let kind, let first, let operand):

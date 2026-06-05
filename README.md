@@ -16,7 +16,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - assemble ARM64 assembly text into machine code
 - disassemble machine code back into assembly text
 - move (wide / immediate / register aliases)
-- add / sub, compare (cmp / cmn)
+- add / sub, compare (cmp / cmn), negate (neg / negs)
 - logical (and / orr / eor / bic / orn / ...) and mvn
 - shifts (lsl / lsr / asr), extract and rotate (extr / ror)
 - variable (register) shifts (lslv / lsrv / asrv / rorv, with the lsl / lsr / asr / ror register-operand aliases)
