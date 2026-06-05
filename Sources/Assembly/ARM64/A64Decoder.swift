@@ -486,38 +486,39 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLogicalImmediate(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f80_0000 == 0x1200_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let n = (word >> 22) & 1
+        typealias F = A64.LogicalImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let n = F.n.extract(word)
         if sf == 0 && n != 0 { return nil }
         let width = sf == 1 ? 64 : 32
-        let immr = (word >> 16) & 0x3f
-        let imms = (word >> 10) & 0x3f
+        let immr = F.immr.extract(word)
+        let imms = F.imms.extract(word)
         guard let value = A64BitmaskImmediate.decode(n: n, immr: immr, imms: imms, width: width) else { return nil }
         let kind: A64.LogicalKind
-        switch (word >> 29) & 3 {
+        switch F.opc.extract(word) {
         case 0: kind = .and
         case 1: kind = .orr
         case 2: kind = .eor
         case 3: kind = .ands
         default: return nil
         }
-        let rd = integerRegister(number: word & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .logical(kind, destination: rd, first: rn, operand: .immediate(Int64(bitPattern: value)))
     }
 
     private static func decodeLogicalShiftedRegister(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f00_0000 == 0x0a00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let shiftField = (word >> 22) & 3
-        let n = (word >> 21) & 1
-        guard let shiftKind = ShiftKind(rawValue: shiftField) else { return nil }
-        let amount = (word >> 10) & 0x3f
+        typealias F = A64.LogicalShiftedRegister
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let n = F.n.extract(word)
+        guard let shiftKind = ShiftKind(rawValue: F.shift.extract(word)) else { return nil }
+        let amount = F.imm6.extract(word)
         let width = sf == 1 ? 64 : 32
         if sf == 0 && amount > 31 { return nil }
         let kind: A64.LogicalKind
-        switch ((word >> 29) & 3, n) {
+        switch (F.opc.extract(word), n) {
         case (0, 0): kind = .and
         case (0, 1): kind = .bic
         case (1, 0): kind = .orr
@@ -528,9 +529,9 @@ internal enum A64InstructionDecoder {
         case (3, 1): kind = .bics
         default: return nil
         }
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rnNum = (word >> 5) & 0x1f
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let rnNum = F.rn.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         let shift: ParsedShift? = (amount == 0 && shiftKind == .lsl) ? nil : ParsedShift(kind: shiftKind, amount: Int(amount))
         if kind == .orn && rnNum == 31 {
             return .mvnAlias(destination: rd, source: rm, shift: shift)
@@ -685,16 +686,17 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMinMaxImmediate(_ word: UInt32) -> Instruction? {
-        // FEAT_CSSC min/max (immediate): bits[30:20] fixed, opc[19:18], imm8[17:10].
-        guard word & 0x7ff0_0000 == 0x11c0_0000 else { return nil }
-        guard let kind = A64.MinMaxKind.decodeImmediate(opc: (word >> 18) & 3) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let imm8 = (word >> 10) & 0xff
+        // FEAT_CSSC min/max (immediate).
+        typealias F = A64.MinMaxImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.MinMaxKind.decodeImmediate(opc: F.opc.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let imm8 = F.imm8.extract(word)
         let immediate: Int64 = kind.isSigned ? Int64(signExtend(imm8, bitCount: 8)) : Int64(imm8)
         return .minMaxImmediate(
             kind,
-            destination: integerRegister(number: word & 0x1f, width: width),
-            source: integerRegister(number: (word >> 5) & 0x1f, width: width),
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            source: integerRegister(number: F.rn.extract(word), width: width),
             immediate: immediate
         )
     }

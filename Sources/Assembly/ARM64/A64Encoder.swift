@@ -694,10 +694,15 @@ internal enum A64LogicalEncoder {
         guard let encoding = A64BitmaskImmediate.encode(UInt64(bitPattern: value) & mask, width: width) else {
             throw AssemblerError.invalidImmediate("#\(value)")
         }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (opc << 29) | 0x12000000
-        let fields = (encoding.n << 22) | (encoding.immr << 16) | (encoding.imms << 10)
-        return head | fields | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.LogicalImmediate
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.opc.insert(opc)
+            | F.n.insert(encoding.n)
+            | F.immr.insert(encoding.immr)
+            | F.imms.insert(encoding.imms)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func shiftedRegister(_ kind: A64.LogicalKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, shift: ParsedShift?) throws -> UInt32 {
@@ -717,9 +722,16 @@ internal enum A64LogicalEncoder {
         case .ands: opc = 3; n = 0
         case .bics: opc = 3; n = 1
         }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (opc << 29) | 0x0a000000 | (shiftKind.rawValue << 22) | (n << 21)
-        return head | (rm.encodedNumber << 16) | (UInt32(amount) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.LogicalShiftedRegister
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.opc.insert(opc)
+            | F.shift.insert(shiftKind.rawValue)
+            | F.n.insert(n)
+            | F.rm.insert(rm.encodedNumber)
+            | F.imm6.insert(UInt32(amount))
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func mvnAlias(destination rd: IntegerRegister, source rm: IntegerRegister, shift: ParsedShift?) throws -> UInt32 {
@@ -1432,8 +1444,13 @@ internal enum A64DataProcessingEncoder {
             try checkRange(immediate, 0...255, instruction: kind.rawValue)
             imm8 = UInt32(immediate) & 0xff
         }
-        let head = (sf << 31) | 0x11c0_0000
-        return head | (kind.immediateOpc << 18) | (imm8 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.MinMaxImmediate
+        return F.baseWord
+            | F.sf.insert(sf)
+            | F.opc.insert(kind.immediateOpc)
+            | F.imm8.insert(imm8)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func addSubCarry(_ kind: A64.AddSubCarryKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {

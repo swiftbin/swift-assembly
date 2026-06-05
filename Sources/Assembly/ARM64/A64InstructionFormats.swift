@@ -219,4 +219,48 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// Logical (immediate): `AND`/`ORR`/`EOR`/`ANDS` with a bitmask immediate.
+    /// `opc` selects the operation; `N`/`immr`/`imms` encode the bitmask.
+    enum LogicalImmediate {
+        static let baseWord: UInt32 = 0x1200_0000
+        static let classMask: UInt32 = 0x1f80_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let opc = BitField(offset: 29, width: 2)
+        static let n = BitField(offset: 22, width: 1)
+        static let immr = BitField(offset: 16, width: 6)
+        static let imms = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Logical (shifted register): `AND`/`BIC`/`ORR`/`ORN`/`EOR`/`EON`/`ANDS`/
+    /// `BICS`. `opc`+`N` select the operation; `shift`/`imm6` the shift.
+    enum LogicalShiftedRegister {
+        static let baseWord: UInt32 = 0x0a00_0000
+        static let classMask: UInt32 = 0x1f00_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let opc = BitField(offset: 29, width: 2)
+        static let shift = BitField(offset: 22, width: 2)
+        static let n = BitField(offset: 21, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let imm6 = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// FEAT_CSSC min/max (immediate): `SMAX`/`UMAX`/`SMIN`/`UMIN` with `#imm8`.
+    /// `opc` selects the variant via `MinMaxKind.immediateOpc`.
+    enum MinMaxImmediate {
+        static let baseWord: UInt32 = 0x11c0_0000
+        static let classMask: UInt32 = 0x7ff0_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let opc = BitField(offset: 18, width: 2)
+        static let imm8 = BitField(offset: 10, width: 8)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
 }
