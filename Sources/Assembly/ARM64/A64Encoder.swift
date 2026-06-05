@@ -198,6 +198,8 @@ internal enum A64InstructionEncoder {
             return try A64LoadStoreEncoder.literal(kind, target: target, offset: offset)
         case .loadLiteralFP(let target, let offset):
             return try A64LoadStoreEncoder.literalFP(target: target, offset: offset)
+        case .prefetchLiteral(let operation, let offset):
+            return try A64LoadStoreEncoder.prefetchLiteral(operation: operation, offset: offset)
         case .loadStorePair(let kind, let first, let second, let memory):
             return try A64LoadStoreEncoder.pair(kind, first: first, second: second, memory: memory)
         case .loadStoreSingleFP(let kind, let target, let memory):
@@ -939,6 +941,14 @@ internal enum A64LoadStoreEncoder {
         let imm19 = offset / 4
         try checkRange(imm19, -262144...262143, instruction: "ldr")
         return (opc << 30) | 0x1c00_0000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | rt.encodedNumber
+    }
+
+    static func prefetchLiteral(operation: UInt32, offset: Int64) throws -> UInt32 {
+        guard operation <= 0x1f else { throw AssemblerError.invalidImmediate("prfm") }
+        guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: "prfm", value: offset, alignment: 4) }
+        let imm19 = offset / 4
+        try checkRange(imm19, -262144...262143, instruction: "prfm")
+        return 0xd800_0000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | operation
     }
 
     static func pair(_ kind: A64.LoadStorePairKind, first rt: IntegerRegister, second rt2: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {

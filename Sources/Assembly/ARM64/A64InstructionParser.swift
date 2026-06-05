@@ -1345,6 +1345,12 @@ internal enum A64InstructionParser {
             try expectOperandCount(instruction, 2...3)
             let kind = A64.PrefetchKind(rawValue: mnemonic)!
             let operation = try prefetchOperation(instruction.operands[0])
+            // PC-relative literal form: `prfm <prfop>, <label|#imm>` (prfm only).
+            if mnemonic == "prfm", instruction.operands.count == 2,
+               !instruction.operands[1].trimmingCharacters(in: .whitespaces).hasPrefix("[") {
+                let offset = try labelOrImmediateByteOffset(instruction.operands[1], pc: pc, labels: labels)
+                return .prefetchLiteral(operation: operation, offset: offset)
+            }
             let memory = try A64MemoryOperandParser.parse(instruction.operands, startIndex: 1)
             return .prefetch(kind, operation: operation, memory: memory)
         case "stlurb", "stlurh", "stlur", "ldapurb", "ldapurh", "ldapur",

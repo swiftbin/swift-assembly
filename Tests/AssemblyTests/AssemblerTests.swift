@@ -2135,6 +2135,27 @@ final class AssemblerTests: XCTestCase {
         }
     }
 
+    func testPrefetchLiteralInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pldl1keep, #16"), 0xd8000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm pstl2strm, #-4"), 0xd8fffff3)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("prfm #5, #16"), 0xd8000085)
+    }
+
+    func testDisassemblePrefetchLiteral() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd8000080), "prfm pldl1keep, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd8fffff3), "prfm pstl2strm, #-4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd8000085), "prfm pldl3strm, #16")
+    }
+
+    func testPrefetchLiteralRoundTrip() throws {
+        for source in ["prfm pldl1keep, #16", "prfm pstl3keep, #-256", "prfm pldl2strm, #1024"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
     func testLoadStoreUnprivilegedInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1]"), 0xb8400820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr x0, [x1]"), 0xf8400820)

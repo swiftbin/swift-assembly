@@ -1098,7 +1098,7 @@ internal enum A64InstructionDecoder {
         case 0: return .loadLiteral(.ldr, target: integerRegister(number: rt, width: 32), offset: offset)
         case 1: return .loadLiteral(.ldr, target: integerRegister(number: rt, width: 64), offset: offset)
         case 2: return .loadLiteral(.ldrsw, target: integerRegister(number: rt, width: 64), offset: offset)
-        default: return nil   // opc=11 is PRFM (literal), not handled here
+        default: return .prefetchLiteral(operation: rt, offset: offset)   // opc=11: PRFM (literal)
         }
     }
 

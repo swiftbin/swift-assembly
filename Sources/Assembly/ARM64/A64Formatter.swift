@@ -145,6 +145,8 @@ internal enum A64InstructionFormatter {
             return "\(kind.rawValue) \(formatRegister(target)), #\(offset)"
         case .loadLiteralFP(let target, let offset):
             return "ldr \(formatFloatRegister(target)), #\(offset)"
+        case .prefetchLiteral(let operation, let offset):
+            return "prfm \(formatPrefetchOperation(operation)), #\(offset)"
         case .loadStoreExclusive(let kind, let status, let value, let value2, let base):
             var operands: [String] = []
             if let status { operands.append(formatRegister(status)) }
