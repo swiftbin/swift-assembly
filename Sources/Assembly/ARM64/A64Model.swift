@@ -147,13 +147,26 @@ internal enum A64 {
         case registerOffset(base: Register, offset: Register, extend: ExtendKind?, shift: Int)
     }
 
-    enum BranchRegisterKind: Equatable {
+    enum BranchRegisterKind: Equatable, CaseIterable {
         case ret
         case br
         case blr
+
+        /// The full base word (Rn at [9:5] is added by the encoder).
+        var baseWord: UInt32 {
+            switch self {
+            case .ret: return 0xd65f0000
+            case .br: return 0xd61f0000
+            case .blr: return 0xd63f0000
+            }
+        }
+
+        static func decode(masked: UInt32) -> BranchRegisterKind? {
+            allCases.first { $0.baseWord == masked }
+        }
     }
 
-    enum ExceptionKind: Equatable {
+    enum ExceptionKind: Equatable, CaseIterable {
         case supervisorCall
         case breakpoint
         case halt
@@ -162,13 +175,46 @@ internal enum A64 {
         case debugChangeState1
         case debugChangeState2
         case debugChangeState3
+
+        /// The full base word (imm16 at [20:5] is added by the encoder).
+        var baseWord: UInt32 {
+            switch self {
+            case .supervisorCall: return 0xd4000001
+            case .breakpoint: return 0xd4200000
+            case .halt: return 0xd4400000
+            case .hypervisorCall: return 0xd4000002
+            case .secureMonitorCall: return 0xd4000003
+            case .debugChangeState1: return 0xd4a00001
+            case .debugChangeState2: return 0xd4a00002
+            case .debugChangeState3: return 0xd4a00003
+            }
+        }
+
+        static func decode(masked: UInt32) -> ExceptionKind? {
+            allCases.first { $0.baseWord == masked }
+        }
     }
 
-    enum BarrierKind: Equatable {
+    enum BarrierKind: Equatable, CaseIterable {
         case instructionSynchronization
         case dataSynchronization
         case dataMemory
         case speculation
+
+        /// The full base word (the CRm option at [11:8] is added by the encoder
+        /// for the ISB/DSB/DMB forms; SB has a fixed option of 0).
+        var baseWord: UInt32 {
+            switch self {
+            case .instructionSynchronization: return 0xd50330df
+            case .dataSynchronization: return 0xd503309f
+            case .dataMemory: return 0xd50330bf
+            case .speculation: return 0xd50330ff
+            }
+        }
+
+        static func decode(masked: UInt32) -> BarrierKind? {
+            allCases.first { $0.baseWord == masked }
+        }
     }
 
     /// Named `HINT #imm` instructions. Unrecognised immediates round-trip

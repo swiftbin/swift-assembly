@@ -139,18 +139,8 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeBranchRegister(_ word: UInt32) -> Instruction? {
-        let mask: UInt32 = 0xffff_fc1f
-        let rn = xRegister(number: (word >> 5) & 0x1f)
-        switch word & mask {
-        case 0xd65f0000:
-            return .branchRegister(.ret, rn)
-        case 0xd61f0000:
-            return .branchRegister(.br, rn)
-        case 0xd63f0000:
-            return .branchRegister(.blr, rn)
-        default:
-            return nil
-        }
+        guard let kind = A64.BranchRegisterKind.decode(masked: word & 0xffff_fc1f) else { return nil }
+        return .branchRegister(kind, xRegister(number: (word >> 5) & 0x1f))
     }
 
     private static func decodePointerAuthBranch(_ word: UInt32) -> Instruction? {
@@ -231,46 +221,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeException(_ word: UInt32) -> Instruction? {
-        let mask: UInt32 = 0xffe0_001f
-        let immediate = Int64((word >> 5) & 0xffff)
-        switch word & mask {
-        case 0xd4000001:
-            return .exception(.supervisorCall, immediate: immediate)
-        case 0xd4200000:
-            return .exception(.breakpoint, immediate: immediate)
-        case 0xd4400000:
-            return .exception(.halt, immediate: immediate)
-        case 0xd4000002:
-            return .exception(.hypervisorCall, immediate: immediate)
-        case 0xd4000003:
-            return .exception(.secureMonitorCall, immediate: immediate)
-        case 0xd4a00001:
-            return .exception(.debugChangeState1, immediate: immediate)
-        case 0xd4a00002:
-            return .exception(.debugChangeState2, immediate: immediate)
-        case 0xd4a00003:
-            return .exception(.debugChangeState3, immediate: immediate)
-        default:
-            return nil
-        }
+        guard let kind = A64.ExceptionKind.decode(masked: word & 0xffe0_001f) else { return nil }
+        return .exception(kind, immediate: Int64((word >> 5) & 0xffff))
     }
 
     private static func decodeBarrier(_ word: UInt32) -> Instruction? {
-        let mask: UInt32 = 0xffff_f0ff
-        let option = (word >> 8) & 0xf
-        switch word & mask {
-        case 0xd50330df:
-            return .barrier(.instructionSynchronization, option: option)
-        case 0xd503309f:
-            return .barrier(.dataSynchronization, option: option)
-        case 0xd50330bf:
-            return .barrier(.dataMemory, option: option)
-        case 0xd50330ff:
-            // SB (speculation barrier): op2=111, CRm fixed at 0.
-            return .barrier(.speculation, option: 0)
-        default:
-            return nil
-        }
+        guard let kind = A64.BarrierKind.decode(masked: word & 0xffff_f0ff) else { return nil }
+        // SB (speculation barrier) has a fixed CRm of 0; the others carry the option.
+        let option = kind == .speculation ? 0 : (word >> 8) & 0xf
+        return .barrier(kind, option: option)
     }
 
     private static func decodeClearExclusive(_ word: UInt32) -> Instruction? {
