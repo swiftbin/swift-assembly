@@ -64,6 +64,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - scalar floating-point conditional select and conditional compare (fcsel, fccmp / fccmpe with `#nzcv` and a condition, on `s`/`d`/`h`)
 - scalar floating-point ↔ fixed-point convert (scvtf / ucvtf / fcvtzs / fcvtzu between a general register and `s`/`d`/`h` with a `#fbits` scale)
 - scalar floating-point to general-register convert with directed rounding (fcvtns / fcvtnu / fcvtas / fcvtau / fcvtps / fcvtpu / fcvtms / fcvtmu, `s`/`d`/`h` source to a `w`/`x` integer register)
+- half-precision fmov between a general register and an `h` register (fmov `Hd, Wn` / `Wd, Hn` / `Hd, Xn` / `Xd, Hn`, FEAT_FP16)
 - FEAT_CSSC integer minimum/maximum on general registers (smax / umax / smin / umin, register `Rd, Rn, Rm` and immediate `Rd, Rn, #imm` forms)
 - FEAT_CSSC scalar bit operations on general registers (abs / cnt / ctz)
 - scalar BFloat16 convert (bfcvt `Hd, Sn`, single-precision to BF16)

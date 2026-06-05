@@ -1611,10 +1611,12 @@ internal enum A64InstructionDecoder {
             let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
             return .fpConvertFromInt(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
         case (0b00, 0b110):
-            guard width == 32 || width == 64 else { return nil }
+            // Half-precision (type=11) pairs with either a 32- or 64-bit register;
+            // single (type=00) pairs with W, double (type=01) with X.
+            guard width == 16 || width == 32 || width == 64 else { return nil }
             return .fpMoveToGeneral(destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width))
         case (0b00, 0b111):
-            guard width == 32 || width == 64 else { return nil }
+            guard width == 16 || width == 32 || width == 64 else { return nil }
             return .fpMoveFromGeneral(destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
         case (0b11, 0b110):
             // FJCVTZS: fixed 32-bit general destination, double-precision source.

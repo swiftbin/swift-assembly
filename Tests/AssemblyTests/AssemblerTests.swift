@@ -2247,6 +2247,19 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x0, d0"), 0x9e660000)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov s0, w0"), 0x1e270000)
         XCTAssertEqual(try ARM64Assembler.assembleWord("fmov d0, x0"), 0x9e670000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov h0, w1"), 0x1ee70020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov w0, h1"), 0x1ee60020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov h0, x1"), 0x9ee70020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("fmov x0, h1"), 0x9ee60020)
+    }
+
+    func testFMovHalfGeneralRoundTrip() throws {
+        for source in ["fmov h0, w1", "fmov w0, h1", "fmov h2, x3", "fmov x4, h5"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
     }
 
     func testDisassembleFloatingPointInstructions() throws {

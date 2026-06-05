@@ -236,6 +236,9 @@ internal enum A64FloatEncoder {
         switch (general.is64Bit, float.width) {
         case (false, 32): return (0, 0b00)
         case (true, 64): return (1, 0b01)
+        // Half-precision (FEAT_FP16) pairs with either a 32- or 64-bit register.
+        case (false, 16): return (0, 0b11)
+        case (true, 16): return (1, 0b11)
         default: throw AssemblerError.invalidRegister(instruction)
         }
     }
