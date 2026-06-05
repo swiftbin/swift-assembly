@@ -425,4 +425,48 @@ extension A64 {
 
         static let imm16 = BitField(offset: 0, width: 16)
     }
+
+    /// Load/store exclusive (`LDXR`/`STXR`/`LDAXP`/...). `size`/`o2`/`l`/`o1`/
+    /// `o0` form the discriminator (carried by `LoadStoreExclusiveKind`).
+    enum LoadStoreExclusive {
+        static let baseWord: UInt32 = 0x0800_0000
+        static let classMask: UInt32 = 0x3f00_0000
+
+        static let size = BitField(offset: 30, width: 2)
+        static let o2 = BitField(offset: 23, width: 1)
+        static let l = BitField(offset: 22, width: 1)
+        static let o1 = BitField(offset: 21, width: 1)
+        static let rs = BitField(offset: 16, width: 5)
+        static let o0 = BitField(offset: 15, width: 1)
+        static let rt2 = BitField(offset: 10, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// Atomic memory operations (`LDADD`/`SWP`/...). `a`/`r` are acquire/release;
+    /// `o3`/`opc` select the operation.
+    enum AtomicMemory {
+        static let baseWord: UInt32 = 0x3820_0000
+        static let classMask: UInt32 = 0x3f20_0c00
+
+        static let size = BitField(offset: 30, width: 2)
+        static let a = BitField(offset: 23, width: 1)
+        static let r = BitField(offset: 22, width: 1)
+        static let rs = BitField(offset: 16, width: 5)
+        static let o3 = BitField(offset: 15, width: 1)
+        static let opc = BitField(offset: 12, width: 3)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// Load-acquire RCpc register (`LDAPR`/`LDAPRH`/`LDAPRB`). `size` selects
+    /// the access width.
+    enum LoadAcquireRCpc {
+        static let baseWord: UInt32 = 0x38bf_c000
+        static let classMask: UInt32 = 0x3fff_fc00
+
+        static let size = BitField(offset: 30, width: 2)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
 }

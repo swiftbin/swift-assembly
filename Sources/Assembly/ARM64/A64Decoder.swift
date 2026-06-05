@@ -763,12 +763,13 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStoreExclusive(_ word: UInt32) -> Instruction? {
-        guard word & 0x3f00_0000 == 0x0800_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let o2 = (word >> 23) & 1
-        let l = (word >> 22) & 1
-        let o1 = (word >> 21) & 1
-        let o0 = (word >> 15) & 1
+        typealias F = A64.LoadStoreExclusive
+        guard word & F.classMask == F.baseWord else { return nil }
+        let size = F.size.extract(word)
+        let o2 = F.o2.extract(word)
+        let l = F.l.extract(word)
+        let o1 = F.o1.extract(word)
+        let o0 = F.o0.extract(word)
 
         let fixedSize: UInt32?
         if o1 == 1 {
@@ -789,11 +790,11 @@ internal enum A64InstructionDecoder {
 
         let valueWidth = fixedSize == nil ? (size == 3 ? 64 : 32) : 32
         let status: IntegerRegister? = kind.hasStatusRegister
-            ? integerRegister(number: (word >> 16) & 0x1f, width: 32) : nil
-        let value = integerRegister(number: word & 0x1f, width: valueWidth)
+            ? integerRegister(number: F.rs.extract(word), width: 32) : nil
+        let value = integerRegister(number: F.rt.extract(word), width: valueWidth)
         let value2: IntegerRegister? = kind.isPair
-            ? integerRegister(number: (word >> 10) & 0x1f, width: valueWidth) : nil
-        let base = xRegister(number: (word >> 5) & 0x1f)
+            ? integerRegister(number: F.rt2.extract(word), width: valueWidth) : nil
+        let base = xRegister(number: F.rn.extract(word))
         return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
     }
 
@@ -850,9 +851,10 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAtomicMemory(_ word: UInt32) -> Instruction? {
-        guard word & 0x3f20_0c00 == 0x3820_0000 else { return nil }
-        let o3 = (word >> 15) & 1
-        let opc = (word >> 12) & 7
+        typealias F = A64.AtomicMemory
+        guard word & F.classMask == F.baseWord else { return nil }
+        let o3 = F.o3.extract(word)
+        let opc = F.opc.extract(word)
         let operation: A64.AtomicMemoryOperation
         if o3 == 1 {
             guard opc == 0 else { return nil }
@@ -864,9 +866,9 @@ internal enum A64InstructionDecoder {
             operation = op
         }
 
-        let size = (word >> 30) & 3
-        let acquire = (word >> 23) & 1 == 1
-        let release = (word >> 22) & 1 == 1
+        let size = F.size.extract(word)
+        let acquire = F.a.extract(word) == 1
+        let release = F.r.extract(word) == 1
         let fixedSize: UInt32?
         let width: Int
         switch size {
@@ -877,9 +879,9 @@ internal enum A64InstructionDecoder {
         default: return nil
         }
 
-        let rsNum = (word >> 16) & 0x1f
-        let rtNum = word & 0x1f
-        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rsNum = F.rs.extract(word)
+        let rtNum = F.rt.extract(word)
+        let base = xRegister(number: F.rn.extract(word))
         let source = integerRegister(number: rsNum, width: width)
 
         // Prefer the ST<op> alias when the result register is discarded and the
@@ -898,11 +900,11 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadAcquireRCpc(_ word: UInt32) -> Instruction? {
-        guard word & 0x3fff_fc00 == 0x38bf_c000 else { return nil }
-        let size = (word >> 30) & 3
+        typealias F = A64.LoadAcquireRCpc
+        guard word & F.classMask == F.baseWord else { return nil }
         let kind: A64.LoadAcquireRCpcKind
         let width: Int
-        switch size {
+        switch F.size.extract(word) {
         case 0: kind = .ldaprb; width = 32
         case 1: kind = .ldaprh; width = 32
         case 2: kind = .ldapr; width = 32
@@ -911,8 +913,8 @@ internal enum A64InstructionDecoder {
         }
         return .loadAcquireRCpc(
             kind,
-            value: integerRegister(number: word & 0x1f, width: width),
-            base: xRegister(number: (word >> 5) & 0x1f)
+            value: integerRegister(number: F.rt.extract(word), width: width),
+            base: xRegister(number: F.rn.extract(word))
         )
     }
 

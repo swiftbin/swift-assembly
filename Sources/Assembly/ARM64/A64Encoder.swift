@@ -778,9 +778,17 @@ internal enum A64LoadStoreEncoder {
             rt2Num = 0b11111
         }
 
-        let head = (size << 30) | 0x0800_0000 | (kind.o2 << 23) | (kind.l << 22)
-            | ((kind.isPair ? 1 : 0) << 21) | (rsNum << 16) | (kind.o0 << 15) | (rt2Num << 10)
-        return head | (base.encodedNumber << 5) | rt.encodedNumber
+        typealias F = A64.LoadStoreExclusive
+        return F.baseWord
+            | F.size.insert(size)
+            | F.o2.insert(kind.o2)
+            | F.l.insert(kind.l)
+            | F.o1.insert(kind.isPair ? 1 : 0)
+            | F.rs.insert(rsNum)
+            | F.o0.insert(kind.o0)
+            | F.rt2.insert(rt2Num)
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(rt.encodedNumber)
     }
 
     static func compareAndSwap(_ kind: A64.CompareAndSwapKind, compare rs: IntegerRegister, value rt: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
@@ -833,11 +841,16 @@ internal enum A64LoadStoreEncoder {
             rtNum = rt.encodedNumber
         }
 
-        let a: UInt32 = kind.acquire ? 1 : 0
-        let r: UInt32 = kind.release ? 1 : 0
-        let head = (size << 30) | 0x3820_0000 | (a << 23) | (r << 22)
-            | (rs.encodedNumber << 16) | (kind.operation.o3 << 15) | (kind.operation.opc << 12)
-        return head | (base.encodedNumber << 5) | rtNum
+        typealias F = A64.AtomicMemory
+        return F.baseWord
+            | F.size.insert(size)
+            | F.a.insert(kind.acquire ? 1 : 0)
+            | F.r.insert(kind.release ? 1 : 0)
+            | F.rs.insert(rs.encodedNumber)
+            | F.o3.insert(kind.operation.o3)
+            | F.opc.insert(kind.operation.opc)
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(rtNum)
     }
 
     static func loadAcquireRCpc(_ kind: A64.LoadAcquireRCpcKind, value rt: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
@@ -849,7 +862,8 @@ internal enum A64LoadStoreEncoder {
         } else {
             size = rt.is64Bit ? 0b11 : 0b10
         }
-        return (size << 30) | 0x38bf_c000 | (base.encodedNumber << 5) | rt.encodedNumber
+        typealias F = A64.LoadAcquireRCpc
+        return F.baseWord | F.size.insert(size) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
     }
 
     static func prefetch(_ kind: A64.PrefetchKind, operation: UInt32, memory: MemoryOperand) throws -> UInt32 {
