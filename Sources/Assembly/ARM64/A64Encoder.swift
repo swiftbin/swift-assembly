@@ -509,8 +509,13 @@ internal enum A64MTEEncoder {
         let uimm6 = offset / 16
         try checkRange(Int64(uimm6), 0...63, instruction: mnemonic)
         try checkRange(Int64(tag), 0...15, instruction: mnemonic)
-        let base: UInt32 = subtract ? 0xd180_0000 : 0x9180_0000
-        return base | (uimm6 << 16) | (tag << 10) | (source.encodedNumber << 5) | destination.encodedNumber
+        typealias F = A64.AddSubTag
+        return F.baseWord
+            | F.op.insert(subtract ? 1 : 0)
+            | F.uimm6.insert(uimm6)
+            | F.uimm4.insert(tag)
+            | F.rn.insert(source.encodedNumber)
+            | F.rd.insert(destination.encodedNumber)
     }
 
     /// Base of the "Load/store memory tags" single class (bit21 set, opc/op2 zero).
@@ -602,13 +607,14 @@ internal enum A64FlagManipulationEncoder {
         guard source.is64Bit else { throw AssemblerError.invalidRegister("rmif") }
         try checkRange(Int64(rotate), 0...63, instruction: "rmif")
         try checkRange(Int64(mask), 0...15, instruction: "rmif")
-        return 0xba00_0400 | (rotate << 15) | (source.encodedNumber << 5) | mask
+        typealias F = A64.RMIF
+        return F.baseWord | F.rotate.insert(rotate) | F.rn.insert(source.encodedNumber) | F.mask.insert(mask)
     }
 
     static func evaluateIntoFlags(_ kind: A64.EvaluateFlagsKind, source: IntegerRegister) throws -> UInt32 {
         guard !source.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let base: UInt32 = kind.isSixteen ? 0x3a00_480d : 0x3a00_080d
-        return base | (source.encodedNumber << 5)
+        typealias F = A64.EvaluateIntoFlags
+        return F.baseWord | F.sz.insert(kind.isSixteen ? 1 : 0) | F.rn.insert(source.encodedNumber)
     }
 }
 

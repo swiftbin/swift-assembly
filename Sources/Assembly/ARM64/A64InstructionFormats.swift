@@ -263,4 +263,37 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// `RMIF` — rotate, mask, insert into NZCV.
+    enum RMIF {
+        static let baseWord: UInt32 = 0xba00_0400
+        static let classMask: UInt32 = 0xffe0_7c10
+
+        static let rotate = BitField(offset: 15, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let mask = BitField(offset: 0, width: 4)
+    }
+
+    /// `SETF8`/`SETF16` — evaluate an 8/16-bit value into NZCV. `sz` selects
+    /// the width.
+    enum EvaluateIntoFlags {
+        static let baseWord: UInt32 = 0x3a00_080d
+        static let classMask: UInt32 = 0xffff_bc1f
+
+        static let sz = BitField(offset: 14, width: 1)
+        static let rn = BitField(offset: 5, width: 5)
+    }
+
+    /// `ADDG`/`SUBG` — add/subtract immediate with tag. `op` (bit30) selects
+    /// subtract; `uimm6` is the offset/16; `uimm4` the tag.
+    enum AddSubTag {
+        static let baseWord: UInt32 = 0x9180_0000
+        static let classMask: UInt32 = 0xbfc0_c000
+
+        static let op = BitField(offset: 30, width: 1)
+        static let uimm6 = BitField(offset: 16, width: 6)
+        static let uimm4 = BitField(offset: 10, width: 4)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
 }

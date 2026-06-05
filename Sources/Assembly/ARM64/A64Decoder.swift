@@ -395,14 +395,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMTEAddSubTag(_ word: UInt32) -> Instruction? {
-        // ADDG/SUBG (add/subtract immediate, with tags): sf=1, S=0,
-        // bits[28:23]=100011, bit22(o2)=0, bits[15:14]=00.
-        guard word & 0xbfc0_c000 == 0x9180_0000 else { return nil }
-        let subtract = ((word >> 30) & 1) == 1
-        let uimm6 = (word >> 16) & 0x3f
-        let tag = (word >> 10) & 0xf
-        let rn = xRegister(number: (word >> 5) & 0x1f)
-        let rd = xRegister(number: word & 0x1f)
+        // ADDG/SUBG (add/subtract immediate, with tags).
+        typealias F = A64.AddSubTag
+        guard word & F.classMask == F.baseWord else { return nil }
+        let subtract = F.op.extract(word) == 1
+        let uimm6 = F.uimm6.extract(word)
+        let tag = F.uimm4.extract(word)
+        let rn = xRegister(number: F.rn.extract(word))
+        let rd = xRegister(number: F.rd.extract(word))
         return .mteAddSubTag(subtract: subtract, destination: rd, source: rn, offset: uimm6 * 16, tag: tag)
     }
 
@@ -427,19 +427,19 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeRMIF(_ word: UInt32) -> Instruction? {
-        // RMIF: bits[31:21]=10111010000, bits[14:10]=00001, bit4=0.
-        guard word & 0xffe0_7c10 == 0xba00_0400 else { return nil }
-        let rotate = (word >> 15) & 0x3f
-        let mask = word & 0xf
-        let source = xRegister(number: (word >> 5) & 0x1f)
+        typealias F = A64.RMIF
+        guard word & F.classMask == F.baseWord else { return nil }
+        let rotate = F.rotate.extract(word)
+        let mask = F.mask.extract(word)
+        let source = xRegister(number: F.rn.extract(word))
         return .rmif(source: source, rotate: rotate, mask: mask)
     }
 
     private static func decodeEvaluateIntoFlags(_ word: UInt32) -> Instruction? {
-        // SETF8/SETF16: bits fixed except sz (bit14) and Rn.
-        guard word & 0xffff_bc1f == 0x3a00_080d else { return nil }
-        let kind: A64.EvaluateFlagsKind = ((word >> 14) & 1) == 1 ? .setf16 : .setf8
-        let source = integerRegister(number: (word >> 5) & 0x1f, width: 32)
+        typealias F = A64.EvaluateIntoFlags
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind: A64.EvaluateFlagsKind = F.sz.extract(word) == 1 ? .setf16 : .setf8
+        let source = integerRegister(number: F.rn.extract(word), width: 32)
         return .evaluateIntoFlags(kind, source: source)
     }
 
