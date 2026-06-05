@@ -296,4 +296,60 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// PC-relative addressing: `ADR` (`op`=0) / `ADRP` (`op`=1). The 21-bit
+    /// immediate is split into `immlo`[30:29] and `immhi`[23:5].
+    enum PCRelativeAddressing {
+        static let baseWord: UInt32 = 0x1000_0000
+        /// Class bits [28:24]=10000 (the `op` bit at [31] is dispatched separately).
+        static let classMask: UInt32 = 0x1f00_0000
+
+        static let op = BitField(offset: 31, width: 1)
+        static let immlo = BitField(offset: 29, width: 2)
+        static let immhi = BitField(offset: 5, width: 19)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Unconditional branch (immediate): `B` (`op`=0) / `BL` (`op`=1).
+    enum UnconditionalBranchImmediate {
+        static let baseWord: UInt32 = 0x1400_0000
+        /// Class bits [30:26]=00101 (the `op` bit at [31] is dispatched separately).
+        static let classMask: UInt32 = 0x7c00_0000
+
+        static let op = BitField(offset: 31, width: 1)
+        static let imm26 = BitField(offset: 0, width: 26)
+    }
+
+    /// Conditional branch (immediate): `B.cond`. `cond` is at [3:0].
+    enum ConditionalBranchImmediate {
+        static let baseWord: UInt32 = 0x5400_0000
+        static let classMask: UInt32 = 0xff00_0010
+
+        static let imm19 = BitField(offset: 5, width: 19)
+        static let cond = BitField(offset: 0, width: 4)
+    }
+
+    /// Compare and branch: `CBZ` (`op`=0) / `CBNZ` (`op`=1). `sf` selects width.
+    enum CompareAndBranch {
+        static let baseWord: UInt32 = 0x3400_0000
+        static let classMask: UInt32 = 0x7e00_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 24, width: 1)
+        static let imm19 = BitField(offset: 5, width: 19)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// Test and branch: `TBZ` (`op`=0) / `TBNZ` (`op`=1). The tested bit number
+    /// is `b5`[31] (high bit) and `b40`[23:19].
+    enum TestAndBranch {
+        static let baseWord: UInt32 = 0x3600_0000
+        static let classMask: UInt32 = 0x7e00_0000
+
+        static let b5 = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 24, width: 1)
+        static let b40 = BitField(offset: 19, width: 5)
+        static let imm14 = BitField(offset: 5, width: 14)
+        static let rt = BitField(offset: 0, width: 5)
+    }
 }

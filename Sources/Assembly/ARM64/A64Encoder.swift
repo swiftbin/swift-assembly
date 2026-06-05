@@ -29,25 +29,29 @@ internal enum A64InstructionEncoder {
             guard (-0x2000000...0x1ffffff).contains(imm26) else {
                 throw AssemblerError.branchOutOfRange(instruction: link ? "bl" : "b", label: "#\(offset)", byteOffset: offset)
             }
-            return (link ? 0x94000000 : 0x14000000) | (UInt32(bitPattern: Int32(imm26)) & 0x03ff_ffff)
+            return A64.UnconditionalBranchImmediate.baseWord
+                | A64.UnconditionalBranchImmediate.op.insert(link ? 1 : 0)
+                | A64.UnconditionalBranchImmediate.imm26.insert(UInt32(bitPattern: Int32(imm26)))
         case .conditionalBranch(let condition, let offset):
             guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: "b.\(condition)", value: offset, alignment: 4) }
             let imm19 = offset / 4
             guard (-0x40000...0x3ffff).contains(imm19) else {
                 throw AssemblerError.branchOutOfRange(instruction: "b.\(condition)", label: "#\(offset)", byteOffset: offset)
             }
-            return 0x54000000 | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5) | condition.rawValue
+            return A64.ConditionalBranchImmediate.baseWord
+                | A64.ConditionalBranchImmediate.imm19.insert(UInt32(bitPattern: Int32(imm19)))
+                | A64.ConditionalBranchImmediate.cond.insert(condition.rawValue)
         case .compareAndBranch(let nonzero, let rt, let offset):
             guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: nonzero ? "cbnz" : "cbz", value: offset, alignment: 4) }
             let imm19 = offset / 4
             guard (-0x40000...0x3ffff).contains(imm19) else {
                 throw AssemblerError.branchOutOfRange(instruction: nonzero ? "cbnz" : "cbz", label: "#\(offset)", byteOffset: offset)
             }
-            return ((rt.is64Bit ? UInt32(1) : 0) << 31)
-            | 0x34000000
-            | ((nonzero ? UInt32(1) : 0) << 24)
-            | ((UInt32(bitPattern: Int32(imm19)) & 0x7ffff) << 5)
-            | rt.encodedNumber
+            return A64.CompareAndBranch.baseWord
+            | A64.CompareAndBranch.sf.insert(rt.is64Bit ? 1 : 0)
+            | A64.CompareAndBranch.op.insert(nonzero ? 1 : 0)
+            | A64.CompareAndBranch.imm19.insert(UInt32(bitPattern: Int32(imm19)))
+            | A64.CompareAndBranch.rt.insert(rt.encodedNumber)
         case .testAndBranch(let nonzero, let rt, let bit, let offset):
             try checkRange(bit, 0...(rt.is64Bit ? 63 : 31), instruction: nonzero ? "tbnz" : "tbz")
             guard offset % 4 == 0 else { throw AssemblerError.immediateAlignment(instruction: nonzero ? "tbnz" : "tbz", value: offset, alignment: 4) }
@@ -55,12 +59,12 @@ internal enum A64InstructionEncoder {
             guard (-0x2000...0x1fff).contains(imm14) else {
                 throw AssemblerError.branchOutOfRange(instruction: nonzero ? "tbnz" : "tbz", label: "#\(offset)", byteOffset: offset)
             }
-            return ((UInt32(bit >> 5) & 1) << 31)
-            | 0x36000000
-            | ((nonzero ? UInt32(1) : 0) << 24)
-            | ((UInt32(bit) & 0x1f) << 19)
-            | ((UInt32(bitPattern: Int32(imm14)) & 0x3fff) << 5)
-            | rt.encodedNumber
+            return A64.TestAndBranch.baseWord
+            | A64.TestAndBranch.b5.insert(UInt32(bit >> 5))
+            | A64.TestAndBranch.op.insert(nonzero ? 1 : 0)
+            | A64.TestAndBranch.b40.insert(UInt32(bit))
+            | A64.TestAndBranch.imm14.insert(UInt32(bitPattern: Int32(imm14)))
+            | A64.TestAndBranch.rt.insert(rt.encodedNumber)
         case .address(let page, let rd, let offset):
             let mnemonic = page ? "adrp" : "adr"
             let immediate: Int64
@@ -74,7 +78,11 @@ internal enum A64InstructionEncoder {
                 throw AssemblerError.immediateOutOfRange(instruction: mnemonic, value: immediate, range: -0x100000...0xfffff)
             }
             let imm = UInt32(bitPattern: Int32(immediate)) & 0x1f_ffff
-            return (page ? 0x90000000 : 0x10000000) | ((imm & 0x3) << 29) | (((imm >> 2) & 0x7ffff) << 5) | rd.encodedNumber
+            return A64.PCRelativeAddressing.baseWord
+                | A64.PCRelativeAddressing.op.insert(page ? 1 : 0)
+                | A64.PCRelativeAddressing.immlo.insert(imm & 0x3)
+                | A64.PCRelativeAddressing.immhi.insert(imm >> 2)
+                | A64.PCRelativeAddressing.rd.insert(rd.encodedNumber)
         case .exception(.supervisorCall, let immediate):
             return 0xd4000001 | (UInt32(immediate) << 5)
         case .exception(.breakpoint, let immediate):

@@ -180,55 +180,48 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeUnconditionalBranch(_ word: UInt32) -> Instruction? {
-        switch word & 0xfc00_0000 {
-        case 0x14000000:
-            return .unconditionalBranch(link: false, offset: signExtend(word & 0x03ff_ffff, bitCount: 26) * 4)
-        case 0x94000000:
-            return .unconditionalBranch(link: true, offset: signExtend(word & 0x03ff_ffff, bitCount: 26) * 4)
-        default:
-            return nil
-        }
+        typealias F = A64.UnconditionalBranchImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let offset = signExtend(F.imm26.extract(word), bitCount: 26) * 4
+        return .unconditionalBranch(link: F.op.extract(word) == 1, offset: offset)
     }
 
     private static func decodeConditionalBranch(_ word: UInt32) -> Instruction? {
-        guard word & 0xff00_0010 == 0x5400_0000 else { return nil }
-        guard let condition = Condition(rawValue: word & 0xf) else { return nil }
-        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
+        typealias F = A64.ConditionalBranchImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let offset = signExtend(F.imm19.extract(word), bitCount: 19) * 4
         return .conditionalBranch(condition, offset: offset)
     }
 
     private static func decodeCompareAndBranch(_ word: UInt32) -> Instruction? {
-        guard word & 0x7e00_0000 == 0x3400_0000 else { return nil }
-        let is64Bit = (word >> 31) & 1 == 1
-        let nonzero = (word >> 24) & 1 == 1
-        let rt = integerRegister(number: word & 0x1f, width: is64Bit ? 64 : 32)
-        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
+        typealias F = A64.CompareAndBranch
+        guard word & F.classMask == F.baseWord else { return nil }
+        let is64Bit = F.sf.extract(word) == 1
+        let nonzero = F.op.extract(word) == 1
+        let rt = integerRegister(number: F.rt.extract(word), width: is64Bit ? 64 : 32)
+        let offset = signExtend(F.imm19.extract(word), bitCount: 19) * 4
         return .compareAndBranch(nonzero: nonzero, rt, offset: offset)
     }
 
     private static func decodeTestAndBranch(_ word: UInt32) -> Instruction? {
-        guard word & 0x7e00_0000 == 0x3600_0000 else { return nil }
-        let bit = Int64(((word >> 31) & 1) << 5) | Int64((word >> 19) & 0x1f)
-        let nonzero = (word >> 24) & 1 == 1
-        let rt = integerRegister(number: word & 0x1f, width: bit >= 32 ? 64 : 32)
-        let offset = signExtend((word >> 5) & 0x3fff, bitCount: 14) * 4
+        typealias F = A64.TestAndBranch
+        guard word & F.classMask == F.baseWord else { return nil }
+        let bit = Int64(F.b5.extract(word) << 5) | Int64(F.b40.extract(word))
+        let nonzero = F.op.extract(word) == 1
+        let rt = integerRegister(number: F.rt.extract(word), width: bit >= 32 ? 64 : 32)
+        let offset = signExtend(F.imm14.extract(word), bitCount: 14) * 4
         return .testAndBranch(nonzero: nonzero, rt, bit: bit, offset: offset)
     }
 
     private static func decodeAddress(_ word: UInt32) -> Instruction? {
-        let page: Bool
-        switch word & 0x9f00_0000 {
-        case 0x1000_0000:
-            page = false
-        case 0x9000_0000:
-            page = true
-        default:
-            return nil
-        }
-        let immlo = (word >> 29) & 0x3
-        let immhi = (word >> 5) & 0x7ffff
+        typealias F = A64.PCRelativeAddressing
+        guard word & F.classMask == F.baseWord else { return nil }
+        let page = F.op.extract(word) == 1
+        let immlo = F.immlo.extract(word)
+        let immhi = F.immhi.extract(word)
         let immediate = signExtend((immhi << 2) | immlo, bitCount: 21)
-        return .address(page: page, xRegister(number: word & 0x1f), offset: page ? immediate * 4096 : immediate)
+        return .address(page: page, xRegister(number: F.rd.extract(word)), offset: page ? immediate * 4096 : immediate)
     }
 
     private static func decodeUDF(_ word: UInt32) -> Instruction? {
