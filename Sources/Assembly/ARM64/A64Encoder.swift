@@ -918,19 +918,20 @@ internal enum A64LoadStoreEncoder {
     static func single(_ kind: A64.LoadStoreSingleKind, target rt: IntegerRegister, memory: MemoryOperand) throws -> UInt32 {
         let mnemonic = kind.rawValue
         let descriptor = SingleDescriptor(kind: kind, rt: rt)
+        typealias F = A64.LoadStoreSingle
 
         switch memory {
         case .unsignedOffset(let base, let offset):
             if descriptor.forceUnscaled {
                 try checkRange(offset, -256...255, instruction: mnemonic)
-                return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
+                return descriptor.unscaledBase | F.imm9.insert(UInt32(bitPattern: Int32(offset))) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
             }
             guard offset >= 0, offset % descriptor.byteSize == 0 else {
                 throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: descriptor.byteSize)
             }
             let scaled = offset / descriptor.byteSize
             try checkRange(scaled, 0...0xfff, instruction: mnemonic)
-            return descriptor.unsignedBase | (UInt32(scaled) << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+            return descriptor.unsignedBase | F.imm12.insert(UInt32(scaled)) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
 
         case .signedUnscaled(let base, let offset), .preIndexed(let base, let offset), .postIndexed(let base, let offset):
             try checkRange(offset, -256...255, instruction: mnemonic)
@@ -941,13 +942,13 @@ internal enum A64LoadStoreEncoder {
             case .preIndexed: mode = 3
             default: mode = 0
             }
-            return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (mode << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+            return descriptor.unscaledBase | F.imm9.insert(UInt32(bitPattern: Int32(offset))) | F.mode.insert(mode) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
 
         case .registerOffset(let base, let offset, let ext, let shift):
             let option = ext ?? (offset.is64Bit ? ExtendKind.uxtx : ExtendKind.uxtw)
             let naturalShift = Int(log2(Double(descriptor.byteSize)))
             guard shift == 0 || shift == naturalShift else { throw AssemblerError.unsupportedShift("lsl #\(shift)") }
-            return descriptor.registerOffsetBase | (offset.encodedNumber << 16) | (option.rawValue << 13) | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
+            return descriptor.registerOffsetBase | F.rm.insert(offset.encodedNumber) | F.option.insert(option.rawValue) | F.s.insert(shift == 0 ? 0 : 1) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
         }
     }
 
@@ -1056,19 +1057,20 @@ internal enum A64LoadStoreEncoder {
     static func singleFP(_ kind: A64.LoadStoreSingleKind, target rt: A64.FPRegister, memory: MemoryOperand) throws -> UInt32 {
         let mnemonic = kind.rawValue
         let descriptor = try FPSingleDescriptor(kind: kind, rt: rt)
+        typealias F = A64.LoadStoreSingle
 
         switch memory {
         case .unsignedOffset(let base, let offset):
             if descriptor.forceUnscaled {
                 try checkRange(offset, -256...255, instruction: mnemonic)
-                return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
+                return descriptor.unscaledBase | F.imm9.insert(UInt32(bitPattern: Int32(offset))) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
             }
             guard offset >= 0, offset % descriptor.byteSize == 0 else {
                 throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: descriptor.byteSize)
             }
             let scaled = offset / descriptor.byteSize
             try checkRange(scaled, 0...0xfff, instruction: mnemonic)
-            return descriptor.unsignedBase | (UInt32(scaled) << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+            return descriptor.unsignedBase | F.imm12.insert(UInt32(scaled)) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
 
         case .signedUnscaled(let base, let offset), .preIndexed(let base, let offset), .postIndexed(let base, let offset):
             try checkRange(offset, -256...255, instruction: mnemonic)
@@ -1079,13 +1081,13 @@ internal enum A64LoadStoreEncoder {
             case .preIndexed: mode = 3
             default: mode = 0
             }
-            return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (mode << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+            return descriptor.unscaledBase | F.imm9.insert(UInt32(bitPattern: Int32(offset))) | F.mode.insert(mode) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
 
         case .registerOffset(let base, let offset, let ext, let shift):
             let option = ext ?? (offset.is64Bit ? ExtendKind.uxtx : ExtendKind.uxtw)
             let naturalShift = Int(log2(Double(descriptor.byteSize)))
             guard shift == 0 || shift == naturalShift else { throw AssemblerError.unsupportedShift("lsl #\(shift)") }
-            return descriptor.registerOffsetBase | (offset.encodedNumber << 16) | (option.rawValue << 13) | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | rt.encodedNumber
+            return descriptor.registerOffsetBase | F.rm.insert(offset.encodedNumber) | F.option.insert(option.rawValue) | F.s.insert(shift == 0 ? 0 : 1) | F.rn.insert(base.encodedNumber) | F.rt.insert(rt.encodedNumber)
         }
     }
 
@@ -1242,17 +1244,13 @@ internal enum A64LoadStoreEncoder {
             }
         }
 
-        var unsignedBase: UInt32 {
-            (size << 30) | 0x3d000000 | (opc << 22)
+        private var sizeOpcV: UInt32 {
+            A64.LoadStoreSingle.size.insert(size) | A64.LoadStoreSingle.opc.insert(opc) | A64.LoadStoreSingle.v.insert(1)
         }
 
-        var unscaledBase: UInt32 {
-            (size << 30) | 0x3c000000 | (opc << 22)
-        }
-
-        var registerOffsetBase: UInt32 {
-            (size << 30) | 0x3c200800 | (opc << 22)
-        }
+        var unsignedBase: UInt32 { A64.LoadStoreSingle.unsignedBase | sizeOpcV }
+        var unscaledBase: UInt32 { A64.LoadStoreSingle.unscaledBase | sizeOpcV }
+        var registerOffsetBase: UInt32 { A64.LoadStoreSingle.registerOffsetBase | sizeOpcV }
     }
 
     private struct SingleDescriptor {
@@ -1288,17 +1286,13 @@ internal enum A64LoadStoreEncoder {
             }
         }
 
-        var unsignedBase: UInt32 {
-            (size << 30) | 0x39000000 | (opc << 22)
+        private var sizeOpc: UInt32 {
+            A64.LoadStoreSingle.size.insert(size) | A64.LoadStoreSingle.opc.insert(opc)
         }
 
-        var unscaledBase: UInt32 {
-            (size << 30) | 0x38000000 | (opc << 22)
-        }
-
-        var registerOffsetBase: UInt32 {
-            (size << 30) | 0x38200800 | (opc << 22)
-        }
+        var unsignedBase: UInt32 { A64.LoadStoreSingle.unsignedBase | sizeOpc }
+        var unscaledBase: UInt32 { A64.LoadStoreSingle.unscaledBase | sizeOpc }
+        var registerOffsetBase: UInt32 { A64.LoadStoreSingle.registerOffsetBase | sizeOpc }
     }
 }
 

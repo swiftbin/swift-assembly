@@ -1066,34 +1066,35 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {
+        typealias F = A64.LoadStoreSingle
         let op = word & 0x3f00_0000
         guard op == 0x3800_0000 || op == 0x3900_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
+        let size = F.size.extract(word)
+        let opc = F.opc.extract(word)
         guard let info = loadStoreSingleKind(size: size, opc: opc) else { return nil }
         let scaledKind = info.scaled
         let unscaledKind = info.unscaled
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: info.rtWidth)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: info.rtWidth)
 
         if op == 0x3900_0000 {
-            let offset = Int64((word >> 10) & 0xfff) * info.byteSize
+            let offset = Int64(F.imm12.extract(word)) * info.byteSize
             return .loadStoreSingle(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
         }
 
         if (word >> 21) & 1 == 1 {
-            guard (word >> 10) & 3 == 2 else { return nil }
-            let optionRaw = (word >> 13) & 7
-            let s = (word >> 12) & 1
+            guard F.mode.extract(word) == 2 else { return nil }
+            let optionRaw = F.option.extract(word)
+            let s = F.s.extract(word)
             let rmWidth = (optionRaw == 2 || optionRaw == 6) ? 32 : 64
-            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
             let shift = s == 1 ? Int(size) : 0
             let extend: ExtendKind? = optionRaw == 3 ? nil : ExtendKind(rawValue: optionRaw)
             return .loadStoreSingle(scaledKind, target: rt, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
         }
 
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
-        switch (word >> 10) & 3 {
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
+        switch F.mode.extract(word) {
         case 0:
             let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
             return .loadStoreSingle(unscaledKind, target: rt, memory: mem)
@@ -1158,10 +1159,11 @@ internal enum A64InstructionDecoder {
 
     private static func decodeLoadStoreSingleFP(_ word: UInt32) -> Instruction? {
         // SIMD&FP load/store register: the integer forms with the V (bit 26) set.
+        typealias F = A64.LoadStoreSingle
         let op = word & 0x3f00_0000
         guard op == 0x3c00_0000 || op == 0x3d00_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
+        let size = F.size.extract(word)
+        let opc = F.opc.extract(word)
         // opc bit 1 selects the 128-bit (Q) form; opc bit 0 selects load.
         let isLoad = (opc & 1) == 1
         let isQuad = (opc & 2) == 2
@@ -1181,27 +1183,27 @@ internal enum A64InstructionDecoder {
         }
         let scaledKind: A64.LoadStoreSingleKind = isLoad ? .ldr : .str
         let unscaledKind: A64.LoadStoreSingleKind = isLoad ? .ldur : .stur
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = floatRegister(number: word & 0x1f, width: width)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = floatRegister(number: F.rt.extract(word), width: width)
 
         if op == 0x3d00_0000 {
-            let offset = Int64((word >> 10) & 0xfff) * byteSize
+            let offset = Int64(F.imm12.extract(word)) * byteSize
             return .loadStoreSingleFP(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
         }
 
         if (word >> 21) & 1 == 1 {
-            guard (word >> 10) & 3 == 2 else { return nil }
-            let optionRaw = (word >> 13) & 7
-            let s = (word >> 12) & 1
+            guard F.mode.extract(word) == 2 else { return nil }
+            let optionRaw = F.option.extract(word)
+            let s = F.s.extract(word)
             let rmWidth = (optionRaw == 2 || optionRaw == 6) ? 32 : 64
-            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
             let shift = s == 1 ? Int(log2(Double(byteSize))) : 0
             let extend: ExtendKind? = optionRaw == 3 ? nil : ExtendKind(rawValue: optionRaw)
             return .loadStoreSingleFP(scaledKind, target: rt, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
         }
 
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
-        switch (word >> 10) & 3 {
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
+        switch F.mode.extract(word) {
         case 0:
             let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
             return .loadStoreSingleFP(unscaledKind, target: rt, memory: mem)

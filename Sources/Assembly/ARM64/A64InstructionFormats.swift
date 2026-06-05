@@ -512,6 +512,35 @@ extension A64 {
         static let rt = BitField(offset: 0, width: 5)
     }
 
+    /// Load/store a single register. The family spans three addressing forms
+    /// that share `size`/`opc`/`Rn`/`Rt` but differ in base word and offset
+    /// encoding: unsigned-offset (`imm12`), unscaled/indexed (`imm9`+`mode`)
+    /// and register-offset (`Rm`/`option`/`s`).
+    enum LoadStoreSingle {
+        static let size = BitField(offset: 30, width: 2)
+        /// `V`[26] selects the SIMD&FP register file (the integer forms use 0).
+        static let v = BitField(offset: 26, width: 1)
+        static let opc = BitField(offset: 22, width: 2)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+
+        /// Unsigned immediate offset (scaled). Base `0x3900_0000`.
+        static let unsignedBase: UInt32 = 0x3900_0000
+        static let imm12 = BitField(offset: 10, width: 12)
+
+        /// Unscaled / pre / post indexed. Base `0x3800_0000`; `mode`[11:10]
+        /// selects 0=unscaled, 1=post, 3=pre.
+        static let unscaledBase: UInt32 = 0x3800_0000
+        static let imm9 = BitField(offset: 12, width: 9)
+        static let mode = BitField(offset: 10, width: 2)
+
+        /// Register offset. Base `0x3820_0800`.
+        static let registerOffsetBase: UInt32 = 0x3820_0800
+        static let rm = BitField(offset: 16, width: 5)
+        static let option = BitField(offset: 13, width: 3)
+        static let s = BitField(offset: 12, width: 1)
+    }
+
     /// Load register (literal): integer `LDR`/`LDRSW`, the FP `LDR` (`v`=1) and
     /// `PRFM` (literal, `opc`=11). `opc`/`v` select the variant; `imm19` is the
     /// PC-relative word offset.
