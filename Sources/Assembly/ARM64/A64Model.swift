@@ -561,6 +561,9 @@ internal enum A64 {
         case stlxrb, stlxrh, stlxr
         case ldarb, ldarh, ldar
         case stlrb, stlrh, stlr
+        // FEAT_LOR LOAcquire/LORelease (ordered, o0=0).
+        case ldlarb, ldlarh, ldlar
+        case stllrb, stllrh, stllr
         case ldxp, ldaxp
         case stxp, stlxp
 
@@ -582,7 +585,8 @@ internal enum A64 {
         /// The `o2` field at bit 23 (set for the non-exclusive ordered forms).
         var o2: UInt32 {
             switch self {
-            case .ldarb, .ldarh, .ldar, .stlrb, .stlrh, .stlr: return 1
+            case .ldarb, .ldarh, .ldar, .stlrb, .stlrh, .stlr,
+                 .ldlarb, .ldlarh, .ldlar, .stllrb, .stllrh, .stllr: return 1
             default: return 0
             }
         }
@@ -590,7 +594,8 @@ internal enum A64 {
         /// The `L` (load) field at bit 22.
         var l: UInt32 {
             switch self {
-            case .ldxrb, .ldxrh, .ldxr, .ldaxrb, .ldaxrh, .ldaxr, .ldarb, .ldarh, .ldar, .ldxp, .ldaxp:
+            case .ldxrb, .ldxrh, .ldxr, .ldaxrb, .ldaxrh, .ldaxr, .ldarb, .ldarh, .ldar,
+                 .ldlarb, .ldlarh, .ldlar, .ldxp, .ldaxp:
                 return 1
             default:
                 return 0
@@ -612,8 +617,8 @@ internal enum A64 {
         /// width-dependent word/doubleword encoding.
         var fixedSize: UInt32? {
             switch self {
-            case .ldxrb, .stxrb, .ldaxrb, .stlxrb, .ldarb, .stlrb: return 0b00
-            case .ldxrh, .stxrh, .ldaxrh, .stlxrh, .ldarh, .stlrh: return 0b01
+            case .ldxrb, .stxrb, .ldaxrb, .stlxrb, .ldarb, .stlrb, .ldlarb, .stllrb: return 0b00
+            case .ldxrh, .stxrh, .ldaxrh, .stlxrh, .ldarh, .stlrh, .ldlarh, .stllrh: return 0b01
             default: return nil
             }
         }

@@ -1252,6 +1252,7 @@ internal enum A64InstructionParser {
         case "ldxrb", "ldxrh", "ldxr", "stxrb", "stxrh", "stxr",
              "ldaxrb", "ldaxrh", "ldaxr", "stlxrb", "stlxrh", "stlxr",
              "ldarb", "ldarh", "ldar", "stlrb", "stlrh", "stlr",
+             "ldlarb", "ldlarh", "ldlar", "stllrb", "stllrh", "stllr",
              "ldxp", "ldaxp", "stxp", "stlxp":
             guard parts.count == 1 else { return nil }
             let kind = A64.LoadStoreExclusiveKind(rawValue: mnemonic)!

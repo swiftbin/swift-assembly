@@ -508,6 +508,40 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("yield x0"))   // takes no operands
     }
 
+    func testLoadStoreLORegionInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldlar w0, [x1]"), 0x88df7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldlar x0, [x1]"), 0xc8df7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldlarb w0, [x1]"), 0x08df7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldlarh w0, [x1]"), 0x48df7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stllr w0, [x1]"), 0x889f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stllr x0, [x1]"), 0xc89f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stllrb w0, [x1]"), 0x089f7c20)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("stllrh w0, [x1]"), 0x489f7c20)
+    }
+
+    func testDisassembleLoadStoreLORegion() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x88df7c20), "ldlar w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xc89f7c20), "stllr x0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x08df7c20), "ldlarb w0, [x1]")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x489f7c20), "stllrh w0, [x1]")
+    }
+
+    func testLoadStoreLORegionRoundTrip() throws {
+        for source in ["ldlar w0, [x1]", "ldlar x2, [x3]", "ldlarb w4, [x5]", "ldlarh w6, [x7]",
+                       "stllr w8, [x9]", "stllr x10, [x11]", "stllrb w12, [x13]", "stllrh w14, [x15]"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testLoadStoreLORegionInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldlar w0, [x1, #4]"))  // no offset form
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("stllr w0"))            // missing base
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldlarb x0, [x1]"))     // byte form is 32-bit
+    }
+
     func testLoadStoreExclusiveInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldxr w0, [x1]"), 0x885f7c20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldxr x0, [x1]"), 0xc85f7c20)
