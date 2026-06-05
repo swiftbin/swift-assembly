@@ -142,6 +142,38 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ror x0, x1, #8"), 0x93c12020)
     }
 
+    func testVariableShiftInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("lslv w0, w1, w2"), 0x1ac22020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("lsrv w0, w1, w2"), 0x1ac22420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("asrv w0, w1, w2"), 0x1ac22820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("rorv w0, w1, w2"), 0x1ac22c20)
+        // Register operand selects the variable-shift form via the alias mnemonic.
+        XCTAssertEqual(try ARM64Assembler.assembleWord("lsl w0, w1, w2"), 0x1ac22020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("lsr x0, x1, x2"), 0x9ac22420)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("asr w0, w1, w2"), 0x1ac22820)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ror x0, x1, x2"), 0x9ac22c20)
+    }
+
+    func testDisassembleVariableShift() throws {
+        // The disassembler prefers the lsl/lsr/asr/ror aliases over LSLV/LSRV/...
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ac22020), "lsl w0, w1, w2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9ac22420), "lsr x0, x1, x2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1ac22820), "asr w0, w1, w2")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9ac22c20), "ror x0, x1, x2")
+    }
+
+    func testVariableShiftRoundTrip() throws {
+        for source in ["lsl w0, w1, w2", "lsr x3, x4, x5", "asr w6, w7, w8", "ror x9, x10, x11"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+        // The immediate forms remain bitfield/extract aliases.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(try ARM64Assembler.assembleWord("lsl w0, w1, #4")), "lsl w0, w1, #4")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(try ARM64Assembler.assembleWord("ror w0, w1, #4")), "ror w0, w1, #4")
+    }
+
     func testMultiplyAndDivideInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("mul x0, x1, x2"), 0x9b027c20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("mneg x0, x1, x2"), 0x9b02fc20)

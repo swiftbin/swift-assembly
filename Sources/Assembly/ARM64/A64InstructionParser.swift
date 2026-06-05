@@ -1053,9 +1053,29 @@ internal enum A64InstructionParser {
             default:    kind = .ubfm; imms = 15; guard !rd.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) }
             }
             return .bitfield(kind, destination: rd, source: rn, immr: 0, imms: imms)
+        case "lslv", "lsrv", "asrv", "rorv":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, exactly: 3)
+            return .variableShift(
+                A64.VariableShiftKind(rawValue: String(mnemonic.dropLast()))!,
+                destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                second: try A64Parser.integerRegister(instruction.operands[2], allowSP: false)
+            )
         case "lsl", "lsr", "asr":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, exactly: 3)
+            // A register third operand selects the variable-shift form (LSLV/LSRV/ASRV);
+            // an immediate selects the bitfield-based shift alias.
+            if !instruction.operands[2].trimmingCharacters(in: .whitespaces).hasPrefix("#"),
+               let second = try? A64Parser.integerRegister(instruction.operands[2], allowSP: false) {
+                return .variableShift(
+                    A64.VariableShiftKind(rawValue: mnemonic)!,
+                    destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                    first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                    second: second
+                )
+            }
             return .shiftAlias(
                 A64.ShiftAliasKind(rawValue: mnemonic)!,
                 destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
@@ -1065,6 +1085,18 @@ internal enum A64InstructionParser {
         case "extr", "ror":
             guard parts.count == 1 else { return nil }
             let kind = A64.ExtractKind(rawValue: mnemonic)!
+            // `ror Wd, Wn, Wm` (register) is the RORV variable-shift; the immediate
+            // form is the EXTR rotate alias.
+            if kind == .ror, instruction.operands.count == 3,
+               !instruction.operands[2].trimmingCharacters(in: .whitespaces).hasPrefix("#"),
+               let second = try? A64Parser.integerRegister(instruction.operands[2], allowSP: false) {
+                return .variableShift(
+                    .ror,
+                    destination: try A64Parser.integerRegister(instruction.operands[0], allowSP: false),
+                    first: try A64Parser.integerRegister(instruction.operands[1], allowSP: false),
+                    second: second
+                )
+            }
             try expectOperandCount(instruction, exactly: kind == .ror ? 3 : 4)
             let destination = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
             let first = try A64Parser.integerRegister(instruction.operands[1], allowSP: false)

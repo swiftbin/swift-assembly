@@ -96,6 +96,8 @@ internal enum A64InstructionFormatter {
             return formatBitfield(kind, destination: destination, source: source, immr: immr, imms: imms)
         case .divide(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
+        case .variableShift(let kind, let destination, let first, let second):
+            return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
         case .minMaxRegister(let kind, let destination, let first, let second):
             return "\(kind.rawValue) \(formatRegister(destination)), \(formatRegister(first)), \(formatRegister(second))"
         case .minMaxImmediate(let kind, let destination, let source, let immediate):

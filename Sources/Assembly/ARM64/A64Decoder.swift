@@ -39,6 +39,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMultiply(word) { return instruction }
         if let instruction = decodeMultiplyWide(word) { return instruction }
         if let instruction = decodeDivide(word) { return instruction }
+        if let instruction = decodeVariableShift(word) { return instruction }
         if let instruction = decodeMinMaxRegister(word) { return instruction }
         if let instruction = decodeMinMaxImmediate(word) { return instruction }
         if let instruction = decodeAddSubCarry(word) { return instruction }
@@ -652,6 +653,19 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         let rd = integerRegister(number: word & 0x1f, width: width)
         return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+    }
+
+    private static func decodeVariableShift(_ word: UInt32) -> Instruction? {
+        // Data-processing-2-source, opcode[15:12]=0010 (LSLV/LSRV/ASRV/RORV).
+        guard word & 0x7fe0_f000 == 0x1ac0_2000 else { return nil }
+        guard let kind = A64.VariableShiftKind.decode(opcode: (word >> 10) & 0x3f) else { return nil }
+        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        return .variableShift(
+            kind,
+            destination: integerRegister(number: word & 0x1f, width: width),
+            first: integerRegister(number: (word >> 5) & 0x1f, width: width),
+            second: integerRegister(number: (word >> 16) & 0x1f, width: width)
+        )
     }
 
     private static func decodeMinMaxRegister(_ word: UInt32) -> Instruction? {

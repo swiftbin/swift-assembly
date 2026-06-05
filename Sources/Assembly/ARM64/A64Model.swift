@@ -232,6 +232,26 @@ internal enum A64 {
         case udiv, sdiv
     }
 
+    /// Variable (register) shift (`LSLV`/`LSRV`/`ASRV`/`RORV`), disassembled
+    /// using the preferred `lsl`/`lsr`/`asr`/`ror` aliases.
+    enum VariableShiftKind: String, Equatable, CaseIterable {
+        case lsl, lsr, asr, ror
+
+        /// The data-processing-2-source `opcode` at [15:10].
+        var opcode: UInt32 {
+            switch self {
+            case .lsl: return 0b001000
+            case .lsr: return 0b001001
+            case .asr: return 0b001010
+            case .ror: return 0b001011
+            }
+        }
+
+        static func decode(opcode: UInt32) -> VariableShiftKind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
     /// FEAT_CSSC integer minimum/maximum (`smax`/`umax`/`smin`/`umin`) on
     /// general-purpose registers, in both register (`Rd, Rn, Rm`) and
     /// immediate (`Rd, Rn, #imm`) forms.
@@ -2578,6 +2598,7 @@ internal enum A64 {
         case extractOrRotateAlias(ExtractKind, destination: Register, first: Register, operand: ExtractOperand)
         case multiply(MultiplyKind, destination: Register, first: Register, second: Register, accumulator: Register?)
         case divide(DivideKind, destination: Register, first: Register, second: Register)
+        case variableShift(VariableShiftKind, destination: Register, first: Register, second: Register)
         case minMaxRegister(MinMaxKind, destination: Register, first: Register, second: Register)
         case minMaxImmediate(MinMaxKind, destination: Register, source: Register, immediate: Int64)
         case addSubCarry(AddSubCarryKind, destination: Register, first: Register, second: Register)

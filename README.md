@@ -19,6 +19,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - add / sub, compare (cmp / cmn)
 - logical (and / orr / eor / bic / orn / ...) and mvn
 - shifts (lsl / lsr / asr), extract and rotate (extr / ror)
+- variable (register) shifts (lslv / lsrv / asrv / rorv, with the lsl / lsr / asr / ror register-operand aliases)
 - multiply / divide (mul / madd / msub / udiv / sdiv)
 - wide multiply (smull / umull / smaddl / umaddl / smsubl / umsubl / smnegl / umnegl / smulh / umulh)
 - data-processing (1 source) (rbit / rev16 / rev32 / rev / clz / cls)
