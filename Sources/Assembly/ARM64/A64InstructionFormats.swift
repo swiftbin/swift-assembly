@@ -469,4 +469,46 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rt = BitField(offset: 0, width: 5)
     }
+
+    /// Load/store register pair (`LDP`/`STP`/`LDNP`/`STNP`/`LDPSW`). `opc`
+    /// selects width/signedness; `mode`[24:23] selects the addressing form;
+    /// `l` selects load.
+    enum LoadStorePair {
+        static let baseWord: UInt32 = 0x2800_0000
+        static let classMask: UInt32 = 0x3e00_0000
+
+        static let opc = BitField(offset: 30, width: 2)
+        static let mode = BitField(offset: 23, width: 2)
+        static let l = BitField(offset: 22, width: 1)
+        static let imm7 = BitField(offset: 15, width: 7)
+        static let rt2 = BitField(offset: 10, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// Load/store unprivileged (`LDTR`/`STTR`/...). `size`/`opc` select the
+    /// variant; `imm9` is the signed unscaled offset.
+    enum LoadStoreUnprivileged {
+        static let baseWord: UInt32 = 0x3800_0800
+        static let classMask: UInt32 = 0x3f20_0c00
+
+        static let size = BitField(offset: 30, width: 2)
+        static let opc = BitField(offset: 22, width: 2)
+        static let imm9 = BitField(offset: 12, width: 9)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// RCpc unscaled (`LDAPUR`/`STLUR`/...). `size`/`opc` select the variant;
+    /// `imm9` is the signed unscaled offset.
+    enum RCpcUnscaledImmediate {
+        static let baseWord: UInt32 = 0x1900_0000
+        static let classMask: UInt32 = 0x3f20_0c00
+
+        static let size = BitField(offset: 30, width: 2)
+        static let opc = BitField(offset: 22, width: 2)
+        static let imm9 = BitField(offset: 12, width: 9)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
 }

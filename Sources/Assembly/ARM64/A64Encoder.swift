@@ -172,9 +172,13 @@ internal enum A64InstructionEncoder {
             guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
             try checkRange(offset, -256...255, instruction: kind.rawValue)
             let (size, opc) = kind.fields(is64Bit: target.is64Bit)
-            return (size << 30) | 0x1900_0000 | (opc << 22)
-                | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12)
-                | (base.encodedNumber << 5) | target.encodedNumber
+            typealias F = A64.RCpcUnscaledImmediate
+            return F.baseWord
+                | F.size.insert(size)
+                | F.opc.insert(opc)
+                | F.imm9.insert(UInt32(bitPattern: Int32(offset)))
+                | F.rn.insert(base.encodedNumber)
+                | F.rt.insert(target.encodedNumber)
         case .systemInstruction(let read, let op1, let crn, let crm, let op2, let register):
             if let register = register, !register.is64Bit {
                 throw AssemblerError.invalidRegister(read ? "sysl" : "sys")
@@ -801,9 +805,17 @@ internal enum A64LoadStoreEncoder {
             guard rs.is64Bit == rt.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
             size = rt.is64Bit ? 0b11 : 0b10
         }
-        let head = (size << 30) | 0x0800_0000 | (1 << 23) | (kind.acquire << 22) | (1 << 21)
-            | (rs.encodedNumber << 16) | (kind.release << 15) | (0b11111 << 10)
-        return head | (base.encodedNumber << 5) | rt.encodedNumber
+        typealias F = A64.LoadStoreExclusive
+        return F.baseWord
+            | F.size.insert(size)
+            | F.o2.insert(1)
+            | F.l.insert(kind.acquire)
+            | F.o1.insert(1)
+            | F.rs.insert(rs.encodedNumber)
+            | F.o0.insert(kind.release)
+            | F.rt2.insert(0b11111)
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(rt.encodedNumber)
     }
 
     static func compareAndSwapPair(_ kind: A64.CompareAndSwapPairKind, compare rs: IntegerRegister, value rt: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
@@ -814,9 +826,16 @@ internal enum A64LoadStoreEncoder {
             throw AssemblerError.invalidRegister(kind.rawValue)
         }
         let size: UInt32 = rt.is64Bit ? 0b01 : 0b00
-        let head = (size << 30) | 0x0800_0000 | (kind.acquire << 22) | (1 << 21)
-            | (rs.encodedNumber << 16) | (kind.release << 15) | (0b11111 << 10)
-        return head | (base.encodedNumber << 5) | rt.encodedNumber
+        typealias F = A64.LoadStoreExclusive
+        return F.baseWord
+            | F.size.insert(size)
+            | F.l.insert(kind.acquire)
+            | F.o1.insert(1)
+            | F.rs.insert(rs.encodedNumber)
+            | F.o0.insert(kind.release)
+            | F.rt2.insert(0b11111)
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(rt.encodedNumber)
     }
 
     static func atomicMemory(_ kind: A64.AtomicMemoryKind, source rs: IntegerRegister, value rt: IntegerRegister?, base: IntegerRegister) throws -> UInt32 {
@@ -945,8 +964,17 @@ internal enum A64LoadStoreEncoder {
             throw AssemblerError.unsupportedOperand(mnemonic)
         }
         try checkRange(offset, -256...255, instruction: mnemonic)
-        // Unscaled base with bits[11:10]=10 selecting the unprivileged variant.
-        return descriptor.unscaledBase | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (0b10 << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+        // size/opc come from the unscaled descriptor's base word; the
+        // unprivileged class word adds bits[11:10]=10.
+        typealias F = A64.LoadStoreUnprivileged
+        let size = (descriptor.unscaledBase >> 30) & 3
+        let opc = (descriptor.unscaledBase >> 22) & 3
+        return F.baseWord
+            | F.size.insert(size)
+            | F.opc.insert(opc)
+            | F.imm9.insert(UInt32(bitPattern: Int32(offset)))
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(rt.encodedNumber)
     }
 
     static func literal(_ kind: A64.LoadLiteralKind, target rt: IntegerRegister, offset: Int64) throws -> UInt32 {
@@ -992,17 +1020,18 @@ internal enum A64LoadStoreEncoder {
         // LDPSW always uses 64-bit destinations with a word (4-byte) scale.
         if kind.isSignedWord { guard rt.is64Bit else { throw AssemblerError.invalidRegister(mnemonic) } }
         let scale: Int64 = kind.isSignedWord ? 4 : (rt.is64Bit ? 8 : 4)
-        let modeBase: UInt32
+        // `mode`[24:23]: 00=no-allocate, 01=post-indexed, 10=signed offset, 11=pre-indexed.
+        let mode: UInt32
         let base: IntegerRegister
         let offset: Int64
         switch memory {
-        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): modeBase = kind.isNoAllocate ? 0x28000000 : 0x29000000; base = b; offset = o
+        case .signedUnscaled(let b, let o), .unsignedOffset(let b, let o): mode = kind.isNoAllocate ? 0 : 2; base = b; offset = o
         case .postIndexed(let b, let o):
             guard !kind.isNoAllocate else { throw AssemblerError.unsupportedOperand(mnemonic) }
-            modeBase = 0x28800000; base = b; offset = o
+            mode = 1; base = b; offset = o
         case .preIndexed(let b, let o):
             guard !kind.isNoAllocate else { throw AssemblerError.unsupportedOperand(mnemonic) }
-            modeBase = 0x29800000; base = b; offset = o
+            mode = 3; base = b; offset = o
         case .registerOffset: throw AssemblerError.unsupportedOperand(mnemonic)
         }
         guard offset % scale == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: offset, alignment: scale) }
@@ -1010,8 +1039,15 @@ internal enum A64LoadStoreEncoder {
         try checkRange(imm7, -64...63, instruction: mnemonic)
         // `opc`: 00=word, 10=doubleword, 01=signed word (LDPSW).
         let opc: UInt32 = kind.isSignedWord ? 1 : (rt.is64Bit ? 2 : 0)
-        let head = (opc << 30) | modeBase | ((kind.isLoad ? UInt32(1) : 0) << 22)
-        return head | ((UInt32(bitPattern: Int32(imm7)) & 0x7f) << 15) | (rt2.encodedNumber << 10) | (base.encodedNumber << 5) | rt.encodedNumber
+        typealias F = A64.LoadStorePair
+        return F.baseWord
+            | F.opc.insert(opc)
+            | F.mode.insert(mode)
+            | F.l.insert(kind.isLoad ? 1 : 0)
+            | F.imm7.insert(UInt32(bitPattern: Int32(imm7)))
+            | F.rt2.insert(rt2.encodedNumber)
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(rt.encodedNumber)
     }
 
     static func singleFP(_ kind: A64.LoadStoreSingleKind, target rt: A64.FPRegister, memory: MemoryOperand) throws -> UInt32 {

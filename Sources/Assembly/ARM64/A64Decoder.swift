@@ -799,16 +799,17 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeCompareAndSwap(_ word: UInt32) -> Instruction? {
-        guard word & 0x3f00_0000 == 0x0800_0000 else { return nil }
-        let o2 = (word >> 23) & 1
-        let o1 = (word >> 21) & 1
+        typealias F = A64.LoadStoreExclusive
+        guard word & F.classMask == F.baseWord else { return nil }
+        let o2 = F.o2.extract(word)
+        let o1 = F.o1.extract(word)
         guard o1 == 1 else { return nil }
-        let size = (word >> 30) & 3
-        let acquire = (word >> 22) & 1
-        let release = (word >> 15) & 1
-        let rsNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rtNum = word & 0x1f
+        let size = F.size.extract(word)
+        let acquire = F.l.extract(word)
+        let release = F.o0.extract(word)
+        let rsNum = F.rs.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rtNum = F.rt.extract(word)
 
         if o2 == 1 {
             // Compare and swap (single register).
@@ -947,14 +948,12 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeRCpcUnscaled(_ word: UInt32) -> Instruction? {
-        // LDAPUR/STLUR: bits[29:24]=011001, bit21=0, bits[11:10]=00.
-        guard word & 0x3f20_0c00 == 0x1900_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
-        guard let info = RCpcUnscaledKind.decode(size: size, opc: opc) else { return nil }
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let target = integerRegister(number: word & 0x1f, width: info.width)
-        let offset = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        typealias F = A64.RCpcUnscaledImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let info = RCpcUnscaledKind.decode(size: F.size.extract(word), opc: F.opc.extract(word)) else { return nil }
+        let base = xRegister(number: F.rn.extract(word))
+        let target = integerRegister(number: F.rt.extract(word), width: info.width)
+        let offset = signExtend(F.imm9.extract(word), bitCount: 9)
         return .rcpcUnscaled(info.kind, target: target, base: base, offset: offset)
     }
 
@@ -1056,14 +1055,12 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStoreUnprivileged(_ word: UInt32) -> Instruction? {
-        // size 111 0 00 opc 0 imm9 10 Rn Rt (V=0, bit21=0, bits[11:10]=10).
-        guard word & 0x3f20_0c00 == 0x3800_0800 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
-        guard let info = A64.LoadStoreUnprivilegedKind.decode(size: size, opc: opc) else { return nil }
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: info.width)
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        typealias F = A64.LoadStoreUnprivileged
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let info = A64.LoadStoreUnprivilegedKind.decode(size: F.size.extract(word), opc: F.opc.extract(word)) else { return nil }
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: info.width)
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
         let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
         return .loadStoreUnprivileged(info.kind, target: rt, memory: mem)
     }
@@ -1110,19 +1107,20 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStorePair(_ word: UInt32) -> Instruction? {
-        guard word & 0x3e00_0000 == 0x2800_0000 else { return nil }
-        let opc2 = (word >> 30) & 3
-        let l = (word >> 22) & 1
+        typealias F = A64.LoadStorePair
+        guard word & F.classMask == F.baseWord else { return nil }
+        let opc2 = F.opc.extract(word)
+        let l = F.l.extract(word)
         // opc=01 is LDPSW (load-only, signed word into 64-bit registers).
         if opc2 == 1 {
             guard l == 1 else { return nil }
             let scale: Int64 = 4
-            let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
-            let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: 64)
-            let base = xRegister(number: (word >> 5) & 0x1f)
-            let rt = integerRegister(number: word & 0x1f, width: 64)
+            let offset = signExtend(F.imm7.extract(word), bitCount: 7) * scale
+            let rt2 = integerRegister(number: F.rt2.extract(word), width: 64)
+            let base = xRegister(number: F.rn.extract(word))
+            let rt = integerRegister(number: F.rt.extract(word), width: 64)
             let memory: MemoryOperand
-            switch (word >> 23) & 3 {
+            switch F.mode.extract(word) {
             case 1: memory = .postIndexed(base: base, offset: offset)
             case 2: memory = .unsignedOffset(base: base, offset: offset)
             case 3: memory = .preIndexed(base: base, offset: offset)
@@ -1134,13 +1132,13 @@ internal enum A64InstructionDecoder {
         let is64 = opc2 == 2
         let width = is64 ? 64 : 32
         let scale: Int64 = is64 ? 8 : 4
-        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
-        let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: width)
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: width)
+        let offset = signExtend(F.imm7.extract(word), bitCount: 7) * scale
+        let rt2 = integerRegister(number: F.rt2.extract(word), width: width)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: width)
         let memory: MemoryOperand
         let kind: A64.LoadStorePairKind
-        switch (word >> 23) & 3 {
+        switch F.mode.extract(word) {
         case 0:
             kind = l == 1 ? .ldnp : .stnp
             memory = .unsignedOffset(base: base, offset: offset)
