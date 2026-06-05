@@ -864,6 +864,29 @@ final class AssemblerTests: XCTestCase {
         }
     }
 
+    func testRangeTLBIInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi rvae1, x0"), 0xd5088620)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi rvaale1, x0"), 0xd50886e0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi rvae2is, x0"), 0xd50c8220)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi rvale3os, x0"), 0xd50e85a0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi ripas2e1, x0"), 0xd50c8440)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi ripas2le1os, x0"), 0xd50c84e0)
+    }
+
+    func testRangeTLBIRoundTrip() throws {
+        let ops = ["rvae1", "rvaae1", "rvale1", "rvaale1", "rvae1is", "rvaae1is", "rvale1is",
+                   "rvaale1is", "rvae1os", "rvaae1os", "rvale1os", "rvaale1os",
+                   "rvae2", "rvae2is", "rvae2os", "rvale2", "rvale2is", "rvale2os",
+                   "rvae3", "rvae3is", "rvae3os", "rvale3", "rvale3is", "rvale3os",
+                   "ripas2e1", "ripas2e1is", "ripas2e1os", "ripas2le1", "ripas2le1is", "ripas2le1os"]
+        for op in ops {
+            let source = "tlbi \(op), x2"
+            let word = try ARM64Assembler.assembleWord(source)
+            XCTAssertEqual(try ARM64Assembler.disassembleWord(word), source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(try ARM64Assembler.disassembleWord(word)), word)
+        }
+    }
+
     func testDataCacheTagOpInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("dc cvadp, x0"), 0xd50b7d20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("dc igvac, x0"), 0xd5087660)
