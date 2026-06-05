@@ -2082,6 +2082,37 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sturh w0, [x1, #2]"), 0x78002020)
     }
 
+    func testLoadLiteralInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr w0, #16"), 0x18000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr x0, #16"), 0x58000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldrsw x0, #16"), 0x98000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr w0, #-4"), 0x18ffffe0)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr x0, #0"), 0x58000000)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr x5, #1048572"), 0x587fffe5)
+    }
+
+    func testDisassembleLoadLiteral() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x18000080), "ldr w0, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x58000080), "ldr x0, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x98000080), "ldrsw x0, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x18ffffe0), "ldr w0, #-4")
+    }
+
+    func testLoadLiteralRoundTrip() throws {
+        for source in ["ldr w0, #16", "ldr x1, #-256", "ldrsw x2, #1024", "ldr w3, #-1048576", "ldr x4, #1048572"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testLoadLiteralInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldr w0, #3"))         // not word-aligned
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldr w0, #1048576"))   // offset out of range
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldrsw w0, #16"))      // ldrsw requires X
+    }
+
     func testLoadStoreUnprivilegedInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1]"), 0xb8400820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr x0, [x1]"), 0xf8400820)

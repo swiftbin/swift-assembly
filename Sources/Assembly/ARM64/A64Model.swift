@@ -517,6 +517,11 @@ internal enum A64 {
         case stur, sturb, sturh
     }
 
+    /// Load register (literal): PC-relative loads (`LDR`/`LDRSW`).
+    enum LoadLiteralKind: String, Equatable {
+        case ldr, ldrsw
+    }
+
     /// Load/store register (unprivileged): `LDTR`/`STTR` and their sized and
     /// sign-extending variants. These use the unscaled signed-immediate form
     /// only, with bits[11:10]=10 distinguishing them from `LDUR`/`STUR`.
@@ -2612,6 +2617,7 @@ internal enum A64 {
         case conditionalSelectAlias(ConditionalSelectAliasKind, destination: Register, source: Register, condition: Condition)
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
         case loadStoreUnprivileged(LoadStoreUnprivilegedKind, target: Register, memory: MemoryOperand)
+        case loadLiteral(LoadLiteralKind, target: Register, offset: Int64)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
         case loadStorePairFP(LoadStorePairKind, first: FPRegister, second: FPRegister, memory: MemoryOperand)

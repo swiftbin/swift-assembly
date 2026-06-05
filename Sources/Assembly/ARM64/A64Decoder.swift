@@ -60,6 +60,7 @@ internal enum A64InstructionDecoder {
         if let instruction = decodeMTEMemoryTag(word) { return instruction }
         if let instruction = decodeMTEStoreTagPair(word) { return instruction }
         if let instruction = decodeLoadStoreUnprivileged(word) { return instruction }
+        if let instruction = decodeLoadLiteral(word) { return instruction }
         if let instruction = decodeLoadStoreSingle(word) { return instruction }
         if let instruction = decodeLoadStorePair(word) { return instruction }
         if let instruction = decodeLoadStoreSingleFP(word) { return instruction }
@@ -1074,6 +1075,20 @@ internal enum A64InstructionDecoder {
             ? .preIndexed(base: base, offset: offset)
             : .unsignedOffset(base: base, offset: offset)
         return .pointerAuthLoad(kind, target: target, memory: memory)
+    }
+
+    private static func decodeLoadLiteral(_ word: UInt32) -> Instruction? {
+        // Load register (literal): bits[29:24]=011000 (V=0). opc selects W/X/SW.
+        guard word & 0x3f00_0000 == 0x1800_0000 else { return nil }
+        let opc = (word >> 30) & 3
+        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
+        let rt = word & 0x1f
+        switch opc {
+        case 0: return .loadLiteral(.ldr, target: integerRegister(number: rt, width: 32), offset: offset)
+        case 1: return .loadLiteral(.ldr, target: integerRegister(number: rt, width: 64), offset: offset)
+        case 2: return .loadLiteral(.ldrsw, target: integerRegister(number: rt, width: 64), offset: offset)
+        default: return nil   // opc=11 is PRFM (literal), not handled here
+        }
     }
 
     private static func decodeLoadStoreUnprivileged(_ word: UInt32) -> Instruction? {
