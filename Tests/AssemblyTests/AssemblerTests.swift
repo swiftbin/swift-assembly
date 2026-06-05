@@ -2113,6 +2113,28 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("ldrsw w0, #16"))      // ldrsw requires X
     }
 
+    func testLoadLiteralFPInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr s0, #16"), 0x1c000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr d0, #16"), 0x5c000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr q0, #16"), 0x9c000080)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("ldr s5, #-4"), 0x1cffffe5)
+    }
+
+    func testDisassembleLoadLiteralFP() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x1c000080), "ldr s0, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x5c000080), "ldr d0, #16")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x9c000080), "ldr q0, #16")
+    }
+
+    func testLoadLiteralFPRoundTrip() throws {
+        for source in ["ldr s0, #16", "ldr d1, #-256", "ldr q2, #1024", "ldr s3, #1048572"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
     func testLoadStoreUnprivilegedInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr w0, [x1]"), 0xb8400820)
         XCTAssertEqual(try ARM64Assembler.assembleWord("ldtr x0, [x1]"), 0xf8400820)

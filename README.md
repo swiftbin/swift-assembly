@@ -32,7 +32,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - add / subtract extended register (uxtb / uxth / uxtw / uxtx / sxtb / sxth / sxtw / sxtx with an optional shift, including stack-pointer operands)
 - hint instructions (yield / wfe / wfi / sev / sevl / esb / csdb and the generic hint #imm)
 - load / store (single and pair, including pre/post-indexed)
-- load register (literal) PC-relative (ldr `Wt`/`Xt` / ldrsw `Xt` with a label or `#imm` offset)
+- load register (literal) PC-relative (ldr `Wt`/`Xt` / ldrsw `Xt` and the SIMD&FP ldr `St`/`Dt`/`Qt`, with a label or `#imm` offset)
 - load / store exclusive and acquire/release ordered (ldxr / stxr / ldaxr / stlxr / ldar / stlr with byte/half/word/doubleword forms, plus the ldxp / stxp / ldaxp / stlxp pairs)
 - compare and swap (cas / casa / casl / casal with byte/half/word/doubleword forms, plus the casp / caspa / caspl / caspal register pairs)
 - atomic memory operations (ldadd / ldclr / ldeor / ldset / ldsmax / ldsmin / ldumax / ldumin and swp, with acquire/release and byte/half variants, plus the st* aliases)

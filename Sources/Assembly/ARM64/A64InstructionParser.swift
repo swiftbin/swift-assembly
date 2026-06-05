@@ -1278,13 +1278,16 @@ internal enum A64InstructionParser {
         case "ldr", "ldrb", "ldrh", "ldrsb", "ldrsh", "ldrsw", "str", "strb", "strh", "ldur", "ldurb", "ldurh", "ldursb", "ldursh", "ldursw", "stur", "sturb", "sturh":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 2...3)
-            // Load register (literal): `ldr Wt/Xt, <label|#imm>` / `ldrsw Xt, …`. The
-            // PC-relative form has no `[` memory operand and an integer target.
+            // Load register (literal): `ldr Wt/Xt, <label|#imm>` / `ldrsw Xt, …`, and the
+            // SIMD&FP `ldr St/Dt/Qt, …` form. The PC-relative form has no `[` memory operand.
             if (mnemonic == "ldr" || mnemonic == "ldrsw"),
                instruction.operands.count == 2,
-               !instruction.operands[1].trimmingCharacters(in: .whitespaces).hasPrefix("["),
-               let target = try? A64Parser.integerRegister(instruction.operands[0], allowSP: false) {
+               !instruction.operands[1].trimmingCharacters(in: .whitespaces).hasPrefix("[") {
                 let offset = try labelOrImmediateByteOffset(instruction.operands[1], pc: pc, labels: labels)
+                if mnemonic == "ldr", let target = try? A64Parser.floatRegister(instruction.operands[0]) {
+                    return .loadLiteralFP(target: target, offset: offset)
+                }
+                let target = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
                 return .loadLiteral(A64.LoadLiteralKind(rawValue: mnemonic)!, target: target, offset: offset)
             }
             // SIMD&FP form (`ldr q0, [x1]`, `str s0, [x1, #4]`, …): the target is a

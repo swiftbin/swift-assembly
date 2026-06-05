@@ -2618,6 +2618,7 @@ internal enum A64 {
         case loadStoreSingle(LoadStoreSingleKind, target: Register, memory: MemoryOperand)
         case loadStoreUnprivileged(LoadStoreUnprivilegedKind, target: Register, memory: MemoryOperand)
         case loadLiteral(LoadLiteralKind, target: Register, offset: Int64)
+        case loadLiteralFP(target: FPRegister, offset: Int64)
         case loadStorePair(LoadStorePairKind, first: Register, second: Register, memory: MemoryOperand)
         case loadStoreSingleFP(LoadStoreSingleKind, target: FPRegister, memory: MemoryOperand)
         case loadStorePairFP(LoadStorePairKind, first: FPRegister, second: FPRegister, memory: MemoryOperand)
