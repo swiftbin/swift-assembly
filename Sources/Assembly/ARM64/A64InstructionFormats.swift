@@ -172,4 +172,51 @@ extension A64 {
         static let imm16 = BitField(offset: 5, width: 16)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// Common discriminator fields shared by the add/subtract families:
+    /// `op` (add vs sub) and `s` (sets-flags). `sf` selects the operand width.
+    enum AddSubImmediate {
+        static let baseWord: UInt32 = 0x1100_0000
+        /// Class bits [28:23]=100010 (bit23=0 excludes the min/max immediate space).
+        static let classMask: UInt32 = 0x1f80_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 30, width: 1)
+        static let s = BitField(offset: 29, width: 1)
+        static let sh = BitField(offset: 22, width: 1)
+        static let imm12 = BitField(offset: 10, width: 12)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Add/subtract (shifted register). `shift` is the shift type [23:22].
+    enum AddSubShiftedRegister {
+        static let baseWord: UInt32 = 0x0b00_0000
+        static let classMask: UInt32 = 0x1f20_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 30, width: 1)
+        static let s = BitField(offset: 29, width: 1)
+        static let shift = BitField(offset: 22, width: 2)
+        static let rm = BitField(offset: 16, width: 5)
+        static let imm6 = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Add/subtract (extended register). `option` is the extend [15:13];
+    /// `imm3` the shift amount [12:10].
+    enum AddSubExtendedRegister {
+        static let baseWord: UInt32 = 0x0b20_0000
+        static let classMask: UInt32 = 0x1fe0_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 30, width: 1)
+        static let s = BitField(offset: 29, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let option = BitField(offset: 13, width: 3)
+        static let imm3 = BitField(offset: 10, width: 3)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
 }

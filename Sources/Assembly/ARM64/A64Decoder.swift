@@ -444,44 +444,45 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAddSubImmediate(_ word: UInt32) -> Instruction? {
-        // bits[28:23]=100010 (bit23=0 excludes the FEAT_CSSC min/max immediate space).
-        guard word & 0x1f80_0000 == 0x1100_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let s = (word >> 29) & 1
-        let sh = (word >> 22) & 1
-        let imm12 = (word >> 10) & 0xfff
+        // bit23=0 excludes the FEAT_CSSC min/max immediate space.
+        typealias F = A64.AddSubImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let op = F.op.extract(word)
+        let s = F.s.extract(word)
+        let sh = F.sh.extract(word)
+        let imm12 = F.imm12.extract(word)
         let width = sf == 1 ? 64 : 32
-        let rnNum = (word >> 5) & 0x1f
+        let rnNum = F.rn.extract(word)
         let operand = A64.AddSubOperand.immediate(Int64(imm12), shift: sh == 1 ? 12 : nil)
-        if s == 1 && word & 0x1f == 31 {
+        if s == 1 && F.rd.extract(word) == 31 {
             return .compareAlias(op == 1 ? .cmp : .cmn, first: baseRegister(number: rnNum, width: width), operand: operand)
         }
         let rn = baseRegister(number: rnNum, width: width)
-        let rd: IntegerRegister = s == 0 ? baseRegister(number: word & 0x1f, width: width) : integerRegister(number: word & 0x1f, width: width)
+        let rd: IntegerRegister = s == 0 ? baseRegister(number: F.rd.extract(word), width: width) : integerRegister(number: F.rd.extract(word), width: width)
         let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
         return .addSub(kind, destination: rd, first: rn, operand: operand)
     }
 
     private static func decodeAddSubShiftedRegister(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f20_0000 == 0x0b00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let s = (word >> 29) & 1
-        let shiftField = (word >> 22) & 3
-        guard let shiftKind = ShiftKind(rawValue: shiftField), shiftKind != .ror else { return nil }
-        let amount = (word >> 10) & 0x3f
+        typealias F = A64.AddSubShiftedRegister
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let op = F.op.extract(word)
+        let s = F.s.extract(word)
+        guard let shiftKind = ShiftKind(rawValue: F.shift.extract(word)), shiftKind != .ror else { return nil }
+        let amount = F.imm6.extract(word)
         let width = sf == 1 ? 64 : 32
         if sf == 0 && amount > 31 { return nil }
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rnNum = (word >> 5) & 0x1f
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let rnNum = F.rn.extract(word)
         let shift: ParsedShift? = (amount == 0 && shiftKind == .lsl) ? nil : ParsedShift(kind: shiftKind, amount: Int(amount))
         let operand = A64.AddSubOperand.shiftedRegister(rm, shift: shift)
-        if s == 1 && word & 0x1f == 31 {
+        if s == 1 && F.rd.extract(word) == 31 {
             return .compareAlias(op == 1 ? .cmp : .cmn, first: integerRegister(number: rnNum, width: width), operand: operand)
         }
         let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
-        return .addSub(kind, destination: integerRegister(number: word & 0x1f, width: width), first: integerRegister(number: rnNum, width: width), operand: operand)
+        return .addSub(kind, destination: integerRegister(number: F.rd.extract(word), width: width), first: integerRegister(number: rnNum, width: width), operand: operand)
     }
 
     private static func decodeLogicalImmediate(_ word: UInt32) -> Instruction? {
@@ -699,26 +700,26 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAddSubExtendedRegister(_ word: UInt32) -> Instruction? {
-        // op[28:24]=01011, opt[23:22]=00, and bit21=1 distinguish this from the
-        // shifted-register form (bit21=0).
-        guard word & 0x1fe0_0000 == 0x0b20_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let s = (word >> 29) & 1
-        guard let extend = ExtendKind(rawValue: (word >> 13) & 7) else { return nil }
-        let imm3 = (word >> 10) & 7
+        // bit21=1 distinguishes this from the shifted-register form (bit21=0).
+        typealias F = A64.AddSubExtendedRegister
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let op = F.op.extract(word)
+        let s = F.s.extract(word)
+        guard let extend = ExtendKind(rawValue: F.option.extract(word)) else { return nil }
+        let imm3 = F.imm3.extract(word)
         guard imm3 <= 4 else { return nil }
         let width = sf == 1 ? 64 : 32
         let rmWidth = (extend == .uxtx || extend == .sxtx) ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
-        let rnNum = (word >> 5) & 0x1f
+        let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
+        let rnNum = F.rn.extract(word)
         let amount = imm3 == 0 ? nil : Int(imm3)
         let operand = A64.AddSubOperand.extendedRegister(rm, extend: extend, amount: amount)
-        if s == 1 && word & 0x1f == 31 {
+        if s == 1 && F.rd.extract(word) == 31 {
             return .compareAlias(op == 1 ? .cmp : .cmn, first: baseRegister(number: rnNum, width: width), operand: operand)
         }
         let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
-        let rd: IntegerRegister = s == 0 ? baseRegister(number: word & 0x1f, width: width) : integerRegister(number: word & 0x1f, width: width)
+        let rd: IntegerRegister = s == 0 ? baseRegister(number: F.rd.extract(word), width: width) : integerRegister(number: F.rd.extract(word), width: width)
         return .addSub(kind, destination: rd, first: baseRegister(number: rnNum, width: width), operand: operand)
     }
 

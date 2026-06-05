@@ -1251,11 +1251,18 @@ internal enum A64AddSubEncoder {
         // `*x` extends, 32-bit otherwise.
         let expectedRmWidth = (extend == .uxtx || extend == .sxtx) ? 64 : 32
         guard rm.width == expectedRmWidth else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
         let op: UInt32 = (kind == .sub || kind == .subs) ? 1 : 0
         let s: UInt32 = (kind == .adds || kind == .subs) ? 1 : 0
-        let head = (sf << 31) | (op << 30) | (s << 29) | 0x0b20_0000
-        return head | (rm.encodedNumber << 16) | (extend.rawValue << 13) | (UInt32(amt) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.AddSubExtendedRegister
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.op.insert(op)
+            | F.s.insert(s)
+            | F.rm.insert(rm.encodedNumber)
+            | F.option.insert(extend.rawValue)
+            | F.imm3.insert(UInt32(amt))
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func compareAlias(_ kind: A64.CompareAliasKind, first rn: IntegerRegister, operand: A64.AddSubOperand) throws -> UInt32 {
@@ -1269,13 +1276,17 @@ internal enum A64AddSubEncoder {
             sh = 12
         }
         try checkRange(value, 0...0xfff, instruction: kind.rawValue)
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
         let op: UInt32 = (kind == .sub || kind == .subs) ? 1 : 0
         let s: UInt32 = (kind == .adds || kind == .subs) ? 1 : 0
-        let shBit: UInt32 = sh == 12 ? 1 : 0
-        let head = (sf << 31) | (op << 30) | (s << 29) | 0x11000000
-        let fields = (shBit << 22) | (UInt32(value) << 10)
-        return head | fields | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.AddSubImmediate
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.op.insert(op)
+            | F.s.insert(s)
+            | F.sh.insert(sh == 12 ? 1 : 0)
+            | F.imm12.insert(UInt32(value))
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     private static func shiftedRegister(_ kind: A64.AddSubKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, shift: ParsedShift?) throws -> UInt32 {
@@ -1283,11 +1294,18 @@ internal enum A64AddSubEncoder {
         let shiftKind = shift?.kind ?? .lsl
         let amount = shift?.amount ?? 0
         guard shiftKind != .ror else { throw AssemblerError.unsupportedShift("ror") }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
         let op: UInt32 = (kind == .sub || kind == .subs) ? 1 : 0
         let s: UInt32 = (kind == .adds || kind == .subs) ? 1 : 0
-        let head = (sf << 31) | (op << 30) | (s << 29) | 0x0b000000 | (shiftKind.rawValue << 22)
-        return head | (rm.encodedNumber << 16) | (UInt32(amount) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.AddSubShiftedRegister
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.op.insert(op)
+            | F.s.insert(s)
+            | F.shift.insert(shiftKind.rawValue)
+            | F.rm.insert(rm.encodedNumber)
+            | F.imm6.insert(UInt32(amount))
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 }
 
