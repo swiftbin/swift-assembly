@@ -907,6 +907,8 @@ internal enum A64 {
             ("cntvct_el0", SystemRegister(op0: 3, op1: 3, crn: 14, crm: 0, op2: 2)),
             ("cntfrq_el0", SystemRegister(op0: 3, op1: 3, crn: 14, crm: 0, op2: 0)),
             ("pmccntr_el0", SystemRegister(op0: 3, op1: 3, crn: 9, crm: 13, op2: 0)),
+            ("rndr", SystemRegister(op0: 3, op1: 3, crn: 2, crm: 4, op2: 0)),
+            ("rndrrs", SystemRegister(op0: 3, op1: 3, crn: 2, crm: 4, op2: 1)),
         ]
 
         /// The canonical name (a known register name, or the generic

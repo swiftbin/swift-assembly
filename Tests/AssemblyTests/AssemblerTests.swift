@@ -738,6 +738,8 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, sp_el0"), 0xd5384100)
         XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, cntvct_el0"), 0xd53be040)
         XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, pmccntr_el0"), 0xd53b9d00)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, rndr"), 0xd53b2400)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, rndrrs"), 0xd53b2420)
         // Generic S<op0>_<op1>_C<n>_C<m>_<op2> form.
         XCTAssertEqual(try ARM64Assembler.assembleWord("mrs x0, s3_3_c13_c2_1"), 0xd53bd220)
         XCTAssertEqual(try ARM64Assembler.assembleWord("msr s3_3_c13_c2_1, x5"), 0xd51bd225)
@@ -755,7 +757,7 @@ final class AssemblerTests: XCTestCase {
             "nzcv", "daif", "fpcr", "fpsr", "tpidr_el0", "tpidrro_el0", "tpidr_el1",
             "midr_el1", "mpidr_el1", "ctr_el0", "dczid_el0", "sp_el0", "elr_el1",
             "spsr_el1", "vbar_el1", "ttbr0_el1", "ttbr1_el1", "sctlr_el1", "esr_el1",
-            "far_el1", "cntvct_el0", "cntfrq_el0", "pmccntr_el0", "s3_3_c13_c2_1",
+            "far_el1", "cntvct_el0", "cntfrq_el0", "pmccntr_el0", "rndr", "rndrrs", "s3_3_c13_c2_1",
         ]
         var sources: [String] = []
         for name in names {
