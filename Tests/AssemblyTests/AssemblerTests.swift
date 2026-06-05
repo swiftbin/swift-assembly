@@ -832,6 +832,36 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("sysl x7, #0, c7, c5, #0"), 0xd5287507)
     }
 
+    func testExtendedTLBIInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vmalle1os"), 0xd508811f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vae1os, x0"), 0xd5088120)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi alle2"), 0xd50c871f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi alle3is"), 0xd50e831f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vae2, x0"), 0xd50c8720)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi ipas2e1is, x0"), 0xd50c8020)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vmalls12e1"), 0xd50c87df)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tlbi vale3, x0"), 0xd50e87a0)
+    }
+
+    func testExtendedTLBIRoundTrip() throws {
+        let regOps = ["vae1os", "aside1os", "vaae1os", "vale1os", "vaale1os",
+                      "vae2", "vae2is", "vae2os", "vale2", "vale2is", "vale2os",
+                      "vae3", "vae3is", "vae3os", "vale3", "vale3is", "vale3os",
+                      "ipas2e1", "ipas2e1is", "ipas2e1os", "ipas2le1", "ipas2le1is", "ipas2le1os"]
+        for op in regOps {
+            let source = "tlbi \(op), x2"
+            let word = try ARM64Assembler.assembleWord(source)
+            XCTAssertEqual(try ARM64Assembler.disassembleWord(word), source, "round trip failed for \(source)")
+        }
+        let noRegOps = ["vmalle1os", "alle2", "alle2is", "alle2os", "alle1", "alle1is", "alle1os",
+                        "alle3", "alle3is", "alle3os", "vmalls12e1", "vmalls12e1is", "vmalls12e1os"]
+        for op in noRegOps {
+            let source = "tlbi \(op)"
+            let word = try ARM64Assembler.assembleWord(source)
+            XCTAssertEqual(try ARM64Assembler.disassembleWord(word), source, "round trip failed for \(source)")
+        }
+    }
+
     func testDataCacheTagOpInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("dc cvadp, x0"), 0xd50b7d20)
         XCTAssertEqual(try ARM64Assembler.assembleWord("dc igvac, x0"), 0xd5087660)

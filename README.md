@@ -38,7 +38,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - prefetch memory (prfm / prfum with pld/pli/pst × l1/l2/l3 × keep/strm operations, immediate / register / unscaled addressing)
 - system register moves (mrs / msr with named registers such as nzcv / fpcr / tpidr_el0 and the generic S<op0>_<op1>_C<n>_C<m>_<op2> form)
 - PSTATE field writes (msr immediate: spsel / daifset / daifclr / uao / pan / dit / ssbs / tco / allint)
-- system instructions (sys / sysl plus the dc / ic / at / tlbi cache, address-translation, and TLB-maintenance aliases, including the FEAT_MTE tag and FEAT_DPB2 cvadp data-cache ops)
+- system instructions (sys / sysl plus the dc / ic / at / tlbi cache, address-translation, and TLB-maintenance aliases, including the FEAT_MTE tag and FEAT_DPB2 cvadp data-cache ops and the EL1-outer-shareable / EL2 / EL3 / IPAS2 TLBI ops)
 - RCpc unscaled load/store (ldapur / ldapurb / ldapurh / ldapursb / ldapursh / ldapursw / stlur / stlurb / stlurh)
 - PSTATE flag manipulation (cfinv / axflag / xaflag)
 - branches, labels, and address generation (adr / adrp)
