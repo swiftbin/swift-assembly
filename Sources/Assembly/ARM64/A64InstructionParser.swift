@@ -1369,7 +1369,7 @@ internal enum A64InstructionParser {
             let crm = try cRegisterNumber(instruction.operands[3], instruction: "sysl")
             let op2 = try systemFieldValue(instruction.operands[4], instruction: "sysl")
             return .systemInstruction(read: true, op1: op1, crn: crn, crm: crm, op2: op2, register: register)
-        case "dc", "ic", "at", "tlbi":
+        case "dc", "ic", "at", "tlbi", "cfp", "dvp", "cpp":
             guard parts.count == 1 else { return nil }
             try expectOperandCount(instruction, 1...2)
             guard let alias = A64.SystemInstructionAlias.find(

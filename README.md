@@ -68,6 +68,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - scalar BFloat16 convert (bfcvt `Hd, Sn`, single-precision to BF16)
 - load/store register (unprivileged) (ldtr / sttr / ldtrb / sttrb / ldtrh / sttrh / ldtrsb / ldtrsh / ldtrsw, unscaled signed offset)
 - FEAT_LOR LOAcquire/LORelease (ldlar / ldlarb / ldlarh / stllr / stllrb / stllrh)
+- FEAT_SPECRES prediction restriction by context (cfp rctx / dvp rctx / cpp rctx)
 - floating-point move between a general register and the high 64 bits of a vector register (fmov `x<d>, v<n>.d[1]` and `v<d>.d[1], x<n>`)
 - Advanced SIMD across-lanes reductions (addv / saddlv / uaddlv / smaxv / umaxv / sminv / uminv, and fmaxv / fminv / fmaxnmv / fminnmv in both the single-precision `.4s` and half-precision `.4h`/`.8h` forms)
 - Advanced SIMD two-register misc (rev64 / rev32 / rev16 / abs / neg / mvn / rbit / cnt / cls / clz / sqabs / sqneg / suqadd / usqadd / fabs / fneg / fsqrt)

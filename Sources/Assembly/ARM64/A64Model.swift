@@ -740,6 +740,10 @@ internal enum A64 {
             SystemInstructionAlias(family: "tlbi", name: "vaae1", op1: 0, crn: 8, crm: 7, op2: 3, needsRegister: true),
             SystemInstructionAlias(family: "tlbi", name: "vale1", op1: 0, crn: 8, crm: 7, op2: 5, needsRegister: true),
             SystemInstructionAlias(family: "tlbi", name: "vaale1", op1: 0, crn: 8, crm: 7, op2: 7, needsRegister: true),
+            // FEAT_SPECRES prediction restriction by context, CRn=c7, CRm=c3.
+            SystemInstructionAlias(family: "cfp", name: "rctx", op1: 3, crn: 7, crm: 3, op2: 4, needsRegister: true),
+            SystemInstructionAlias(family: "dvp", name: "rctx", op1: 3, crn: 7, crm: 3, op2: 5, needsRegister: true),
+            SystemInstructionAlias(family: "cpp", name: "rctx", op1: 3, crn: 7, crm: 3, op2: 7, needsRegister: true),
         ]
 
         /// Look up an alias by its family (`dc`/`ic`/`at`/`tlbi`) and operation name.

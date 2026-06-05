@@ -867,6 +867,33 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("sys #0, x7, c5, #0")) // CRn must be c<n>
     }
 
+    func testPredictionRestrictionInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cfp rctx, x0"), 0xd50b7380)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("dvp rctx, x3"), 0xd50b73a3)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("cpp rctx, x5"), 0xd50b73e5)
+    }
+
+    func testDisassemblePredictionRestriction() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50b7380), "cfp rctx, x0")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50b73a3), "dvp rctx, x3")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0xd50b73e5), "cpp rctx, x5")
+    }
+
+    func testPredictionRestrictionRoundTrip() throws {
+        for source in ["cfp rctx, x0", "dvp rctx, x7", "cpp rctx, x20"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
+    func testPredictionRestrictionInvalidInputsThrow() throws {
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cfp rctx"))       // requires a register
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cfp bogus, x0"))  // unknown operation
+        XCTAssertThrowsError(try ARM64Assembler.assembleWord("cfp rctx, w0"))   // register must be 64-bit
+    }
+
     func testPStateFlagInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("cfinv"), 0xd500401f)
         XCTAssertEqual(try ARM64Assembler.assembleWord("axflag"), 0xd500405f)
