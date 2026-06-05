@@ -142,6 +142,31 @@ final class AssemblerTests: XCTestCase {
         XCTAssertEqual(try ARM64Assembler.assembleWord("ror x0, x1, #8"), 0x93c12020)
     }
 
+    func testTestAliasInstructions() throws {
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tst w0, w1"), 0x6a01001f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tst x0, x1"), 0xea01001f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tst w0, #1"), 0x7200001f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tst x0, #0xff"), 0xf2401c1f)
+        XCTAssertEqual(try ARM64Assembler.assembleWord("tst w0, w1, lsl #2"), 0x6a01081f)
+    }
+
+    func testDisassembleTestAlias() throws {
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6a01001f), "tst w0, w1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x7200001f), "tst w0, #1")
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6a01081f), "tst w0, w1, lsl #2")
+        // A real destination keeps the ands form.
+        XCTAssertEqual(try ARM64Assembler.disassembleWord(0x6a020020), "ands w0, w1, w2")
+    }
+
+    func testTestAliasRoundTrip() throws {
+        for source in ["tst w0, w1", "tst x2, x3", "tst w4, #1", "tst w6, w7, lsl #3", "tst x8, x9, asr #4"] {
+            let word = try ARM64Assembler.assembleWord(source)
+            let text = try ARM64Assembler.disassembleWord(word)
+            XCTAssertEqual(text, source, "round trip failed for \(source)")
+            XCTAssertEqual(try ARM64Assembler.assembleWord(text), word, "re-assemble failed for \(source)")
+        }
+    }
+
     func testNegateAliasInstructions() throws {
         XCTAssertEqual(try ARM64Assembler.assembleWord("neg w0, w1"), 0x4b0103e0)
         XCTAssertEqual(try ARM64Assembler.assembleWord("neg x0, x1"), 0xcb0103e0)

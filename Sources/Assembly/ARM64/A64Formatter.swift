@@ -83,6 +83,10 @@ internal enum A64InstructionFormatter {
         case .compareAlias(let kind, let first, let operand):
             return "\(kind.rawValue) \(([formatRegister(first)] + formatAddSubOperand(operand, stackPointerInvolved: first.kind == .stackPointer, is64Bit: first.is64Bit)).joined(separator: ", "))"
         case .logical(let kind, let destination, let first, let operand):
+            // `ands` with the zero register as destination prefers the tst alias.
+            if kind == .ands, destination.kind == .zero {
+                return "tst \(([formatRegister(first)] + formatLogicalOperand(operand)).joined(separator: ", "))"
+            }
             return "\(kind.rawValue) \(([formatRegister(destination), formatRegister(first)] + formatLogicalOperand(operand)).joined(separator: ", "))"
         case .mvnAlias(let destination, let source, let shift):
             return "mvn \(([formatRegister(destination), formatRegister(source)] + (shift.map { [formatShift($0)] } ?? [])).joined(separator: ", "))"

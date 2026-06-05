@@ -976,6 +976,16 @@ internal enum A64InstructionParser {
                 first: cmpRn,
                 operand: cmpOp
             )
+        case "tst":
+            guard parts.count == 1 else { return nil }
+            try expectOperandCount(instruction, 2...3)
+            let tstRn = try A64Parser.integerRegister(instruction.operands[0], allowSP: false)
+            return .logical(
+                .ands,
+                destination: zeroRegister(width: tstRn.width),
+                first: tstRn,
+                operand: try logicalOperand(instruction, startIndex: 1)
+            )
         case "and", "ands", "orr", "eor", "bic", "bics", "orn", "eon":
             guard parts.count == 1 else { return nil }
             if ["and", "orr", "eor", "bic", "orn"].contains(mnemonic), allOperandsAreVectorRegisters(instruction) {
@@ -2479,14 +2489,14 @@ internal enum A64InstructionParser {
         return .extendedRegister(rm, extend: rn.is64Bit ? .uxtx : .uxtw, amount: nil)
     }
 
-    private static func logicalOperand(_ instruction: ParsedInstruction) throws -> A64.LogicalOperand {
-        if instruction.operands[2].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#") {
-            return .immediate(try A64Parser.immediate(instruction.operands[2]))
+    private static func logicalOperand(_ instruction: ParsedInstruction, startIndex: Int = 2) throws -> A64.LogicalOperand {
+        if instruction.operands[startIndex].trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix("#") {
+            return .immediate(try A64Parser.immediate(instruction.operands[startIndex]))
         }
 
         return .shiftedRegister(
-            try A64Parser.integerRegister(instruction.operands[2], allowSP: false),
-            shift: try instruction.operands.count == 4 ? shift(instruction.operands[3]) : nil
+            try A64Parser.integerRegister(instruction.operands[startIndex], allowSP: false),
+            shift: try instruction.operands.count == startIndex + 2 ? shift(instruction.operands[startIndex + 1]) : nil
         )
     }
 

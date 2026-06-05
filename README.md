@@ -17,7 +17,7 @@ In addition to turning assembly text into raw bytes, the reverse direction — d
 - disassemble machine code back into assembly text
 - move (wide / immediate / register aliases)
 - add / sub, compare (cmp / cmn), negate (neg / negs)
-- logical (and / orr / eor / bic / orn / ...) and mvn
+- logical (and / orr / eor / bic / orn / ...), mvn, and the tst alias
 - shifts (lsl / lsr / asr), extract and rotate (extr / ror)
 - variable (register) shifts (lslv / lsrv / asrv / rorv, with the lsl / lsr / asr / ror register-operand aliases)
 - multiply / divide (mul / madd / msub / udiv / sdiv)
