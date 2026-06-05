@@ -1357,10 +1357,13 @@ internal enum A64DataProcessingEncoder {
 
     static func divide(_ kind: A64.DivideKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let o1: UInt32 = kind == .sdiv ? 1 : 0
-        let head = (sf << 31) | 0x1ac00800
-        return head | (rm.encodedNumber << 16) | (o1 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing2Source
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.rm.insert(rm.encodedNumber)
+            | F.opcode.insert(kind.opcode)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func variableShift(_ kind: A64.VariableShiftKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
@@ -1376,9 +1379,13 @@ internal enum A64DataProcessingEncoder {
 
     static func minMaxRegister(_ kind: A64.MinMaxKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | 0x1ac0_0000
-        return head | (rm.encodedNumber << 16) | (kind.registerOpcode << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing2Source
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.rm.insert(rm.encodedNumber)
+            | F.opcode.insert(kind.registerOpcode)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func minMaxImmediate(_ kind: A64.MinMaxKind, destination rd: IntegerRegister, source rn: IntegerRegister, immediate: Int64) throws -> UInt32 {
@@ -1440,8 +1447,13 @@ internal enum A64DataProcessingEncoder {
         // Rd and Rn are always 32-bit; Rm is 64-bit only for the `x` variants.
         guard !rd.is64Bit, !rn.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
         guard rm.is64Bit == kind.usesDoubleWordSource else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let head = (kind.sf << 31) | 0x1ac0_0000
-        return head | (rm.encodedNumber << 16) | (kind.opcode << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.DataProcessing2Source
+        return F.baseWord
+            | F.sf.insert(kind.sf)
+            | F.rm.insert(rm.encodedNumber)
+            | F.opcode.insert(kind.opcode)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func dataProcessingOneSource(_ kind: A64.DataProcessingOneSourceKind, destination rd: IntegerRegister, source rn: IntegerRegister) throws -> UInt32 {

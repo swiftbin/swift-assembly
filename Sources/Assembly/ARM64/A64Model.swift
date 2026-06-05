@@ -228,8 +228,15 @@ internal enum A64 {
         case mul, mneg, madd, msub
     }
 
-    enum DivideKind: String, Equatable {
+    enum DivideKind: String, Equatable, CaseIterable {
         case udiv, sdiv
+
+        /// The data-processing-2-source `opcode` at [15:10].
+        var opcode: UInt32 { self == .udiv ? 0b000010 : 0b000011 }
+
+        static func decode(opcode: UInt32) -> DivideKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     /// Variable (register) shift (`LSLV`/`LSRV`/`ASRV`/`RORV`), disassembled

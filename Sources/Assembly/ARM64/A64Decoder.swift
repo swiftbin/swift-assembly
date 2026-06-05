@@ -646,14 +646,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeDivide(_ word: UInt32) -> Instruction? {
-        guard word & 0x7fe0_f800 == 0x1ac0_0800 else { return nil }
-        let sf = (word >> 31) & 1
-        let o1 = (word >> 10) & 1
-        let width = sf == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
-        return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.DivideKind.decode(opcode: F.opcode.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        return .divide(
+            kind,
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            first: integerRegister(number: F.rn.extract(word), width: width),
+            second: integerRegister(number: F.rm.extract(word), width: width)
+        )
     }
 
     private static func decodeVariableShift(_ word: UInt32) -> Instruction? {
@@ -672,15 +674,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMinMaxRegister(_ word: UInt32) -> Instruction? {
-        // FEAT_CSSC min/max (register): data-processing-2-source, opcode[15:12]=0110.
-        guard word & 0x7fe0_f000 == 0x1ac0_6000 else { return nil }
-        guard let kind = A64.MinMaxKind.decodeRegister(opcode: (word >> 10) & 0x3f) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        // FEAT_CSSC min/max (register): data-processing-2-source class.
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.MinMaxKind.decodeRegister(opcode: F.opcode.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
         return .minMaxRegister(
             kind,
-            destination: integerRegister(number: word & 0x1f, width: width),
-            first: integerRegister(number: (word >> 5) & 0x1f, width: width),
-            second: integerRegister(number: (word >> 16) & 0x1f, width: width)
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            first: integerRegister(number: F.rn.extract(word), width: width),
+            second: integerRegister(number: F.rm.extract(word), width: width)
         )
     }
 
@@ -738,14 +741,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeCRC32(_ word: UInt32) -> Instruction? {
-        // Data-processing 2-source group: bit30=0, S=0, op[28:21]=11010110.
-        guard word & 0x7fe0_0000 == 0x1ac0_0000 else { return nil }
-        let opcode = (word >> 10) & 0x3f
-        guard let kind = A64.CRC32Kind.decode(opcode: opcode) else { return nil }
+        // Data-processing 2-source class.
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.CRC32Kind.decode(opcode: F.opcode.extract(word)) else { return nil }
         // Rd and Rn are 32-bit; Rm is 64-bit only for the `x` variants.
-        let rd = integerRegister(number: word & 0x1f, width: 32)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: 32)
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: kind.usesDoubleWordSource ? 64 : 32)
+        let rd = integerRegister(number: F.rd.extract(word), width: 32)
+        let rn = integerRegister(number: F.rn.extract(word), width: 32)
+        let rm = integerRegister(number: F.rm.extract(word), width: kind.usesDoubleWordSource ? 64 : 32)
         return .crc32(kind, destination: rd, first: rn, data: rm)
     }
 
