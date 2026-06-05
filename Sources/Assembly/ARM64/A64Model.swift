@@ -200,8 +200,21 @@ internal enum A64 {
         var amount: Int
     }
 
-    enum MoveWideKind: String, Equatable {
+    enum MoveWideKind: String, Equatable, CaseIterable {
         case movz, movn, movk
+
+        /// The `opc` field at [30:29].
+        var opc: UInt32 {
+            switch self {
+            case .movn: return 0b00
+            case .movz: return 0b10
+            case .movk: return 0b11
+            }
+        }
+
+        static func decode(opc: UInt32) -> MoveWideKind? {
+            allCases.first { $0.opc == opc }
+        }
     }
 
     enum AddSubKind: String, Equatable {

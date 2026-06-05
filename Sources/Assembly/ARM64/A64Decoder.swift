@@ -382,19 +382,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMoveWide(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f80_0000 == 0x1280_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let kind: A64.MoveWideKind
-        switch (word >> 29) & 3 {
-        case 0: kind = .movn
-        case 2: kind = .movz
-        case 3: kind = .movk
-        default: return nil
-        }
-        let hw = (word >> 21) & 3
+        typealias F = A64.MoveWide
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        guard let kind = A64.MoveWideKind.decode(opc: F.opc.extract(word)) else { return nil }
+        let hw = F.hw.extract(word)
         if sf == 0 && hw > 1 { return nil }
-        let imm = Int64((word >> 5) & 0xffff)
-        let rd = integerRegister(number: word & 0x1f, width: sf == 1 ? 64 : 32)
+        let imm = Int64(F.imm16.extract(word))
+        let rd = integerRegister(number: F.rd.extract(word), width: sf == 1 ? 64 : 32)
         let shift = hw == 0 ? nil : Int(hw) * 16
         return .moveWide(kind, destination: rd, immediate: imm, shift: shift)
     }
@@ -579,30 +574,30 @@ internal enum A64InstructionDecoder {
         // Bitfield group fixed field [28:23]=100110. The shift-alias decoder
         // runs first and claims the asr/lsl/lsr patterns; everything else
         // (all bfm, plus the remaining sbfm/ubfm forms) lands here.
-        guard word & 0x1f80_0000 == 0x1300_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let n = (word >> 22) & 1
-        guard n == sf else { return nil }
-        guard let kind = A64.BitfieldKind.decode(opc: (word >> 29) & 3) else { return nil }
+        typealias F = A64.Bitfield
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        guard F.n.extract(word) == sf else { return nil }
+        guard let kind = A64.BitfieldKind.decode(opc: F.opc.extract(word)) else { return nil }
         let width = sf == 1 ? 64 : 32
-        let immr = (word >> 16) & 0x3f
-        let imms = (word >> 10) & 0x3f
-        let rd = integerRegister(number: word & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let immr = F.immr.extract(word)
+        let imms = F.imms.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .bitfield(kind, destination: rd, source: rn, immr: immr, imms: imms)
     }
 
     private static func decodeExtract(_ word: UInt32) -> Instruction? {
-        guard word & 0x7fa0_0000 == 0x1380_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let n = (word >> 22) & 1
-        guard n == sf else { return nil }
+        typealias F = A64.Extract
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        guard F.n.extract(word) == sf else { return nil }
         let width = sf == 1 ? 64 : 32
-        let imms = (word >> 10) & 0x3f
+        let imms = F.imms.extract(word)
         if sf == 0 && imms > 31 { return nil }
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         let rn = integerRegister(number: rnNum, width: width)
         if rmNum == rnNum {
             return .extractOrRotateAlias(.ror, destination: rd, first: rn, operand: .rotate(amount: Int64(imms)))
@@ -728,16 +723,13 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAddSubCarry(_ word: UInt32) -> Instruction? {
-        // op[28:21]=11010000 and the fixed opcode field [15:10]=000000.
-        guard word & 0x1fe0_fc00 == 0x1a00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let setsFlags = (word >> 29) & 1
-        let kind = A64.AddSubCarryKind.decode(op: op, setsFlags: setsFlags)
-        let width = sf == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        typealias F = A64.AddSubWithCarry
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind = A64.AddSubCarryKind.decode(op: F.op.extract(word), setsFlags: F.s.extract(word))
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         return .addSubCarry(kind, destination: rd, first: rn, second: rm)
     }
 

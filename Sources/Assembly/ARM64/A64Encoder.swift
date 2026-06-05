@@ -659,9 +659,13 @@ internal enum A64MoveEncoder {
         let shift = shift ?? 0
         guard shift % 16 == 0 else { throw AssemblerError.immediateAlignment(instruction: mnemonic, value: Int64(shift), alignment: 16) }
         guard rd.is64Bit || shift <= 16 else { throw AssemblerError.immediateOutOfRange(instruction: mnemonic, value: Int64(shift), range: 0...16) }
-        let opc: UInt32 = kind == .movn ? 0 : kind == .movz ? 2 : 3
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        return (sf << 31) | (opc << 29) | 0x12800000 | (UInt32(shift / 16) << 21) | (UInt32(imm) << 5) | rd.encodedNumber
+        typealias F = A64.MoveWide
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.opc.insert(kind.opc)
+            | F.hw.insert(UInt32(shift / 16))
+            | F.imm16.insert(UInt32(imm))
+            | F.rd.insert(rd.encodedNumber)
     }
 }
 
@@ -1329,8 +1333,14 @@ internal enum A64DataProcessingEncoder {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
         try checkRange(amount, 0...(rd.is64Bit ? 63 : 31), instruction: "extr")
         let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | 0x13800000 | (sf << 22)
-        return head | (rm.encodedNumber << 16) | (UInt32(amount) << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.Extract
+        return F.baseWord
+            | F.sf.insert(sf)
+            | F.n.insert(sf)
+            | F.rm.insert(rm.encodedNumber)
+            | F.imms.insert(UInt32(amount))
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func multiply(_ kind: A64.MultiplyKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, accumulator: IntegerRegister?) throws -> UInt32 {
@@ -1410,9 +1420,14 @@ internal enum A64DataProcessingEncoder {
 
     static func addSubCarry(_ kind: A64.AddSubCarryKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister) throws -> UInt32 {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (kind.op << 30) | (kind.setsFlags << 29) | 0x1a00_0000
-        return head | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.AddSubWithCarry
+        return F.baseWord
+            | F.sf.insert(rd.is64Bit ? 1 : 0)
+            | F.op.insert(kind.op)
+            | F.s.insert(kind.setsFlags)
+            | F.rm.insert(rm.encodedNumber)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func bitfield(_ kind: A64.BitfieldKind, destination rd: IntegerRegister, source rn: IntegerRegister, immr: UInt32, imms: UInt32) throws -> UInt32 {
@@ -1421,8 +1436,15 @@ internal enum A64DataProcessingEncoder {
         let registerSize: UInt32 = rd.is64Bit ? 64 : 32
         guard immr < registerSize, imms < registerSize else { throw AssemblerError.invalidImmediate(kind.rawValue) }
         let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (kind.opc << 29) | 0x1300_0000 | (sf << 22)
-        return head | (immr << 16) | (imms << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.Bitfield
+        return F.baseWord
+            | F.sf.insert(sf)
+            | F.opc.insert(kind.opc)
+            | F.n.insert(sf)
+            | F.immr.insert(immr)
+            | F.imms.insert(imms)
+            | F.rn.insert(rn.encodedNumber)
+            | F.rd.insert(rd.encodedNumber)
     }
 
     static func multiplyWide(_ kind: A64.MultiplyWideKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, accumulator: IntegerRegister?) throws -> UInt32 {

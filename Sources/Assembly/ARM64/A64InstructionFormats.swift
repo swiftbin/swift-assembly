@@ -112,4 +112,64 @@ extension A64 {
         static let rn = BitField(offset: 5, width: 5)
         static let rd = BitField(offset: 0, width: 5)
     }
+
+    /// Byte-level format descriptor for add/subtract with carry
+    /// (`ADC`/`ADCS`/`SBC`/`SBCS`). `op`/`s` select the variant via
+    /// `AddSubCarryKind`.
+    enum AddSubWithCarry {
+        static let baseWord: UInt32 = 0x1a00_0000
+        static let classMask: UInt32 = 0x1fe0_fc00
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let op = BitField(offset: 30, width: 1)
+        static let s = BitField(offset: 29, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Byte-level format descriptor for the bitfield class
+    /// (`SBFM`/`BFM`/`UBFM` and their many aliases). `opc` selects the variant;
+    /// `N` mirrors `sf`.
+    enum Bitfield {
+        static let baseWord: UInt32 = 0x1300_0000
+        /// Class bits [28:23]=100110 (sf/opc/N/immr/imms/registers excluded).
+        static let classMask: UInt32 = 0x1f80_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let opc = BitField(offset: 29, width: 2)
+        static let n = BitField(offset: 22, width: 1)
+        static let immr = BitField(offset: 16, width: 6)
+        static let imms = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Byte-level format descriptor for the extract class (`EXTR`, and the
+    /// `ROR` immediate alias). `N` mirrors `sf`; `imms` carries the rotate.
+    enum Extract {
+        static let baseWord: UInt32 = 0x1380_0000
+        static let classMask: UInt32 = 0x7fa0_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let n = BitField(offset: 22, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let imms = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Byte-level format descriptor for the move-wide-immediate class
+    /// (`MOVN`/`MOVZ`/`MOVK`). `opc` selects the variant via `MoveWideKind`;
+    /// `hw` is the shift/16.
+    enum MoveWide {
+        static let baseWord: UInt32 = 0x1280_0000
+        static let classMask: UInt32 = 0x1f80_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let opc = BitField(offset: 29, width: 2)
+        static let hw = BitField(offset: 21, width: 2)
+        static let imm16 = BitField(offset: 5, width: 16)
+        static let rd = BitField(offset: 0, width: 5)
+    }
 }
