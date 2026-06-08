@@ -1376,9 +1376,9 @@ internal enum A64VectorEncoder {
         guard let expectedDestination = widenedArrangement(rn.arrangement), rd.arrangement == expectedDestination else { throw fail() }
 
         let spec = kind.spec
-        let size = rn.arrangement.elementSize
-        let head = (rn.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
-        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorTwoRegisterMisc
+        return F.baseWord | F.q.insert(rn.arrangement.q) | F.u.insert(spec.u) | F.size.insert(rn.arrangement.elementSize)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func tableLookup(_ kind: A64.VectorTableLookupKind, destination rd: VectorRegister, table: A64.VectorRegisterList, index rm: VectorRegister) throws -> UInt32 {
@@ -1386,8 +1386,8 @@ internal enum A64VectorEncoder {
         // The destination and index share an 8b/16b arrangement; the table registers must be 16b.
         guard [A64.VectorArrangement.b8, .b16].contains(rd.arrangement), rd.arrangement == rm.arrangement else { throw fail() }
         guard table.arrangement == .b16, (1...4).contains(table.count) else { throw fail() }
-        let q = rd.arrangement.q
-        let len = UInt32(table.count - 1)
-        return 0x0e00_0000 | (q << 30) | (rm.encodedNumber << 16) | (len << 13) | (kind.op << 12) | (table.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorTableLookup
+        return F.baseWord | F.q.insert(rd.arrangement.q) | F.rm.insert(rm.encodedNumber)
+            | F.len.insert(UInt32(table.count - 1)) | F.op.insert(kind.op) | F.rn.insert(table.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 }

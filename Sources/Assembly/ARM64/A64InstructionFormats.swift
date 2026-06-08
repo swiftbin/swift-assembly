@@ -542,6 +542,20 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Advanced SIMD table lookup (`TBL`/`TBX`). `len`[14:13] = table size − 1;
+    /// `op`[12] selects TBX.
+    enum VectorTableLookup {
+        static let baseWord: UInt32 = 0x0e00_0000
+        static let classMask: UInt32 = 0xbfe0_8c00
+
+        static let q = BitField(offset: 30, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let len = BitField(offset: 13, width: 2)
+        static let op = BitField(offset: 12, width: 1)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Advanced SIMD shift-by-immediate (`SHL`/`SSHR`/`SHRN`/`SSHLL`/...).
     /// `immh`[22:19]:`immb`[18:16] encode the element size and shift amount;
     /// `opcode`[15:11] selects the operation.
