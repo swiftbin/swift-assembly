@@ -2472,14 +2472,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorCopy(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[28:21]=01110000, bit15=0, bit10=1.
-        guard word & 0x9fe0_8400 == 0x0e00_0400 else { return nil }
-        let q = (word >> 30) & 1
-        let op = (word >> 29) & 1
-        let imm5 = (word >> 16) & 0x1f
-        let imm4 = (word >> 11) & 0xf
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorCopy
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let op = F.op.extract(word)
+        let imm5 = F.imm5.extract(word)
+        let imm4 = F.imm4.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         // The lowest set bit of `imm5` selects the element size.
         let width: A64.VectorElementWidth

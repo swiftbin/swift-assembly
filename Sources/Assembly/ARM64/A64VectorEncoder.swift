@@ -314,9 +314,8 @@ internal enum A64VectorEncoder {
     }
 
     private static func encodeCopy(q: UInt32, op: UInt32, imm5: UInt32, imm4: UInt32, rn: UInt32, rd: UInt32) -> UInt32 {
-        // Base: bits[28:24]=01110, bit10=1.
-        let base: UInt32 = 0x0e00_0400
-        return (q << 30) | (op << 29) | base | (imm5 << 16) | (imm4 << 11) | (rn << 5) | rd
+        typealias F = A64.VectorCopy
+        return F.baseWord | F.q.insert(q) | F.op.insert(op) | F.imm5.insert(imm5) | F.imm4.insert(imm4) | F.rn.insert(rn) | F.rd.insert(rd)
     }
 
     private static func validateLane(_ element: A64.VectorElement) throws {

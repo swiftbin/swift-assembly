@@ -542,6 +542,20 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Advanced SIMD copy (`DUP`/`INS`/`SMOV`/`UMOV`). `imm5`[20:16] selects the
+    /// element/lane; `imm4`[14:11] selects the operation; `op`[29] is INS-element.
+    enum VectorCopy {
+        static let baseWord: UInt32 = 0x0e00_0400
+        static let classMask: UInt32 = 0x9fe0_8400
+
+        static let q = BitField(offset: 30, width: 1)
+        static let op = BitField(offset: 29, width: 1)
+        static let imm5 = BitField(offset: 16, width: 5)
+        static let imm4 = BitField(offset: 11, width: 4)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Advanced SIMD table lookup (`TBL`/`TBX`). `len`[14:13] = table size − 1;
     /// `op`[12] selects TBX.
     enum VectorTableLookup {
