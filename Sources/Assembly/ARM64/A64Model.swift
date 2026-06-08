@@ -271,8 +271,36 @@ internal enum A64 {
         case cmp, cmn
     }
 
-    enum LogicalKind: String, Equatable {
+    enum LogicalKind: String, Equatable, CaseIterable {
         case and, ands, orr, eor, bic, bics, orn, eon
+
+        /// The `opc` field at [30:29].
+        var opc: UInt32 {
+            switch self {
+            case .and, .bic: return 0b00
+            case .orr, .orn: return 0b01
+            case .eor, .eon: return 0b10
+            case .ands, .bics: return 0b11
+            }
+        }
+
+        /// The `N` bit at [21] (set for the bit-clear/NOT variants).
+        var n: UInt32 {
+            switch self {
+            case .bic, .orn, .eon, .bics: return 1
+            default: return 0
+            }
+        }
+
+        /// Decode the shifted-register form (`opc`+`N` select all eight ops).
+        static func decodeShifted(opc: UInt32, n: UInt32) -> LogicalKind? {
+            allCases.first { $0.opc == opc && $0.n == n }
+        }
+
+        /// Decode the immediate form (only the four `N`=0 ops are valid).
+        static func decodeImmediate(opc: UInt32) -> LogicalKind? {
+            allCases.first { $0.n == 0 && $0.opc == opc }
+        }
     }
 
     enum ShiftAliasKind: String, Equatable {

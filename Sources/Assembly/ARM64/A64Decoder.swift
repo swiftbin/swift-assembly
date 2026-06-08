@@ -444,14 +444,7 @@ internal enum A64InstructionDecoder {
         let immr = F.immr.extract(word)
         let imms = F.imms.extract(word)
         guard let value = A64BitmaskImmediate.decode(n: n, immr: immr, imms: imms, width: width) else { return nil }
-        let kind: A64.LogicalKind
-        switch F.opc.extract(word) {
-        case 0: kind = .and
-        case 1: kind = .orr
-        case 2: kind = .eor
-        case 3: kind = .ands
-        default: return nil
-        }
+        guard let kind = A64.LogicalKind.decodeImmediate(opc: F.opc.extract(word)) else { return nil }
         let rd = integerRegister(number: F.rd.extract(word), width: width)
         let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .logical(kind, destination: rd, first: rn, operand: .immediate(Int64(bitPattern: value)))
@@ -466,18 +459,7 @@ internal enum A64InstructionDecoder {
         let amount = F.imm6.extract(word)
         let width = sf == 1 ? 64 : 32
         if sf == 0 && amount > 31 { return nil }
-        let kind: A64.LogicalKind
-        switch (F.opc.extract(word), n) {
-        case (0, 0): kind = .and
-        case (0, 1): kind = .bic
-        case (1, 0): kind = .orr
-        case (1, 1): kind = .orn
-        case (2, 0): kind = .eor
-        case (2, 1): kind = .eon
-        case (3, 0): kind = .ands
-        case (3, 1): kind = .bics
-        default: return nil
-        }
+        guard let kind = A64.LogicalKind.decodeShifted(opc: F.opc.extract(word), n: n) else { return nil }
         let rm = integerRegister(number: F.rm.extract(word), width: width)
         let rnNum = F.rn.extract(word)
         let rd = integerRegister(number: F.rd.extract(word), width: width)

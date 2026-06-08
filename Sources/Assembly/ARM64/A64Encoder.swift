@@ -696,14 +696,8 @@ internal enum A64LogicalEncoder {
 
     static func immediate(_ kind: A64.LogicalKind, destination rd: IntegerRegister, first rn: IntegerRegister, value: Int64) throws -> UInt32 {
         guard rd.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let opc: UInt32
-        switch kind {
-        case .and: opc = 0
-        case .orr: opc = 1
-        case .eor: opc = 2
-        case .ands: opc = 3
-        default: throw AssemblerError.unsupportedOperand(kind.rawValue)
-        }
+        guard kind.n == 0 else { throw AssemblerError.unsupportedOperand(kind.rawValue) }
+        let opc = kind.opc
         let width = rd.is64Bit ? 64 : 32
         let mask: UInt64 = width == 64 ? UInt64.max : 0xffff_ffff
         guard let encoding = A64BitmaskImmediate.encode(UInt64(bitPattern: value) & mask, width: width) else {
@@ -725,24 +719,12 @@ internal enum A64LogicalEncoder {
         let shiftKind = shift?.kind ?? .lsl
         let amount = shift?.amount ?? 0
         guard rd.is64Bit || amount <= 31 else { throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: Int64(amount), range: 0...31) }
-        let opc: UInt32
-        let n: UInt32
-        switch kind {
-        case .and: opc = 0; n = 0
-        case .bic: opc = 0; n = 1
-        case .orr: opc = 1; n = 0
-        case .orn: opc = 1; n = 1
-        case .eor: opc = 2; n = 0
-        case .eon: opc = 2; n = 1
-        case .ands: opc = 3; n = 0
-        case .bics: opc = 3; n = 1
-        }
         typealias F = A64.LogicalShiftedRegister
         return F.baseWord
             | F.sf.insert(rd.is64Bit ? 1 : 0)
-            | F.opc.insert(opc)
+            | F.opc.insert(kind.opc)
             | F.shift.insert(shiftKind.rawValue)
-            | F.n.insert(n)
+            | F.n.insert(kind.n)
             | F.rm.insert(rm.encodedNumber)
             | F.imm6.insert(UInt32(amount))
             | F.rn.insert(rn.encodedNumber)
