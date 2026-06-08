@@ -1702,7 +1702,8 @@ internal enum A64InstructionDecoder {
         // Crypto AES (`Vd.16b, Vn.16b`): fixed bits 01001110 00 10100 0 001xx 10.
         // Decoded ahead of the two-register-misc group, whose mask does not check
         // bit[19] and would otherwise mis-decode these as `cls`/`clz` forms.
-        guard word & 0xffff_cc00 == 0x4e28_4800 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffff_cc00 == (F.aesBase | (0b00100 << 12)) else { return nil }
         let opcode = (word >> 12) & 0x1f
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
@@ -1716,18 +1717,20 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSHA3(_ word: UInt32) -> Instruction? {
         // Crypto three-register SHA: 01011110 000 Rm 0 opcode 00 Rn Rd.
-        guard word & 0xffe0_8c00 == 0x5e00_0000 else { return nil }
-        let mNum = (word >> 16) & 0x1f
+        typealias F = A64.Crypto
+        guard word & 0xffe0_8c00 == F.sha3Base else { return nil }
+        let mNum = F.rm.extract(word)
         let opcode = (word >> 12) & 0x7
-        let nNum = (word >> 5) & 0x1f
-        let dNum = word & 0x1f
+        let nNum = F.rn.extract(word)
+        let dNum = F.rd.extract(word)
         guard let kind = A64.CryptoSHA3Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSHA3(kind, d: dNum, n: nNum, m: mNum)
     }
 
     private static func decodeCryptoSHA2(_ word: UInt32) -> Instruction? {
         // Crypto two-register SHA: 01011110 00 10100 0 000xx 10 Rn Rd.
-        guard word & 0xffff_cc00 == 0x5e28_0800 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffff_cc00 == F.sha2Base else { return nil }
         let opcode = (word >> 12) & 0x1f
         let nNum = (word >> 5) & 0x1f
         let dNum = word & 0x1f
@@ -1737,7 +1740,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSHA512(_ word: UInt32) -> Instruction? {
         // Three-register SHA512: 11001110 011 Rm 1 0 00 opcode Rn Rd.
-        guard word & 0xffe0_f000 == 0xce60_8000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_f000 == F.sha512Base else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoSHA512Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSHA512(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
@@ -1745,7 +1749,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoTwoReg(_ word: UInt32) -> Instruction? {
         // Two-register SHA512/SM4: 11001110 110 00000 10 00 opcode Rn Rd.
-        guard word & 0xffff_f000 == 0xcec0_8000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffff_f000 == F.twoRegBase else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoTwoRegKind.decode(opcode: opcode) else { return nil }
         return .cryptoTwoReg(kind, d: word & 0x1f, n: (word >> 5) & 0x1f)
@@ -1753,7 +1758,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSM3(_ word: UInt32) -> Instruction? {
         // Three-register SM3/SM4: 11001110 011 Rm 1 1 00 opcode Rn Rd.
-        guard word & 0xffe0_f000 == 0xce60_c000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_f000 == F.sm3Base else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoSM3Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSM3(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
@@ -1761,7 +1767,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSM3Indexed(_ word: UInt32) -> Instruction? {
         // Three-register SM3 "imm2": 11001110 010 Rm 1 0 imm2 opcode Rn Rd.
-        guard word & 0xffe0_c000 == 0xce40_8000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_c000 == F.sm3IndexedBase else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoSM3IndexedKind.decode(opcode: opcode) else { return nil }
         let index = (word >> 12) & 0x3
@@ -1770,13 +1777,15 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSM3SS1(_ word: UInt32) -> Instruction? {
         // Four-register SM3: 11001110 010 Rm 0 Ra Rn Rd.
-        guard word & 0xffe0_8000 == 0xce40_0000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_8000 == F.sm3ss1Base else { return nil }
         return .cryptoSM3SS1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
     }
 
     private static func decodeCryptoSHA3Four(_ word: UInt32) -> Instruction? {
         // Four-register SHA3: 11001110 0 Op0 Rm 0 Ra Rn Rd.
-        guard word & 0xff80_8000 == 0xce00_0000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xff80_8000 == F.sha3FourBase else { return nil }
         let op0 = (word >> 21) & 0x3
         guard let kind = A64.CryptoSHA3FourKind.decode(op0: op0) else { return nil }
         return .cryptoSHA3Four(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
@@ -1784,13 +1793,15 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoRAX1(_ word: UInt32) -> Instruction? {
         // Three-register SHA3 RAX1: 11001110 011 Rm 1 0 0011 Rn Rd.
-        guard word & 0xffe0_fc00 == 0xce60_8c00 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_fc00 == F.rax1Base else { return nil }
         return .cryptoRAX1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
     }
 
     private static func decodeCryptoXAR(_ word: UInt32) -> Instruction? {
         // XAR: 11001110 100 Rm imm6 Rn Rd.
-        guard word & 0xffe0_0000 == 0xce80_0000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_0000 == F.xarBase else { return nil }
         let imm6 = (word >> 10) & 0x3f
         return .cryptoXAR(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, imm6: imm6)
     }

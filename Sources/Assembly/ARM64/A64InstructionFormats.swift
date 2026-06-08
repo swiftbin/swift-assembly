@@ -542,6 +542,28 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Cryptographic extension instructions. The classes share the register
+    /// fields (`Rd`/`Rn`/`Rm`/`Ra`) but each has its own base word; opcode/imm
+    /// positions differ per class and stay at their call sites.
+    enum Crypto {
+        static let rd = BitField(offset: 0, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let ra = BitField(offset: 10, width: 5)
+        static let rm = BitField(offset: 16, width: 5)
+
+        static let sha3Base: UInt32 = 0x5e00_0000        // three-register SHA1/SHA256
+        static let sha2Base: UInt32 = 0x5e28_0800        // two-register SHA
+        static let aesBase: UInt32 = 0x4e28_0800         // AES (opcode adds into [16:12])
+        static let sha512Base: UInt32 = 0xce60_8000      // three-register SHA512
+        static let twoRegBase: UInt32 = 0xcec0_8000      // two-register SHA512/SM4
+        static let sm3Base: UInt32 = 0xce60_c000         // three-register SM3/SM4
+        static let sm3IndexedBase: UInt32 = 0xce40_8000  // SM3 imm2-indexed
+        static let sm3ss1Base: UInt32 = 0xce40_0000      // four-register SM3SS1
+        static let sha3FourBase: UInt32 = 0xce00_0000     // four-register SHA3
+        static let rax1Base: UInt32 = 0xce60_8c00        // SHA3 RAX1
+        static let xarBase: UInt32 = 0xce80_0000         // SHA3 XAR
+    }
+
     /// Advanced SIMD copy (`DUP`/`INS`/`SMOV`/`UMOV`). `imm5`[20:16] selects the
     /// element/lane; `imm4`[14:11] selects the operation; `op`[29] is INS-element.
     enum VectorCopy {

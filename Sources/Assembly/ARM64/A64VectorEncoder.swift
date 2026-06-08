@@ -1228,58 +1228,69 @@ internal enum A64VectorEncoder {
     }
 
     static func cryptoSHA3(_ kind: A64.CryptoSHA3Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
-        0x5e00_0000 | (m << 16) | (kind.opcode << 12) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sha3Base | F.rm.insert(m) | (kind.opcode << 12) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoSHA2(_ kind: A64.CryptoSHA2Kind, d: UInt32, n: UInt32) -> UInt32 {
-        0x5e28_0800 | (kind.opcode << 12) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sha2Base | (kind.opcode << 12) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoSHA512(_ kind: A64.CryptoSHA512Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
         // Three-register SHA512: 11001110 011 Rm 1 0 00 opcode Rn Rd.
-        0xce60_8000 | (m << 16) | (kind.opcode << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sha512Base | F.rm.insert(m) | (kind.opcode << 10) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoTwoReg(_ kind: A64.CryptoTwoRegKind, d: UInt32, n: UInt32) -> UInt32 {
         // Two-register SHA512/SM4: 11001110 110 00000 10 00 opcode Rn Rd.
-        0xcec0_8000 | (kind.opcode << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.twoRegBase | (kind.opcode << 10) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoSM3(_ kind: A64.CryptoSM3Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
         // Three-register SM3/SM4: 11001110 011 Rm 1 1 00 opcode Rn Rd.
-        0xce60_c000 | (m << 16) | (kind.opcode << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sm3Base | F.rm.insert(m) | (kind.opcode << 10) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoSM3Indexed(_ kind: A64.CryptoSM3IndexedKind, d: UInt32, n: UInt32, m: UInt32, index: UInt32) -> UInt32 {
         // Three-register SM3 "imm2": 11001110 010 Rm 1 0 imm2 opcode Rn Rd.
-        0xce40_8000 | (m << 16) | (index << 12) | (kind.opcode << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sm3IndexedBase | F.rm.insert(m) | (index << 12) | (kind.opcode << 10) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoSM3SS1(d: UInt32, n: UInt32, m: UInt32, a: UInt32) -> UInt32 {
         // Four-register SM3: 11001110 010 Rm 0 Ra Rn Rd.
-        0xce40_0000 | (m << 16) | (a << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sm3ss1Base | F.rm.insert(m) | F.ra.insert(a) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoSHA3Four(_ kind: A64.CryptoSHA3FourKind, d: UInt32, n: UInt32, m: UInt32, a: UInt32) -> UInt32 {
         // Four-register SHA3: 11001110 0 Op0 Rm 0 Ra Rn Rd.
-        0xce00_0000 | (kind.op0 << 21) | (m << 16) | (a << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.sha3FourBase | (kind.op0 << 21) | F.rm.insert(m) | F.ra.insert(a) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoRAX1(d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
         // Three-register SHA3 RAX1: 11001110 011 Rm 1 0 0011 Rn Rd.
-        0xce60_8c00 | (m << 16) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.rax1Base | F.rm.insert(m) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoXAR(d: UInt32, n: UInt32, m: UInt32, imm6: UInt32) throws -> UInt32 {
         // XAR: 11001110 100 Rm imm6 Rn Rd.
         guard imm6 <= 63 else { throw AssemblerError.invalidImmediate("xar") }
-        return 0xce80_0000 | (m << 16) | (imm6 << 10) | (n << 5) | d
+        typealias F = A64.Crypto
+        return F.xarBase | F.rm.insert(m) | (imm6 << 10) | F.rn.insert(n) | F.rd.insert(d)
     }
 
     static func cryptoAES(_ kind: A64.CryptoAESKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
         // Both operands are fixed `16b`.
         guard rd.arrangement == .b16, rn.arrangement == .b16 else { throw AssemblerError.invalidRegister(kind.rawValue) }
-        return 0x4e28_0800 | (kind.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.Crypto
+        return F.aesBase | (kind.opcode << 12) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func fpConvertPrecision(_ kind: A64.VectorFPConvertPrecisionKind, upper: Bool, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
