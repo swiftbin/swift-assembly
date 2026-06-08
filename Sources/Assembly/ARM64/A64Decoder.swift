@@ -2151,7 +2151,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorComplex(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01110, U=1, bit21=0, bits[15:14]=11, bit10=1.
-        guard word & 0xbf20_c400 == 0x2e00_c400 else { return nil }
+        guard word & 0xbf20_c400 == A64.AdvSIMD.complexMultiplyAdd else { return nil }
         let q = (word >> 30) & 1
         let size = (word >> 22) & 3
         guard let arrangement = complexArrangement(size: size, q: q) else { return nil }
@@ -2175,7 +2175,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorComplexByElement(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01111, U=1, bit12=1, bit10=0, bit15=0.
-        guard word & 0xbf00_9400 == 0x2f00_1000 else { return nil }
+        guard word & 0xbf00_9400 == A64.AdvSIMD.complexMultiplyAddByElement else { return nil }
         let q = (word >> 30) & 1
         let size = (word >> 22) & 3
         let l = (word >> 21) & 1
@@ -2701,7 +2701,7 @@ internal enum A64InstructionDecoder {
     private static func decodeVectorMatrixMultiply(_ word: UInt32) -> Instruction? {
         // FEAT_I8MM: Q=1, size=10, bit21=0, bits[15:12]=1010, bit10=0;
         // U(bit29) and B(bit11) select smmla/ummla/usmmla.
-        guard word & 0xcee0_f400 == 0x4e80_a400 else { return nil }
+        guard word & 0xcee0_f400 == A64.AdvSIMD.matrixMultiply else { return nil }
         let u = (word >> 29) & 1
         let b = (word >> 11) & 1
         let kind: A64.VectorMatrixMultiplyKind
@@ -2843,7 +2843,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorIndexed(_ word: UInt32) -> Instruction? {
         // bit31=0, bits[28:24]=01111, bit10=0.
-        guard word & 0x9f00_0400 == 0x0f00_0000 else { return nil }
+        guard word & 0x9f00_0400 == A64.AdvSIMD.vectorImmediate else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
@@ -2980,7 +2980,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarShiftNarrow(_ word: UInt32) -> Instruction? {
         // Shares the scalar shift-by-immediate base; narrowing forms have immh = 0xxx
         // (the highest set bit selects the destination element size).
-        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        guard word & 0xdf80_0400 == A64.AdvSIMD.scalarShift else { return nil }
         let u = (word >> 29) & 1
         let immh = (word >> 19) & 0xf
         let immb = (word >> 16) & 0x7
@@ -3012,7 +3012,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarShiftImmediate(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:23]=111110, bit10=1.
-        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        guard word & 0xdf80_0400 == A64.AdvSIMD.scalarShift else { return nil }
         let u = (word >> 29) & 1
         let immh = (word >> 19) & 0xf
         let immb = (word >> 16) & 0x7
@@ -3039,7 +3039,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarShiftFixedPoint(_ word: UInt32) -> Instruction? {
         // Shares the scalar shift-by-immediate base (bit30=1, bits[28:23]=111110, bit10=1),
         // distinguished by opcode (scvtf/ucvtf = 0b11100, fcvtzs/fcvtzu = 0b11111).
-        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        guard word & 0xdf80_0400 == A64.AdvSIMD.scalarShift else { return nil }
         let u = (word >> 29) & 1
         let immh = (word >> 19) & 0xf
         let immb = (word >> 16) & 0x7
@@ -3076,7 +3076,7 @@ internal enum A64InstructionDecoder {
         // bit22=1, bit21=0, bits[15:14]=00, bit10=1. Distinguished by (U, bit23,
         // opcode) where the encoded opcode field is only 3 bits ([13:11]) and the
         // full opcode is 0b11_000 | field.
-        guard word & 0xdf60_c400 == 0x5e40_0400 else { return nil }
+        guard word & 0xdf60_c400 == A64.AdvSIMD.scalarThreeSameFP16 else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let opcode = 0b11000 | ((word >> 11) & 0b111)
@@ -3123,7 +3123,7 @@ internal enum A64InstructionDecoder {
         // Half-precision scalar two-register misc: bit30=1, bits[28:24]=11110,
         // bit22=1, bits[21:17]=11100, bits[11:10]=10. Distinguished by
         // (U, bit23, opcode[16:12]); the narrow `fcvtxn` has no FP16 form.
-        guard word & 0xdf7e_0c00 == 0x5e78_0800 else { return nil }
+        guard word & 0xdf7e_0c00 == A64.AdvSIMD.scalarFPTwoRegisterMiscFP16 else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let opcode = (word >> 12) & 0x1f
@@ -3173,7 +3173,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarCopy(_ word: UInt32) -> Instruction? {
         // bit30=1, bits[28:21]=11110000, bit15=0, imm4[14:11]=0000, bit10=1 (DUP element scalar).
-        guard word & 0xffe0_fc00 == 0x5e00_0400 else { return nil }
+        guard word & 0xffe0_fc00 == A64.AdvSIMD.scalarCopy else { return nil }
         let imm5 = (word >> 16) & 0x1f
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
@@ -3197,7 +3197,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarIndexed(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11111, bit10=0.
-        guard word & 0xdf00_0400 == 0x5f00_0000 else { return nil }
+        guard word & 0xdf00_0400 == A64.AdvSIMD.scalarIndexed else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let l = (word >> 21) & 1

@@ -542,6 +542,33 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Base words for the remaining one-off Advanced SIMD classes (each used by
+    /// a single instruction group). Centralized here so the encoder and decoder
+    /// reference the same constant instead of duplicating the literal.
+    enum AdvSIMD {
+        static let vectorImmediate: UInt32 = 0x0f00_0000          // modified-immediate / by-element indexed
+        static let dotProduct: UInt32 = 0x0e80_9400
+        static let dotProductByElement: UInt32 = 0x0f80_e000
+        static let matrixMultiply: UInt32 = 0x4e80_a400
+        static let threeSameExtra: UInt32 = 0x0e00_8400
+        static let scalarThreeSameExtra: UInt32 = 0x5e00_8400
+        static let complexAdd: UInt32 = 0x2e00_e400
+        static let complexMultiplyAdd: UInt32 = 0x2e00_c400
+        static let complexMultiplyAddByElement: UInt32 = 0x2f00_1000
+        static let fpMultiplyLongByElement: UInt32 = 0x0f80_0000
+        static let bfDot: UInt32 = 0x2e40_fc00
+        static let bfDotByElement: UInt32 = 0x0f40_f000
+        static let bfMultiplyLong: UInt32 = 0x2ec0_fc00
+        static let bfMultiplyLongByElement: UInt32 = 0x0fc0_f000
+        static let bfMatrixMultiply: UInt32 = 0x6e40_ec00
+        static let bfConvertNarrow: UInt32 = 0x0ea1_6800
+        static let scalarShift: UInt32 = 0x5f00_0400              // scalar shift immediate/narrow/fixed-point
+        static let scalarThreeSameFP16: UInt32 = 0x5e40_0400
+        static let scalarFPTwoRegisterMiscFP16: UInt32 = 0x5e78_0800
+        static let scalarCopy: UInt32 = 0x5e00_0400
+        static let scalarIndexed: UInt32 = 0x5f00_0000
+    }
+
     /// Scalar Advanced SIMD instructions. Like the vector forms but with
     /// scalar operands; the classes share the register fields and each has its
     /// own base word. `opcode`/`size` positions differ per class (kept at the

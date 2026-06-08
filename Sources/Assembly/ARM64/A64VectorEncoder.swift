@@ -297,7 +297,7 @@ internal enum A64VectorEncoder {
         let q: UInt32 = arrangement == .d1 ? 0 : arrangement.q
         let abc = (UInt32(imm8) >> 5) & 0x7
         let defgh = UInt32(imm8) & 0x1f
-        let base: UInt32 = 0x0f00_0000 | (1 << 10)
+        let base: UInt32 = A64.AdvSIMD.vectorImmediate | (1 << 10)
         return (q << 30) | (op << 29) | base | (abc << 16) | (cmode << 12) | (defgh << 5) | rd.encodedNumber
     }
 
@@ -471,7 +471,7 @@ internal enum A64VectorEncoder {
     static func dotProduct(_ kind: A64.VectorDotProductKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
         guard let q = dotProductQ(destination: rd, first: rn), rn.arrangement == rm.arrangement else { throw fail() }
-        let base: UInt32 = 0x0e80_9400
+        let base: UInt32 = A64.AdvSIMD.dotProduct
         let head = (q << 30) | (kind.u << 29) | base
         return head | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -484,7 +484,7 @@ internal enum A64VectorEncoder {
         let h = (index >> 1) & 1
         let m = (elementRegister >> 4) & 1
         let rmLow = elementRegister & 0xf
-        let base: UInt32 = 0x0f80_e000
+        let base: UInt32 = A64.AdvSIMD.dotProductByElement
         let head = (q << 30) | (kind.u << 29) | base
         return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -517,7 +517,7 @@ internal enum A64VectorEncoder {
         guard rd.arrangement == .s4, rn.arrangement == .b16, rm.arrangement == .b16 else {
             throw AssemblerError.invalidRegister(kind.rawValue)
         }
-        let base: UInt32 = 0x4e80_a400
+        let base: UInt32 = A64.AdvSIMD.matrixMultiply
         return base | (kind.u << 29) | (rm.encodedNumber << 16) | (kind.b << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -532,7 +532,7 @@ internal enum A64VectorEncoder {
         case .s2, .s4: size = 0b10
         default: throw fail()
         }
-        let base: UInt32 = 0x0e00_8400   // bits[28:24]=01110, bit15=1, bit10=1.
+        let base: UInt32 = A64.AdvSIMD.threeSameExtra   // bits[28:24]=01110, bit15=1, bit10=1.
         let head = (rd.arrangement.q << 30) | (1 << 29) | base | (size << 22)
         return head | (rm.encodedNumber << 16) | (kind.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -546,7 +546,7 @@ internal enum A64VectorEncoder {
         case 32: size = 0b10
         default: throw fail()
         }
-        let base: UInt32 = 0x5e00_8400   // bit30=1, bits[28:24]=11110, bit15=1, bit10=1.
+        let base: UInt32 = A64.AdvSIMD.scalarThreeSameExtra   // bit30=1, bits[28:24]=11110, bit15=1, bit10=1.
         let head = (1 << 29) | base | (size << 22)
         return head | (rm.encodedNumber << 16) | (kind.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -574,7 +574,7 @@ internal enum A64VectorEncoder {
         case 270: rot = 1
         default:  throw fail()
         }
-        let base: UInt32 = 0x2e00_e400   // U=1, bits[28:24]=01110, bits[15:13]=111, bit10=1.
+        let base: UInt32 = A64.AdvSIMD.complexAdd   // U=1, bits[28:24]=01110, bits[15:13]=111, bit10=1.
         let head = (rd.arrangement.q << 30) | base | (size << 22)
         return head | (rm.encodedNumber << 16) | (rot << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -585,7 +585,7 @@ internal enum A64VectorEncoder {
               let size = complexSize(rd.arrangement) else { throw fail() }
         guard rotation % 90 == 0, (0...270).contains(rotation) else { throw fail() }
         let rot = UInt32(rotation / 90)
-        let base: UInt32 = 0x2e00_c400   // U=1, bits[28:24]=01110, bits[15:13]=110, bit10=1.
+        let base: UInt32 = A64.AdvSIMD.complexMultiplyAdd   // U=1, bits[28:24]=01110, bits[15:13]=110, bit10=1.
         let head = (rd.arrangement.q << 30) | base | (size << 22)
         return head | (rm.encodedNumber << 16) | (rot << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -619,7 +619,7 @@ internal enum A64VectorEncoder {
             throw fail()
         }
 
-        let base: UInt32 = 0x2f00_1000   // U=1, bits[28:24]=01111, bit12=1, bit10=0.
+        let base: UInt32 = A64.AdvSIMD.complexMultiplyAddByElement   // U=1, bits[28:24]=01111, bit12=1, bit10=0.
         let head = (rd.arrangement.q << 30) | base | (size << 22)
         return head | (l << 21) | (m << 20) | (rm << 16) | (rot << 13) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -642,7 +642,7 @@ internal enum A64VectorEncoder {
         // bits[28:24]=01110, bit21=1, bit10=1; opcode[15:11]=11101 (non-"2") or
         // 11001 ("2"); U=[29] and sz=[23] select the "2" and subtract forms.
         let opcode: UInt32 = kind.upper == 1 ? 0b11001 : 0b11101
-        let base: UInt32 = 0x0e20_0400
+        let base: UInt32 = A64.VectorThreeSame.baseWord
         let head = (q << 30) | (kind.upper << 29) | base | (kind.sub << 23)
         return head | (rm.encodedNumber << 16) | (opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -656,7 +656,7 @@ internal enum A64VectorEncoder {
         let l = (index >> 1) & 1
         let h = (index >> 2) & 1
         let opcode: UInt32 = (kind.upper << 3) | (kind.sub << 2)
-        let base: UInt32 = 0x0f80_0000   // bits[28:24]=01111, size[23:22]=10, bit10=0.
+        let base: UInt32 = A64.AdvSIMD.fpMultiplyLongByElement   // bits[28:24]=01111, size[23:22]=10, bit10=0.
         let head = (q << 30) | (kind.upper << 29) | base
         return head | (l << 21) | (m << 20) | ((elementRegister & 0xf) << 16) | (opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -674,7 +674,7 @@ internal enum A64VectorEncoder {
         }
         guard rn.arrangement == rm.arrangement else { throw fail() }
         // U=1, bits[28:24]=01110, size=01, opcode[15:11]=11111, bit10=1.
-        let base: UInt32 = 0x2e40_fc00
+        let base: UInt32 = A64.AdvSIMD.bfDot
         return (q << 30) | base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -693,7 +693,7 @@ internal enum A64VectorEncoder {
         let m = (elementRegister >> 4) & 1
         let rmLow = elementRegister & 0xf
         // U=0, bits[28:24]=01111, size=01, opcode[15:12]=1111, bit10=0.
-        let base: UInt32 = 0x0f40_f000
+        let base: UInt32 = A64.AdvSIMD.bfDotByElement
         return (q << 30) | base | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -702,7 +702,7 @@ internal enum A64VectorEncoder {
         // Vd.4s, Vn/Vm.8h. The bottom/top selector occupies the Q bit.
         guard rd.arrangement == .s4, rn.arrangement == .h8, rm.arrangement == .h8 else { throw fail() }
         // U=1, bits[28:24]=01110, size=11, opcode[15:11]=11111, bit10=1.
-        let base: UInt32 = 0x2ec0_fc00
+        let base: UInt32 = A64.AdvSIMD.bfMultiplyLong
         let qt: UInt32 = top ? 1 : 0
         return (qt << 30) | base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -716,7 +716,7 @@ internal enum A64VectorEncoder {
         let l = (index >> 1) & 1
         let h = (index >> 2) & 1
         // U=0, bits[28:24]=01111, size=11, opcode[15:12]=1111, bit10=0.
-        let base: UInt32 = 0x0fc0_f000
+        let base: UInt32 = A64.AdvSIMD.bfMultiplyLongByElement
         let qt: UInt32 = top ? 1 : 0
         return (qt << 30) | base | (l << 21) | (m << 20) | ((elementRegister & 0xf) << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -726,7 +726,7 @@ internal enum A64VectorEncoder {
         // Vd.4s, Vn/Vm.8h. Q, U, size are fixed.
         guard rd.arrangement == .s4, rn.arrangement == .h8, rm.arrangement == .h8 else { throw fail() }
         // Q=1, U=1, bits[28:24]=01110, size=01, opcode[15:11]=11101, bit10=1.
-        let base: UInt32 = 0x6e40_ec00
+        let base: UInt32 = A64.AdvSIMD.bfMatrixMultiply
         return base | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -736,7 +736,7 @@ internal enum A64VectorEncoder {
         guard rn.arrangement == .s4, rd.arrangement == (top ? .h8 : .h4) else { throw fail() }
         // Two-register-misc: bits[28:24]=01110, size=10 (bit23=1), bit21=1,
         // opcode[16:12]=10110, bits[11:10]=10; the Q bit selects bottom/top.
-        let base: UInt32 = 0x0ea1_6800
+        let base: UInt32 = A64.AdvSIMD.bfConvertNarrow
         let q: UInt32 = top ? 1 : 0
         return (q << 30) | base | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -799,7 +799,7 @@ internal enum A64VectorEncoder {
         // `size=01`. The index/Vm fields are identical to the `.h` case above.
         let encodedSize = (spec.form == .fp && element.width == .h) ? 0b00 : size
 
-        let base: UInt32 = 0x0f00_0000
+        let base: UInt32 = A64.AdvSIMD.vectorImmediate
         let head = (q << 30) | (spec.u << 29) | base | (encodedSize << 22)
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -855,7 +855,7 @@ internal enum A64VectorEncoder {
         let immb = immhb & 0x7
 
         // Base: bit30=1, bits[28:23]=111110, bit10=1.
-        let base: UInt32 = 0x5f00_0400
+        let base: UInt32 = A64.AdvSIMD.scalarShift
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -869,7 +869,7 @@ internal enum A64VectorEncoder {
         // opcode field and bit23 carrying the `hi` selector.
         if rd.width == 16 {
             // Base: bits[31:30]=01, bits[28:24]=11110, bit22=1, bit21=0, bits[15:14]=00, bit10=1.
-            let base: UInt32 = 0x5e40_0400
+            let base: UInt32 = A64.AdvSIMD.scalarThreeSameFP16
             return base | (spec.u << 29) | (spec.hi << 23) | (rm.encodedNumber << 16) | ((spec.opcode & 0b111) << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
         }
 
@@ -896,7 +896,7 @@ internal enum A64VectorEncoder {
             case .convert, .compareZero:
                 guard rn.width == 16 else { throw fail() }
                 // Base: bit30=1, bits[28:24]=11110, bit22=1, bits[21:17]=11100, bits[11:10]=10.
-                let base: UInt32 = 0x5e78_0800
+                let base: UInt32 = A64.AdvSIMD.scalarFPTwoRegisterMiscFP16
                 return base | (spec.u << 29) | (spec.hi << 23) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
             case .narrow:
                 throw fail()
@@ -920,7 +920,7 @@ internal enum A64VectorEncoder {
         }
 
         // Base: bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
-        let base: UInt32 = 0x5e20_0800
+        let base: UInt32 = A64.ScalarAdvSIMD.twoRegisterMiscBase
         return base | (spec.u << 29) | (spec.hi << 23) | (sz << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -942,7 +942,7 @@ internal enum A64VectorEncoder {
         let imm5 = (UInt32(element.index) << (size + 1)) | (UInt32(1) << size)
 
         // Base: bit30=1, bits[28:21]=11110000, bit10=1 (DUP element: op=0, imm4=0000).
-        let base: UInt32 = 0x5e00_0400
+        let base: UInt32 = A64.AdvSIMD.scalarCopy
         return base | (imm5 << 16) | (element.number << 5) | rd.encodedNumber
     }
 
@@ -1011,7 +1011,7 @@ internal enum A64VectorEncoder {
         let encodedSize = (spec.form == .fp && element.width == .h) ? 0b00 : size
 
         // Base: bit30=1, bits[28:24]=11111.
-        let base: UInt32 = 0x5f00_0000
+        let base: UInt32 = A64.AdvSIMD.scalarIndexed
         let head = (spec.u << 29) | base | (encodedSize << 22)
         return head | (l << 21) | (m << 20) | (rm << 16) | (spec.opcode << 12) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
@@ -1054,7 +1054,7 @@ internal enum A64VectorEncoder {
         let immb = immhb & 0x7
 
         // Base: bit30=1, bits[28:23]=111110, bit10=1.
-        let base: UInt32 = 0x5f00_0400
+        let base: UInt32 = A64.AdvSIMD.scalarShift
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -1082,7 +1082,7 @@ internal enum A64VectorEncoder {
         let immb = immhb & 0x7
 
         // Base: bit30=1, bits[28:23]=111110, bit10=1.
-        let base: UInt32 = 0x5f00_0400
+        let base: UInt32 = A64.AdvSIMD.scalarShift
         return base | (spec.u << 29) | (immh << 19) | (immb << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
