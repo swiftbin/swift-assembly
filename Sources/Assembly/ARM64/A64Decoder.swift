@@ -462,7 +462,7 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeBitfieldShiftAlias(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f80_0000 == 0x1300_0000 else { return nil }
+        guard word & A64.Bitfield.classMask == A64.Bitfield.baseWord else { return nil }
         let sf = (word >> 31) & 1
         let n = (word >> 22) & 1
         guard n == sf else { return nil }
@@ -1037,7 +1037,7 @@ internal enum A64InstructionDecoder {
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {
         typealias F = A64.LoadStoreSingle
         let op = word & 0x3f00_0000
-        guard op == 0x3800_0000 || op == 0x3900_0000 else { return nil }
+        guard op == A64.LoadStoreSingle.unscaledBase || op == A64.LoadStoreSingle.unsignedBase else { return nil }
         let size = F.size.extract(word)
         let opc = F.opc.extract(word)
         guard let info = loadStoreSingleKind(size: size, opc: opc) else { return nil }
@@ -1046,7 +1046,7 @@ internal enum A64InstructionDecoder {
         let base = xRegister(number: F.rn.extract(word))
         let rt = integerRegister(number: F.rt.extract(word), width: info.rtWidth)
 
-        if op == 0x3900_0000 {
+        if op == A64.LoadStoreSingle.unsignedBase {
             let offset = Int64(F.imm12.extract(word)) * info.byteSize
             return .loadStoreSingle(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
         }
@@ -1130,7 +1130,7 @@ internal enum A64InstructionDecoder {
         // SIMD&FP load/store register: the integer forms with the V (bit 26) set.
         typealias F = A64.LoadStoreSingle
         let op = word & 0x3f00_0000
-        guard op == 0x3c00_0000 || op == 0x3d00_0000 else { return nil }
+        guard op == (A64.LoadStoreSingle.unscaledBase | A64.LoadStoreSingle.v.insert(1)) || op == (A64.LoadStoreSingle.unsignedBase | A64.LoadStoreSingle.v.insert(1)) else { return nil }
         let size = F.size.extract(word)
         let opc = F.opc.extract(word)
         // opc bit 1 selects the 128-bit (Q) form; opc bit 0 selects load.
@@ -1155,7 +1155,7 @@ internal enum A64InstructionDecoder {
         let base = xRegister(number: F.rn.extract(word))
         let rt = floatRegister(number: F.rt.extract(word), width: width)
 
-        if op == 0x3d00_0000 {
+        if op == (A64.LoadStoreSingle.unsignedBase | A64.LoadStoreSingle.v.insert(1)) {
             let offset = Int64(F.imm12.extract(word)) * byteSize
             return .loadStoreSingleFP(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
         }
@@ -1188,7 +1188,7 @@ internal enum A64InstructionDecoder {
     private static func decodeLoadStorePairFP(_ word: UInt32) -> Instruction? {
         // SIMD&FP load/store pair: the integer pair forms with the V (bit 26) set.
         typealias F = A64.LoadStorePair
-        guard word & 0x3e00_0000 == 0x2c00_0000 else { return nil }
+        guard word & A64.LoadStorePair.classMask == (A64.LoadStorePair.baseWord | A64.LoadStorePair.v.insert(1)) else { return nil }
         let opc2 = F.opc.extract(word)
         let width: Int
         let scale: Int64
@@ -1761,7 +1761,7 @@ internal enum A64InstructionDecoder {
         // FP `sz` at bit22 with size-hi (bit23) = 0 — which is what distinguishes
         // frint64x from fsqrt (opcode 11111, but fsqrt has bit23=1). Opcodes
         // 11110/11111 select frint32/frint64; U selects the z/x rounding mode.
-        guard word & 0x9fa0_0c00 == 0x0e20_0800 else { return nil }
+        guard word & 0x9fa0_0c00 == A64.VectorTwoRegisterMisc.baseWord else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let sz = (word >> 22) & 1
@@ -1901,7 +1901,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorFPConvertPrecision(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 10110 (fcvtn/fcvtxn) / 10111 (fcvtl).
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        guard word & A64.VectorTwoRegisterMisc.classMask == A64.VectorTwoRegisterMisc.baseWord else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let sz = (word >> 22) & 1
@@ -1952,7 +1952,7 @@ internal enum A64InstructionDecoder {
         // Shares the two-register-misc encoding; opcodes 11000/11001 (frint),
         // 11100/11101 (estimates). The high `size` bit at [23] separates these
         // from the convert group that reuses the same opcodes.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        guard word & A64.VectorTwoRegisterMisc.classMask == A64.VectorTwoRegisterMisc.baseWord else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let sizeHi = (word >> 23) & 1
@@ -2085,7 +2085,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorThreeSameExtra(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01110, U=1, bit21=0, bit15=1, bit10=1.
-        guard word & 0xbf20_8400 == 0x2e00_8400 else { return nil }
+        guard word & 0xbf20_8400 == (A64.AdvSIMD.threeSameExtra | (1 << 29)) else { return nil }
         let q = (word >> 30) & 1
         let size = (word >> 22) & 3
         let opcode = (word >> 11) & 0xf
@@ -2109,7 +2109,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarThreeSameExtra(_ word: UInt32) -> Instruction? {
         // bit30=1, bits[28:24]=11110, U=1, bit21=0, bit15=1, bit10=1.
-        guard word & 0xff20_8400 == 0x7e00_8400 else { return nil }
+        guard word & 0xff20_8400 == (A64.AdvSIMD.scalarThreeSameExtra | (1 << 29)) else { return nil }
         let size = (word >> 22) & 3
         let opcode = (word >> 11) & 0xf
         guard let kind = A64.VectorThreeSameExtraKind.decode(opcode: opcode) else { return nil }
@@ -2211,7 +2211,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorModifiedImmediate(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01111, bits[23:19]=00000, bit10=1.
-        guard word & 0x9ff8_0400 == 0x0f00_0400 else { return nil }
+        guard word & 0x9ff8_0400 == (A64.AdvSIMD.vectorImmediate | (1 << 10)) else { return nil }
         let q = (word >> 30) & 1
         let op = (word >> 29) & 1
         let cmode = (word >> 12) & 0xf
@@ -2513,7 +2513,7 @@ internal enum A64InstructionDecoder {
         let rdNum = word & 0x1f
 
         // Vector form: bits[28:24]=01110, size=10, bit21=0, bits[15:10]=100101.
-        if word & 0x9fe0_fc00 == 0x0e80_9400 {
+        if word & 0x9fe0_fc00 == A64.AdvSIMD.dotProduct {
             let rmNum = (word >> 16) & 0x1f
             return .vectorDotProduct(kind,
                 destination: VectorRegister(number: rdNum, arrangement: destination),
@@ -2522,7 +2522,7 @@ internal enum A64InstructionDecoder {
         }
 
         // By-element form: bits[28:24]=01111, size=10, bits[15:12]=1110, bit10=0.
-        if word & 0x9fc0_f400 == 0x0f80_e000 {
+        if word & 0x9fc0_f400 == A64.AdvSIMD.dotProductByElement {
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
             let rmLow = (word >> 16) & 0xf
@@ -2594,7 +2594,7 @@ internal enum A64InstructionDecoder {
         let rdNum = word & 0x1f
 
         // BFDOT (vector): U=1, size=01, opcode[15:11]=11111, bit10=1.
-        if word & 0xbfe0_fc00 == 0x2e40_fc00 {
+        if word & 0xbfe0_fc00 == A64.AdvSIMD.bfDot {
             let q = (word >> 30) & 1
             let dest: A64.VectorArrangement = q == 0 ? .s2 : .s4
             let src: A64.VectorArrangement = q == 0 ? .h4 : .h8
@@ -2606,7 +2606,7 @@ internal enum A64InstructionDecoder {
         }
 
         // BFMMLA: Q=1, U=1, size=01, opcode[15:11]=11101, bit10=1.
-        if word & 0xffe0_fc00 == 0x6e40_ec00 {
+        if word & 0xffe0_fc00 == A64.AdvSIMD.bfMatrixMultiply {
             let rmNum = (word >> 16) & 0x1f
             return .vectorBFMatrixMultiply(
                 destination: VectorRegister(number: rdNum, arrangement: .s4),
@@ -2616,7 +2616,7 @@ internal enum A64InstructionDecoder {
 
         // BFMLALB/BFMLALT (vector): U=1, size=11, opcode[15:11]=11111, bit10=1;
         // the Q bit selects bottom (0) / top (1).
-        if word & 0xbfe0_fc00 == 0x2ec0_fc00 {
+        if word & 0xbfe0_fc00 == A64.AdvSIMD.bfMultiplyLong {
             let top = ((word >> 30) & 1) == 1
             let rmNum = (word >> 16) & 0x1f
             return .vectorBFMLAL(top: top,
@@ -2626,7 +2626,7 @@ internal enum A64InstructionDecoder {
         }
 
         // BFDOT (by element): U=0, size=01, opcode[15:12]=1111, bit10=0.
-        if word & 0xbfc0_f400 == 0x0f40_f000 {
+        if word & 0xbfc0_f400 == A64.AdvSIMD.bfDotByElement {
             let q = (word >> 30) & 1
             let dest: A64.VectorArrangement = q == 0 ? .s2 : .s4
             let src: A64.VectorArrangement = q == 0 ? .h4 : .h8
@@ -2643,7 +2643,7 @@ internal enum A64InstructionDecoder {
 
         // BFMLALB/BFMLALT (by element): U=0, size=11, opcode[15:12]=1111,
         // bit10=0; Q selects bottom/top, Vm is V0–V15, index = H:L:M.
-        if word & 0xbfc0_f400 == 0x0fc0_f000 {
+        if word & 0xbfc0_f400 == A64.AdvSIMD.bfMultiplyLongByElement {
             let top = ((word >> 30) & 1) == 1
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
@@ -2689,7 +2689,7 @@ internal enum A64InstructionDecoder {
 
         // By-element form: bits[28:24]=01111, size[23:22]=10, bit10=0. The
         // opcode[15:12] = (upper<<3)|(sub<<2) with bits[13:12]=00; index = H:L:M.
-        if word & 0x9fc0_0400 == 0x0f80_0000 {
+        if word & 0x9fc0_0400 == A64.AdvSIMD.fpMultiplyLongByElement {
             let opcode = (word >> 12) & 0b1111
             guard opcode & 0b0011 == 0 else { return nil }
             let upper = (opcode >> 3) & 1
