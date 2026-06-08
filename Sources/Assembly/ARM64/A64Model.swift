@@ -1465,8 +1465,27 @@ internal enum A64 {
         var isBKey: Bool { self == .ldrab }
     }
 
-    enum FPDataProcessing2Kind: String, Equatable {
+    enum FPDataProcessing2Kind: String, Equatable, CaseIterable {
         case fmul, fdiv, fadd, fsub, fmax, fmin, fmaxnm, fminnm, fnmul
+
+        /// The `opcode` field at [15:12].
+        var opcode: UInt32 {
+            switch self {
+            case .fmul: return 0b0000
+            case .fdiv: return 0b0001
+            case .fadd: return 0b0010
+            case .fsub: return 0b0011
+            case .fmax: return 0b0100
+            case .fmin: return 0b0101
+            case .fmaxnm: return 0b0110
+            case .fminnm: return 0b0111
+            case .fnmul: return 0b1000
+            }
+        }
+
+        static func decode(opcode: UInt32) -> FPDataProcessing2Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     enum FPDataProcessing1Kind: String, Equatable {
@@ -1513,8 +1532,17 @@ internal enum A64 {
         }
     }
 
-    enum FPDataProcessing3Kind: String, Equatable {
+    enum FPDataProcessing3Kind: String, Equatable, CaseIterable {
         case fmadd, fmsub, fnmadd, fnmsub
+
+        /// The `o1` bit at [21] (set for the negating variants).
+        var o1: UInt32 { (self == .fnmadd || self == .fnmsub) ? 1 : 0 }
+        /// The `o0` bit at [15] (set for the subtracting variants).
+        var o0: UInt32 { (self == .fmsub || self == .fnmsub) ? 1 : 0 }
+
+        static func decode(o1: UInt32, o0: UInt32) -> FPDataProcessing3Kind? {
+            allCases.first { $0.o1 == o1 && $0.o0 == o0 }
+        }
     }
 
     enum FPCompareKind: String, Equatable {

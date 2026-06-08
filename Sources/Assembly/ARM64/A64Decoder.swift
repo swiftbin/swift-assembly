@@ -1417,19 +1417,7 @@ internal enum A64InstructionDecoder {
         typealias F = A64.FPDataProcessing2
         guard word & F.classMask == F.baseWord else { return nil }
         guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
-        let kind: A64.FPDataProcessing2Kind
-        switch F.opcode.extract(word) {
-        case 0b0000: kind = .fmul
-        case 0b0001: kind = .fdiv
-        case 0b0010: kind = .fadd
-        case 0b0011: kind = .fsub
-        case 0b0100: kind = .fmax
-        case 0b0101: kind = .fmin
-        case 0b0110: kind = .fmaxnm
-        case 0b0111: kind = .fminnm
-        case 0b1000: kind = .fnmul
-        default: return nil
-        }
+        guard let kind = A64.FPDataProcessing2Kind.decode(opcode: F.opcode.extract(word)) else { return nil }
         return .fpDataProcessing2(
             kind,
             destination: floatRegister(number: F.rd.extract(word), width: width),
@@ -1488,16 +1476,7 @@ internal enum A64InstructionDecoder {
         typealias F = A64.FPDataProcessing3
         guard word & F.classMask == F.baseWord else { return nil }
         guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
-        let o1 = F.o1.extract(word)
-        let o0 = F.o0.extract(word)
-        let kind: A64.FPDataProcessing3Kind
-        switch (o1, o0) {
-        case (0, 0): kind = .fmadd
-        case (0, 1): kind = .fmsub
-        case (1, 0): kind = .fnmadd
-        case (1, 1): kind = .fnmsub
-        default: return nil
-        }
+        guard let kind = A64.FPDataProcessing3Kind.decode(o1: F.o1.extract(word), o0: F.o0.extract(word)) else { return nil }
         return .fpDataProcessing3(
             kind,
             destination: floatRegister(number: F.rd.extract(word), width: width),

@@ -62,20 +62,8 @@ internal enum A64FloatEncoder {
     static func dataProcessing2(_ kind: A64.FPDataProcessing2Kind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
         try requireSameType(rd, rn, rm, instruction: kind.rawValue)
         let type = try ptype(rd, instruction: kind.rawValue)
-        let opcode: UInt32
-        switch kind {
-        case .fmul: opcode = 0b0000
-        case .fdiv: opcode = 0b0001
-        case .fadd: opcode = 0b0010
-        case .fsub: opcode = 0b0011
-        case .fmax: opcode = 0b0100
-        case .fmin: opcode = 0b0101
-        case .fmaxnm: opcode = 0b0110
-        case .fminnm: opcode = 0b0111
-        case .fnmul: opcode = 0b1000
-        }
         typealias F = A64.FPDataProcessing2
-        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.opcode.insert(kind.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func dataProcessing1(_ kind: A64.FPDataProcessing1Kind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -90,11 +78,9 @@ internal enum A64FloatEncoder {
     static func dataProcessing3(_ kind: A64.FPDataProcessing3Kind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, third ra: FloatRegister) throws -> UInt32 {
         try requireSameType(rd, rn, rm, ra, instruction: kind.rawValue)
         let type = try ptype(rd, instruction: kind.rawValue)
-        let o1: UInt32 = (kind == .fnmadd || kind == .fnmsub) ? 1 : 0
-        let o0: UInt32 = (kind == .fmsub || kind == .fnmsub) ? 1 : 0
         typealias F = A64.FPDataProcessing3
-        return F.baseWord | F.type.insert(type) | F.o1.insert(o1) | F.rm.insert(rm.encodedNumber)
-            | F.o0.insert(o0) | F.ra.insert(ra.encodedNumber) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
+        return F.baseWord | F.type.insert(type) | F.o1.insert(kind.o1) | F.rm.insert(rm.encodedNumber)
+            | F.o0.insert(kind.o0) | F.ra.insert(ra.encodedNumber) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func compare(_ kind: A64.FPCompareKind, first rn: FloatRegister, second: A64.FPCompareOperand) throws -> UInt32 {
