@@ -1440,7 +1440,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeBFloat16Convert(_ word: UInt32) -> Instruction? {
         // BFCVT Hd, Sn: fixed encoding (ptype=01, opcode=000110); only Rn/Rd vary.
-        guard word & 0xffff_fc00 == 0x1e63_4000 else { return nil }
+        guard word & 0xffff_fc00 == A64.FPMisc.bfcvt else { return nil }
         return .bfloat16Convert(
             destination: floatRegister(number: word & 0x1f, width: 16),
             source: floatRegister(number: (word >> 5) & 0x1f, width: 32)
@@ -1526,7 +1526,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeFPMoveVectorHigh(_ word: UInt32) -> Instruction? {
         // `fmov x<d>, v<n>.d[1]` (opcode 110) / `fmov v<d>.d[1], x<n>` (opcode 111).
-        guard word & 0xfffe_fc00 == 0x9eae_0000 else { return nil }
+        guard word & 0xfffe_fc00 == A64.FPMisc.fmovVectorHighToGeneral else { return nil }
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
         if (word >> 16) & 1 == 0 {

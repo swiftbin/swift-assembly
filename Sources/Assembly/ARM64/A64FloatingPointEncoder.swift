@@ -130,7 +130,7 @@ internal enum A64FloatEncoder {
     static func bfloat16Convert(destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
         // BFCVT converts a single-precision source to a BFloat16 (half-width) result.
         guard rd.width == 16, rn.width == 32 else { throw AssemblerError.invalidRegister("bfcvt") }
-        return 0x1e63_4000 | (rn.encodedNumber << 5) | rd.encodedNumber
+        return A64.FPMisc.bfcvt | A64.FPMisc.rn.insert(rn.encodedNumber) | A64.FPMisc.rd.insert(rd.encodedNumber)
     }
 
     static func moveImmediate(destination rd: FloatRegister, value: Double) throws -> UInt32 {
@@ -175,14 +175,14 @@ internal enum A64FloatEncoder {
         guard rd.is64Bit, element.width == .d, element.index == 1 else {
             throw AssemblerError.invalidRegister("fmov")
         }
-        return 0x9eae_0000 | (element.encodedNumber << 5) | rd.encodedNumber
+        return A64.FPMisc.fmovVectorHighToGeneral | A64.FPMisc.rn.insert(element.encodedNumber) | A64.FPMisc.rd.insert(rd.encodedNumber)
     }
 
     static func moveGeneralToVectorHigh(destination element: A64.VectorElement, source rn: IntegerRegister) throws -> UInt32 {
         guard rn.is64Bit, element.width == .d, element.index == 1 else {
             throw AssemblerError.invalidRegister("fmov")
         }
-        return 0x9eaf_0000 | (rn.encodedNumber << 5) | element.encodedNumber
+        return A64.FPMisc.fmovGeneralToVectorHigh | A64.FPMisc.rn.insert(rn.encodedNumber) | A64.FPMisc.rd.insert(element.encodedNumber)
     }
 
     static func convertToFixed(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister, fbits: UInt32) throws -> UInt32 {
@@ -232,7 +232,7 @@ internal enum A64FloatEncoder {
         guard !rd.is64Bit, rn.width == 64 else {
             throw AssemblerError.invalidRegister("fjcvtzs")
         }
-        return 0x1e7e_0000 | (rn.encodedNumber << 5) | rd.encodedNumber
+        return A64.FPMisc.fjcvtzs | A64.FPMisc.rn.insert(rn.encodedNumber) | A64.FPMisc.rd.insert(rd.encodedNumber)
     }
 
     /// Resolves the `sf`/`type` fields for `FMOV` between a general register and a single/double FP register.

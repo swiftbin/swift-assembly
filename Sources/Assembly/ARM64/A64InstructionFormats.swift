@@ -794,6 +794,18 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Fixed-encoding floating-point conversions/moves whose only operands are
+    /// `Rn`/`Rd`: `BFCVT`, `FJCVTZS`, and `FMOV` to/from a vector high half.
+    enum FPMisc {
+        static let bfcvt: UInt32 = 0x1e63_4000
+        static let fjcvtzs: UInt32 = 0x1e7e_0000
+        static let fmovVectorHighToGeneral: UInt32 = 0x9eae_0000
+        static let fmovGeneralToVectorHigh: UInt32 = 0x9eaf_0000
+
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Floating-point ↔ integer conversion and `FMOV` general↔FP (`SCVTF`/
     /// `FCVTZS`/`FMOV`/`FJCVTZS`/...). `rmode`+`opcode` select the operation.
     enum FPIntegerConversion {
