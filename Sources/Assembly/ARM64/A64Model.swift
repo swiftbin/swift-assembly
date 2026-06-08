@@ -1336,9 +1336,41 @@ internal enum A64 {
         }
     }
 
-    enum PointerAuthenticationKind: String, Equatable {
+    enum PointerAuthenticationKind: String, Equatable, CaseIterable {
         case paciasp, autiasp, pacibsp, autibsp, xpaci, xpacd
         case pacia1716, pacib1716, autia1716, autib1716, xpaclri
+
+        /// Whether the form takes an `Rd` operand (`XPACI`/`XPACD`); the others
+        /// are complete fixed words.
+        var hasRegister: Bool { self == .xpaci || self == .xpacd }
+
+        /// The full base word. For the register forms (`XPACI`/`XPACD`) the
+        /// encoder ORs `Rd` into [4:0]; the rest are complete instructions.
+        var baseWord: UInt32 {
+            switch self {
+            case .paciasp: return 0xd503233f
+            case .autiasp: return 0xd50323bf
+            case .pacibsp: return 0xd503237f
+            case .autibsp: return 0xd50323ff
+            case .pacia1716: return 0xd503211f
+            case .pacib1716: return 0xd503215f
+            case .autia1716: return 0xd503219f
+            case .autib1716: return 0xd50321df
+            case .xpaclri: return 0xd50320ff
+            case .xpaci: return 0xdac143e0
+            case .xpacd: return 0xdac147e0
+            }
+        }
+
+        /// Decode the no-operand forms (exact word match).
+        static func decodeFixed(_ word: UInt32) -> PointerAuthenticationKind? {
+            allCases.first { !$0.hasRegister && $0.baseWord == word }
+        }
+
+        /// Decode the `XPACI`/`XPACD` forms (base word with `Rd` at [4:0]).
+        static func decodeWithRegister(_ word: UInt32) -> PointerAuthenticationKind? {
+            allCases.first { $0.hasRegister && $0.baseWord == (word & 0xffff_ffe0) }
+        }
     }
 
     /// Data-processing pointer authentication (`PACIA`/`AUTIA`/… `Xd, Xn`, the

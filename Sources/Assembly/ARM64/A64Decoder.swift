@@ -289,23 +289,11 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodePointerAuthentication(_ word: UInt32) -> Instruction? {
-        switch word {
-        case 0xd503233f: return .pointerAuthentication(.paciasp, register: nil, architecture: .arm64e)
-        case 0xd50323bf: return .pointerAuthentication(.autiasp, register: nil, architecture: .arm64e)
-        case 0xd503237f: return .pointerAuthentication(.pacibsp, register: nil, architecture: .arm64e)
-        case 0xd50323ff: return .pointerAuthentication(.autibsp, register: nil, architecture: .arm64e)
-        case 0xd503211f: return .pointerAuthentication(.pacia1716, register: nil, architecture: .arm64e)
-        case 0xd503215f: return .pointerAuthentication(.pacib1716, register: nil, architecture: .arm64e)
-        case 0xd503219f: return .pointerAuthentication(.autia1716, register: nil, architecture: .arm64e)
-        case 0xd50321df: return .pointerAuthentication(.autib1716, register: nil, architecture: .arm64e)
-        case 0xd50320ff: return .pointerAuthentication(.xpaclri, register: nil, architecture: .arm64e)
-        default: break
+        if let kind = A64.PointerAuthenticationKind.decodeFixed(word) {
+            return .pointerAuthentication(kind, register: nil, architecture: .arm64e)
         }
-        if word & 0xffff_ffe0 == 0xdac1_43e0 {
-            return .pointerAuthentication(.xpaci, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
-        }
-        if word & 0xffff_ffe0 == 0xdac1_47e0 {
-            return .pointerAuthentication(.xpacd, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
+        if let kind = A64.PointerAuthenticationKind.decodeWithRegister(word) {
+            return .pointerAuthentication(kind, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
         }
         return nil
     }

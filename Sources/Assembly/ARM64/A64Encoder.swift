@@ -413,22 +413,13 @@ internal enum A64InstructionEncoder {
 internal enum A64PointerAuthenticationEncoder {
     static func encode(_ kind: A64.PointerAuthenticationKind, register: IntegerRegister?, architecture: ARM64Assembler.Architecture) throws -> UInt32 {
         try requireARM64E(architecture, instruction: kind.rawValue)
-        switch kind {
-        case .paciasp: return 0xd503233f
-        case .autiasp: return 0xd50323bf
-        case .pacibsp: return 0xd503237f
-        case .autibsp: return 0xd50323ff
-        case .pacia1716: return 0xd503211f
-        case .pacib1716: return 0xd503215f
-        case .autia1716: return 0xd503219f
-        case .autib1716: return 0xd50321df
-        case .xpaclri: return 0xd50320ff
-        case .xpaci, .xpacd:
+        if kind.hasRegister {
             guard let rd = register else {
                 throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "1", actual: 0)
             }
-            return (kind == .xpaci ? 0xdac143e0 : 0xdac147e0) | rd.encodedNumber
+            return kind.baseWord | rd.encodedNumber
         }
+        return kind.baseWord
     }
 
     static func encodeData(_ kind: A64.PointerAuthDataKind, destination: IntegerRegister, source: IntegerRegister?, modifier: IntegerRegister?) throws -> UInt32 {
