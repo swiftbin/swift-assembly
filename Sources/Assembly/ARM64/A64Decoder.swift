@@ -1221,8 +1221,9 @@ internal enum A64InstructionDecoder {
 
     private static func decodeLoadStorePairFP(_ word: UInt32) -> Instruction? {
         // SIMD&FP load/store pair: the integer pair forms with the V (bit 26) set.
+        typealias F = A64.LoadStorePair
         guard word & 0x3e00_0000 == 0x2c00_0000 else { return nil }
-        let opc2 = (word >> 30) & 3
+        let opc2 = F.opc.extract(word)
         let width: Int
         let scale: Int64
         switch opc2 {
@@ -1231,14 +1232,14 @@ internal enum A64InstructionDecoder {
         case 2: width = 128; scale = 16
         default: return nil
         }
-        let l = (word >> 22) & 1
-        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
-        let rt2 = floatRegister(number: (word >> 10) & 0x1f, width: width)
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = floatRegister(number: word & 0x1f, width: width)
+        let l = F.l.extract(word)
+        let offset = signExtend(F.imm7.extract(word), bitCount: 7) * scale
+        let rt2 = floatRegister(number: F.rt2.extract(word), width: width)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = floatRegister(number: F.rt.extract(word), width: width)
         let memory: MemoryOperand
         let kind: A64.LoadStorePairKind
-        switch (word >> 23) & 3 {
+        switch F.mode.extract(word) {
         case 0:
             kind = l == 1 ? .ldnp : .stnp
             memory = .unsignedOffset(base: base, offset: offset)

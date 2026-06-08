@@ -478,6 +478,8 @@ extension A64 {
         static let classMask: UInt32 = 0x3e00_0000
 
         static let opc = BitField(offset: 30, width: 2)
+        /// `V`[26] selects the SIMD&FP register file (the integer forms use 0).
+        static let v = BitField(offset: 26, width: 1)
         static let mode = BitField(offset: 23, width: 2)
         static let l = BitField(offset: 22, width: 1)
         static let imm7 = BitField(offset: 15, width: 7)
