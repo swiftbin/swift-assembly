@@ -68,31 +68,7 @@ internal enum A64VectorEncoder {
             throw AssemblerError.invalidRegister(kind.rawValue)
         }
 
-        let u: UInt32
-        let opcode: UInt32
-        switch kind {
-        case .rev64: u = 0; opcode = 0b00000
-        case .rev32: u = 1; opcode = 0b00000
-        case .rev16: u = 0; opcode = 0b00001
-        case .cnt: u = 0; opcode = 0b00101
-        case .mvn: u = 1; opcode = 0b00101
-        case .rbit: u = 1; opcode = 0b00101
-        case .cls: u = 0; opcode = 0b00100
-        case .clz: u = 1; opcode = 0b00100
-        case .sqabs: u = 0; opcode = 0b00111
-        case .sqneg: u = 1; opcode = 0b00111
-        case .suqadd: u = 0; opcode = 0b00011
-        case .usqadd: u = 1; opcode = 0b00011
-        case .abs: u = 0; opcode = 0b01011
-        case .neg: u = 1; opcode = 0b01011
-        case .fabs: u = 0; opcode = 0b01111
-        case .fneg: u = 1; opcode = 0b01111
-        case .fsqrt: u = 1; opcode = 0b11111
-        case .frint32z: u = 0; opcode = 0b11110
-        case .frint32x: u = 1; opcode = 0b11110
-        case .frint64z: u = 0; opcode = 0b11111
-        case .frint64x: u = 1; opcode = 0b11111
-        }
+        let (u, opcode) = kind.spec
 
         typealias F = A64.VectorTwoRegisterMisc
         let regs = F.q.insert(rn.arrangement.q) | F.u.insert(u)

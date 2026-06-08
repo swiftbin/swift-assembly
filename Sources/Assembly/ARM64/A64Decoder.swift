@@ -1880,26 +1880,7 @@ internal enum A64InstructionDecoder {
         let rnNum = F.rn.extract(word)
         let rdNum = F.rd.extract(word)
 
-        let kind: A64.VectorTwoRegisterMiscKind
-        switch (u, opcode) {
-        case (0, 0b00000): kind = .rev64
-        case (1, 0b00000): kind = .rev32
-        case (0, 0b00001): kind = .rev16
-        case (0, 0b00101): kind = .cnt
-        case (1, 0b00101): kind = size == 0b01 ? .rbit : .mvn
-        case (0, 0b00100): kind = .cls
-        case (1, 0b00100): kind = .clz
-        case (0, 0b00111): kind = .sqabs
-        case (1, 0b00111): kind = .sqneg
-        case (0, 0b00011): kind = .suqadd
-        case (1, 0b00011): kind = .usqadd
-        case (0, 0b01011): kind = .abs
-        case (1, 0b01011): kind = .neg
-        case (0, 0b01111): kind = .fabs
-        case (1, 0b01111): kind = .fneg
-        case (1, 0b11111): kind = .fsqrt
-        default: return nil
-        }
+        guard let kind = A64.VectorTwoRegisterMiscKind.decode(u: u, opcode: opcode, size: size) else { return nil }
 
         guard let arrangement = vectorTwoRegisterMiscArrangement(kind, size: size, q: q) else { return nil }
         return .vectorTwoRegisterMisc(

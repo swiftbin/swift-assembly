@@ -2063,13 +2063,52 @@ internal enum A64 {
         }
     }
 
-    enum VectorTwoRegisterMiscKind: String, Equatable {
+    enum VectorTwoRegisterMiscKind: String, Equatable, CaseIterable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
         case sqabs, sqneg
         case suqadd, usqadd
         case fabs, fneg, fsqrt
         case frint32z, frint32x, frint64z, frint64x
+
+        /// The `(U, opcode[16:12])` discriminator. Note `rbit` and `mvn` share
+        /// `(1, 0b00101)` and are distinguished by the element `size` on decode.
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .rev64: return (0, 0b00000)
+            case .rev32: return (1, 0b00000)
+            case .rev16: return (0, 0b00001)
+            case .cnt: return (0, 0b00101)
+            case .mvn: return (1, 0b00101)
+            case .rbit: return (1, 0b00101)
+            case .cls: return (0, 0b00100)
+            case .clz: return (1, 0b00100)
+            case .sqabs: return (0, 0b00111)
+            case .sqneg: return (1, 0b00111)
+            case .suqadd: return (0, 0b00011)
+            case .usqadd: return (1, 0b00011)
+            case .abs: return (0, 0b01011)
+            case .neg: return (1, 0b01011)
+            case .fabs: return (0, 0b01111)
+            case .fneg: return (1, 0b01111)
+            case .fsqrt: return (1, 0b11111)
+            case .frint32z: return (0, 0b11110)
+            case .frint32x: return (1, 0b11110)
+            case .frint64z: return (0, 0b11111)
+            case .frint64x: return (1, 0b11111)
+            }
+        }
+
+        /// Decode the base two-register-misc forms (rev/cnt/cls/abs/neg/sq*/
+        /// suqadd/fabs/fneg/fsqrt). The `frint*` forms share opcodes with this
+        /// group (e.g. frint64x vs fsqrt) but are claimed earlier by their own
+        /// decoder, so they are excluded here; compare-zero/convert/round-
+        /// reciprocal opcodes are likewise handled separately.
+        static func decode(u: UInt32, opcode: UInt32, size: UInt32) -> VectorTwoRegisterMiscKind? {
+            if u == 1 && opcode == 0b00101 { return size == 0b01 ? .rbit : .mvn }
+            let excluded: Set<VectorTwoRegisterMiscKind> = [.rbit, .mvn, .frint32z, .frint32x, .frint64z, .frint64x]
+            return allCases.first { !excluded.contains($0) && $0.spec == (u, opcode) }
+        }
     }
 
     /// Advanced SIMD "three same" instructions (`Vd.T, Vn.T, Vm.T`).
