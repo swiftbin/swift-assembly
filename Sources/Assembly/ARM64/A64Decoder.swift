@@ -1920,15 +1920,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorCompareZero(_ word: UInt32) -> Instruction? {
-        // Shares the two-register-misc encoding (mask 0x9f200c00 == 0x0e200800);
-        // selected by the compare-against-zero opcodes.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        // Shares the two-register-misc encoding; selected by the compare-against-zero opcodes.
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         // Integer opcodes 01000/01001/01010; floating-point 01100/01101/01110.
         let isFloat: Bool
@@ -1953,14 +1953,15 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorConvert(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 11010/11011/11100/11101.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
         let sizeHi = (word >> 23) & 1
         let sz = (word >> 22) & 1
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         switch opcode {
         case 0b11010, 0b11011, 0b11100, 0b11101: break
@@ -1984,13 +1985,14 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorExtractNarrow(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 10010/10100.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         guard opcode == 0b10010 || opcode == 0b10100 else { return nil }
         guard let kind = A64.VectorExtractNarrowKind.decode(u: u, opcode: opcode),
@@ -2528,14 +2530,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorPermute(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[29:24]=001110, bit21=0, bit15=0, bits[11:10]=10.
-        guard word & 0xbf20_8c00 == 0x0e00_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let size = (word >> 22) & 0x3
-        let opcode = (word >> 12) & 0x7
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorPermute
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         guard let kind = A64.VectorPermuteKind.allCases.first(where: { $0.opcode == opcode }),
               let arrangement = threeSameIntegerArrangement(size: size, q: q) else { return nil }
         return .vectorPermute(kind,
@@ -2545,13 +2547,13 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorExtract(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[29:24]=101110, bits[23:22]=00, bit21=0, bit15=0, bit10=0.
-        guard word & 0xbfe0_8400 == 0x2e00_0000 else { return nil }
-        let q = (word >> 30) & 1
-        let imm4 = (word >> 11) & 0xf
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorExtract
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let imm4 = F.index.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         // The 8-byte form only addresses lanes 0..7.
         guard q == 1 || imm4 <= 7 else { return nil }
         let arrangement: A64.VectorArrangement = q == 1 ? .b16 : .b8

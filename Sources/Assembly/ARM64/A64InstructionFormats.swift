@@ -542,6 +542,31 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Advanced SIMD permute (`ZIP`/`UZP`/`TRN`). `opcode`[14:12] selects.
+    enum VectorPermute {
+        static let baseWord: UInt32 = 0x0e00_0800
+        static let classMask: UInt32 = 0xbf20_8c00
+
+        static let q = BitField(offset: 30, width: 1)
+        static let size = BitField(offset: 22, width: 2)
+        static let rm = BitField(offset: 16, width: 5)
+        static let opcode = BitField(offset: 12, width: 3)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Advanced SIMD `EXT` — extract byte vector. `index`[14:11] is the lane.
+    enum VectorExtract {
+        static let baseWord: UInt32 = 0x2e00_0000
+        static let classMask: UInt32 = 0xbfe0_8400
+
+        static let q = BitField(offset: 30, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let index = BitField(offset: 11, width: 4)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Advanced SIMD three-same (`ADD`/`AND`/`FADD`/...). `q`/`u`/`size`(or the
     /// FP `a`/`sz` packed into the same [23:22] field)/`opcode`[15:11] select.
     enum VectorThreeSame {

@@ -387,10 +387,9 @@ internal enum A64VectorEncoder {
               allowedPermuteArrangements.contains(arrangement) else {
             throw AssemblerError.invalidRegister(kind.rawValue)
         }
-        // Base: bits[29:24]=001110, bits[11:10]=10.
-        let base: UInt32 = 0x0e00_0800
-        let head = (arrangement.q << 30) | base | (arrangement.elementSize << 22)
-        return head | (rm.encodedNumber << 16) | (kind.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorPermute
+        return F.baseWord | F.q.insert(arrangement.q) | F.size.insert(arrangement.elementSize)
+            | F.rm.insert(rm.encodedNumber) | F.opcode.insert(kind.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func extract(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister, index: Int) throws -> UInt32 {
@@ -402,10 +401,9 @@ internal enum A64VectorEncoder {
         // 8-byte form indexes 0..7; 16-byte form indexes 0..15.
         let maxIndex = arrangement == .b16 ? 15 : 7
         try checkRange(Int64(index), 0...Int64(maxIndex), instruction: "ext")
-        // Base: bits[29:24]=101110.
-        let base: UInt32 = 0x2e00_0000
-        let head = (arrangement.q << 30) | base
-        return head | (rm.encodedNumber << 16) | (UInt32(index) << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorExtract
+        return F.baseWord | F.q.insert(arrangement.q) | F.rm.insert(rm.encodedNumber)
+            | F.index.insert(UInt32(index)) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     // MARK: - Three different (long / wide / narrow)
@@ -1206,14 +1204,14 @@ internal enum A64VectorEncoder {
         guard allowed.contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
 
         let spec = kind.spec
+        typealias F = A64.VectorTwoRegisterMisc
+        let regs = F.q.insert(rd.arrangement.q) | F.u.insert(spec.u)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
         if kind.isFloat, rd.arrangement.elementWidth == 16 {
             // FP16 form: the compare-against-#0.0 opcodes live on the `a`=1 page.
-            let head = (rd.arrangement.q << 30) | (spec.u << 29) | fp16TwoRegisterMiscBase | (1 << 23)
-            return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return fp16TwoRegisterMiscBase | regs | (1 << 23)
         }
-        let size = rd.arrangement.elementSize
-        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
-        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return F.baseWord | regs | F.size.insert(rd.arrangement.elementSize)
     }
 
     static func convert(_ kind: A64.VectorConvertKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
@@ -1221,15 +1219,15 @@ internal enum A64VectorEncoder {
         guard [A64.VectorArrangement.h4, .h8, .s2, .s4, .d2].contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
 
         let spec = kind.spec
+        typealias F = A64.VectorTwoRegisterMisc
+        let regs = F.q.insert(rd.arrangement.q) | F.u.insert(spec.u)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
         if rd.arrangement.elementWidth == 16 {
             // FP16 form: `a` (bit23) carries the high `size` bit selector.
-            let head = (rd.arrangement.q << 30) | (spec.u << 29) | fp16TwoRegisterMiscBase | (spec.sizeHi << 23)
-            return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return fp16TwoRegisterMiscBase | regs | (spec.sizeHi << 23)
         }
         let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
-        let size = (spec.sizeHi << 1) | sz
-        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
-        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return F.baseWord | regs | F.size.insert((spec.sizeHi << 1) | sz)
     }
 
     static func cryptoSHA3(_ kind: A64.CryptoSHA3Kind, d: UInt32, n: UInt32, m: UInt32) -> UInt32 {
@@ -1334,15 +1332,15 @@ internal enum A64VectorEncoder {
         guard allowed.contains(rd.arrangement) else { throw AssemblerError.invalidRegister(kind.rawValue) }
 
         let spec = kind.spec
+        typealias F = A64.VectorTwoRegisterMisc
+        let regs = F.q.insert(rd.arrangement.q) | F.u.insert(spec.u)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
         if rd.arrangement.elementWidth == 16 {
             // FP16 form: `a` (bit23) carries the high `size` bit selector.
-            let head = (rd.arrangement.q << 30) | (spec.u << 29) | fp16TwoRegisterMiscBase | (spec.sizeHi << 23)
-            return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return fp16TwoRegisterMiscBase | regs | (spec.sizeHi << 23)
         }
         let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
-        let size = (spec.sizeHi << 1) | sz
-        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
-        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return F.baseWord | regs | F.size.insert((spec.sizeHi << 1) | sz)
     }
 
     static func extractNarrow(_ kind: A64.VectorExtractNarrowKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
@@ -1353,9 +1351,9 @@ internal enum A64VectorEncoder {
         guard let expectedSource = doubledArrangement(rd.arrangement), rn.arrangement == expectedSource else { throw fail() }
 
         let spec = kind.spec
-        let size = rd.arrangement.elementSize
-        let head = (rd.arrangement.q << 30) | (spec.u << 29) | 0x0e20_0800 | (size << 22)
-        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorTwoRegisterMisc
+        return F.baseWord | F.q.insert(rd.arrangement.q) | F.u.insert(spec.u) | F.size.insert(rd.arrangement.elementSize)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     /// Maps a source arrangement to the pairwise-long-add destination, which has
