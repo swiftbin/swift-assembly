@@ -888,6 +888,9 @@ internal enum A64LoadStoreEncoder {
     static func prefetch(_ kind: A64.PrefetchKind, operation: UInt32, memory: MemoryOperand) throws -> UInt32 {
         try checkRange(Int64(operation), 0...0x1f, instruction: kind.rawValue)
         let op = operation & 0x1f
+        // PRFM/PRFUM are load/store single forms with size=11, opc=10, V=0.
+        typealias F = A64.LoadStoreSingle
+        let sizeOpc = F.size.insert(0b11) | F.opc.insert(0b10)
         switch (kind, memory) {
         case (.prfm, .unsignedOffset(let base, let offset)):
             guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
@@ -896,19 +899,19 @@ internal enum A64LoadStoreEncoder {
             }
             let scaled = offset / 8
             try checkRange(scaled, 0...0xfff, instruction: kind.rawValue)
-            return 0xf980_0000 | (UInt32(scaled) << 10) | (base.encodedNumber << 5) | op
+            return F.unsignedBase | sizeOpc | F.imm12.insert(UInt32(scaled)) | F.rn.insert(base.encodedNumber) | F.rt.insert(op)
 
         case (.prfm, .registerOffset(let base, let rm, let ext, let shift)):
             guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
             let option = ext ?? (rm.is64Bit ? ExtendKind.uxtx : ExtendKind.uxtw)
             guard shift == 0 || shift == 3 else { throw AssemblerError.unsupportedShift("lsl #\(shift)") }
-            return 0xf8a0_0800 | (rm.encodedNumber << 16) | (option.rawValue << 13)
-                | (UInt32(shift == 0 ? 0 : 1) << 12) | (base.encodedNumber << 5) | op
+            return F.registerOffsetBase | sizeOpc | F.rm.insert(rm.encodedNumber) | F.option.insert(option.rawValue)
+                | F.s.insert(shift == 0 ? 0 : 1) | F.rn.insert(base.encodedNumber) | F.rt.insert(op)
 
         case (.prfum, .unsignedOffset(let base, let offset)), (.prfum, .signedUnscaled(let base, let offset)):
             guard base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
             try checkRange(offset, -256...255, instruction: kind.rawValue)
-            return 0xf880_0000 | ((UInt32(bitPattern: Int32(offset)) & 0x1ff) << 12) | (base.encodedNumber << 5) | op
+            return F.unscaledBase | sizeOpc | F.imm9.insert(UInt32(bitPattern: Int32(offset))) | F.rn.insert(base.encodedNumber) | F.rt.insert(op)
 
         default:
             throw AssemblerError.unsupportedOperand(kind.rawValue)

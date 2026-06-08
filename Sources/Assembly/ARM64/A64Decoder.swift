@@ -920,27 +920,30 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodePrefetch(_ word: UInt32) -> Instruction? {
-        let operation = word & 0x1f
-        let base = xRegister(number: (word >> 5) & 0x1f)
+        // PRFM/PRFUM are load/store single forms with size=11, opc=10, V=0.
+        typealias F = A64.LoadStoreSingle
+        let sizeOpc = F.size.insert(0b11) | F.opc.insert(0b10)
+        let operation = F.rt.extract(word)
+        let base = xRegister(number: F.rn.extract(word))
 
-        // PRFM (immediate, unsigned offset): size=11, opc=10, scaled by 8.
-        if word & 0xffc0_0000 == 0xf980_0000 {
-            let offset = Int64((word >> 10) & 0xfff) * 8
+        // PRFM (immediate, unsigned offset), scaled by 8.
+        if word & 0xffc0_0000 == F.unsignedBase | sizeOpc {
+            let offset = Int64(F.imm12.extract(word)) * 8
             return .prefetch(.prfm, operation: operation, memory: .unsignedOffset(base: base, offset: offset))
         }
-        // PRFM (register offset): size=11, opc=10, bit21=1, bits[11:10]=10.
-        if word & 0xffe0_0c00 == 0xf8a0_0800 {
-            let option = (word >> 13) & 7
-            let s = (word >> 12) & 1
+        // PRFM (register offset): bit21=1, bits[11:10]=10.
+        if word & 0xffe0_0c00 == F.registerOffsetBase | sizeOpc {
+            let option = F.option.extract(word)
+            let s = F.s.extract(word)
             let shift = s == 1 ? 3 : 0
             let rmWidth = (option == 2 || option == 6) ? 32 : 64
-            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
             let extend: ExtendKind? = option == 3 ? nil : ExtendKind(rawValue: option)
             return .prefetch(.prfm, operation: operation, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
         }
-        // PRFUM (unscaled immediate): size=11, opc=10, bit21=0, bits[11:10]=00.
-        if word & 0xffe0_0c00 == 0xf880_0000 {
-            let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        // PRFUM (unscaled immediate): bit21=0, bits[11:10]=00.
+        if word & 0xffe0_0c00 == F.unscaledBase | sizeOpc {
+            let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
             let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
             return .prefetch(.prfum, operation: operation, memory: mem)
         }
