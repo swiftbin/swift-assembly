@@ -601,6 +601,35 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Floating-point ↔ integer conversion and `FMOV` general↔FP (`SCVTF`/
+    /// `FCVTZS`/`FMOV`/`FJCVTZS`/...). `rmode`+`opcode` select the operation.
+    enum FPIntegerConversion {
+        static let baseWord: UInt32 = 0x1e20_0000
+        static let classMask: UInt32 = 0x7f20_fc00
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let type = BitField(offset: 22, width: 2)
+        static let rmode = BitField(offset: 19, width: 2)
+        static let opcode = BitField(offset: 16, width: 3)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Floating-point ↔ fixed-point conversion (`SCVTF`/`UCVTF`/`FCVTZS`/
+    /// `FCVTZU`, fixed-point forms). `scale` = 64 − fbits.
+    enum FPFixedConversion {
+        static let baseWord: UInt32 = 0x1e00_0000
+        static let classMask: UInt32 = 0x7f20_0000
+
+        static let sf = BitField(offset: 31, width: 1)
+        static let type = BitField(offset: 22, width: 2)
+        static let rmode = BitField(offset: 19, width: 2)
+        static let opcode = BitField(offset: 16, width: 3)
+        static let scale = BitField(offset: 10, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Load/store a single register. The family spans three addressing forms
     /// that share `size`/`opc`/`Rn`/`Rt` but differ in base word and offset
     /// encoding: unsigned-offset (`imm12`), unscaled/indexed (`imm9`+`mode`)

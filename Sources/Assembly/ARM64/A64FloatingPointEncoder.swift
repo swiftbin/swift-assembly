@@ -144,30 +144,30 @@ internal enum A64FloatEncoder {
 
     static func moveToGeneral(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
         let (sf, type) = try generalMoveFields(general: rd, float: rn, instruction: "fmov")
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22)
-        return head | (0b110 << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(0b110) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func moveFromGeneral(destination rd: FloatRegister, source rn: IntegerRegister) throws -> UInt32 {
         let (sf, type) = try generalMoveFields(general: rn, float: rd, instruction: "fmov")
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22)
-        return head | (0b111 << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(0b111) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func convertToInt(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
         let sf: UInt32 = rd.is64Bit ? 1 : 0
         let type = try ptype(rn, instruction: kind.rawValue)
         let (rmode, opcode) = kind.spec
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22) | (rmode << 19)
-        return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.rmode.insert(rmode) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func convertFromInt(_ kind: A64.FPConvertFromIntKind, destination rd: FloatRegister, source rn: IntegerRegister) throws -> UInt32 {
         let sf: UInt32 = rn.is64Bit ? 1 : 0
         let type = try ptype(rd, instruction: kind.rawValue)
         let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22)
-        return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func moveVectorHighToGeneral(destination rd: IntegerRegister, source element: A64.VectorElement) throws -> UInt32 {
@@ -194,8 +194,9 @@ internal enum A64FloatEncoder {
         guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
         let scale = 64 - fbits
         let opcode: UInt32 = kind == .fcvtzs ? 0b000 : 0b001
-        let head: UInt32 = (sf << 31) | 0x1e00_0000 | (type << 22) | (0b11 << 19)
-        return head | (opcode << 16) | (scale << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPFixedConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.rmode.insert(0b11)
+            | F.opcode.insert(opcode) | F.scale.insert(scale) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func convertFromFixed(_ kind: A64.FPConvertFromIntKind, destination rd: FloatRegister, source rn: IntegerRegister, fbits: UInt32) throws -> UInt32 {
@@ -205,8 +206,9 @@ internal enum A64FloatEncoder {
         guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
         let scale = 64 - fbits
         let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
-        let head: UInt32 = (sf << 31) | 0x1e00_0000 | (type << 22)
-        return head | (opcode << 16) | (scale << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPFixedConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type)
+            | F.opcode.insert(opcode) | F.scale.insert(scale) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalSelect(destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, condition: A64.Condition) throws -> UInt32 {

@@ -1542,19 +1542,20 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPFixedPointConvert(_ word: UInt32) -> Instruction? {
-        guard word & 0x7f20_0000 == 0x1e00_0000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let sf = (word >> 31) & 1
+        typealias F = A64.FPFixedConversion
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let sf = F.sf.extract(word)
         let generalWidth = sf == 1 ? 64 : 32
-        let rmode = (word >> 19) & 3
-        let opcode = (word >> 16) & 7
-        let scale = (word >> 10) & 0x3f
+        let rmode = F.rmode.extract(word)
+        let opcode = F.opcode.extract(word)
+        let scale = F.scale.extract(word)
         // For 32-bit general registers `scale` must have its high bit set (fbits 1...32).
         if sf == 0 { guard scale >= 32 else { return nil } }
         let fbits = 64 - scale
         guard fbits >= 1 else { return nil }
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         switch (rmode, opcode) {
         case (0b11, 0b000), (0b11, 0b001):
             let kind: A64.FPConvertToIntKind = opcode == 0b000 ? .fcvtzs : .fcvtzu
@@ -1604,14 +1605,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPIntegerConversion(_ word: UInt32) -> Instruction? {
-        guard word & 0x7f20_fc00 == 0x1e20_0000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let sf = (word >> 31) & 1
+        typealias F = A64.FPIntegerConversion
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let sf = F.sf.extract(word)
         let generalWidth = sf == 1 ? 64 : 32
-        let rmode = (word >> 19) & 3
-        let opcode = (word >> 16) & 7
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let rmode = F.rmode.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         if let kind = A64.FPConvertToIntKind.decode(rmode: rmode, opcode: opcode) {
             return .fpConvertToInt(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width))
         }
