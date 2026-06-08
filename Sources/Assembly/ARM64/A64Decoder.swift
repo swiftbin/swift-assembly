@@ -1414,10 +1414,11 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPDataProcessing2(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_0c00 == 0x1e20_0800 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
+        typealias F = A64.FPDataProcessing2
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
         let kind: A64.FPDataProcessing2Kind
-        switch (word >> 12) & 0xf {
+        switch F.opcode.extract(word) {
         case 0b0000: kind = .fmul
         case 0b0001: kind = .fdiv
         case 0b0010: kind = .fadd
@@ -1431,9 +1432,9 @@ internal enum A64InstructionDecoder {
         }
         return .fpDataProcessing2(
             kind,
-            destination: floatRegister(number: word & 0x1f, width: width),
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width)
+            destination: floatRegister(number: F.rd.extract(word), width: width),
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width)
         )
     }
 
@@ -1447,10 +1448,11 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPDataProcessing1(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_7c00 == 0x1e20_4000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let opcode = (word >> 15) & 0x3f
-        let rn = floatRegister(number: (word >> 5) & 0x1f, width: width)
+        typealias F = A64.FPDataProcessing1
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let opcode = F.opcode.extract(word)
+        let rn = floatRegister(number: F.rn.extract(word), width: width)
         let kind: A64.FPDataProcessing1Kind
         switch opcode {
         case 0b000000: kind = .fmov
@@ -1471,7 +1473,7 @@ internal enum A64InstructionDecoder {
         case 0b000100, 0b000101, 0b000111:
             guard let target = floatWidth(forPtype: opcode & 3), target != width else { return nil }
             return .fpConvertPrecision(
-                destination: floatRegister(number: word & 0x1f, width: target),
+                destination: floatRegister(number: F.rd.extract(word), width: target),
                 source: rn
             )
         default:
@@ -1479,14 +1481,15 @@ internal enum A64InstructionDecoder {
         }
         // frint32*/frint64* have no half-precision form.
         if !kind.allowsHalf, width == 16 { return nil }
-        return .fpDataProcessing1(kind, destination: floatRegister(number: word & 0x1f, width: width), source: rn)
+        return .fpDataProcessing1(kind, destination: floatRegister(number: F.rd.extract(word), width: width), source: rn)
     }
 
     private static func decodeFPDataProcessing3(_ word: UInt32) -> Instruction? {
-        guard word & 0xff00_0000 == 0x1f00_0000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let o1 = (word >> 21) & 1
-        let o0 = (word >> 15) & 1
+        typealias F = A64.FPDataProcessing3
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let o1 = F.o1.extract(word)
+        let o0 = F.o0.extract(word)
         let kind: A64.FPDataProcessing3Kind
         switch (o1, o0) {
         case (0, 0): kind = .fmadd
@@ -1497,25 +1500,26 @@ internal enum A64InstructionDecoder {
         }
         return .fpDataProcessing3(
             kind,
-            destination: floatRegister(number: word & 0x1f, width: width),
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
-            third: floatRegister(number: (word >> 10) & 0x1f, width: width)
+            destination: floatRegister(number: F.rd.extract(word), width: width),
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width),
+            third: floatRegister(number: F.ra.extract(word), width: width)
         )
     }
 
     private static func decodeFPCompare(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_fc07 == 0x1e20_2000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let opcode2 = word & 0x1f
+        typealias F = A64.FPCompare
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let opcode2 = F.opcode2.extract(word)
         let kind: A64.FPCompareKind = (opcode2 >> 4) & 1 == 1 ? .fcmpe : .fcmp
-        let rn = floatRegister(number: (word >> 5) & 0x1f, width: width)
+        let rn = floatRegister(number: F.rn.extract(word), width: width)
         let second: A64.FPCompareOperand
         if (opcode2 >> 3) & 1 == 1 {
-            guard (word >> 16) & 0x1f == 0 else { return nil }
+            guard F.rm.extract(word) == 0 else { return nil }
             second = .zero
         } else {
-            second = .register(floatRegister(number: (word >> 16) & 0x1f, width: width))
+            second = .register(floatRegister(number: F.rm.extract(word), width: width))
         }
         return .fpCompare(kind, first: rn, second: second)
     }
@@ -1564,36 +1568,39 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPConditionalSelect(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_0c00 == 0x1e20_0c00 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
+        typealias F = A64.FPConditionalSelect
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
         return .fpConditionalSelect(
-            destination: floatRegister(number: word & 0x1f, width: width),
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
+            destination: floatRegister(number: F.rd.extract(word), width: width),
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width),
             condition: condition
         )
     }
 
     private static func decodeFPConditionalCompare(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_0c00 == 0x1e20_0400 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
-        let kind: A64.FPConditionalCompareKind = ((word >> 4) & 1) == 1 ? .fccmpe : .fccmp
+        typealias F = A64.FPConditionalCompare
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let kind: A64.FPConditionalCompareKind = F.op.extract(word) == 1 ? .fccmpe : .fccmp
         return .fpConditionalCompare(
             kind,
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
-            nzcv: word & 0xf,
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width),
+            nzcv: F.nzcv.extract(word),
             condition: condition
         )
     }
 
     private static func decodeFPMoveImmediate(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_1fe0 == 0x1e20_1000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let value = A64FloatImmediate.decode((word >> 13) & 0xff)
-        return .fpMoveImmediate(destination: floatRegister(number: word & 0x1f, width: width), value: value)
+        typealias F = A64.FPMoveImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let value = A64FloatImmediate.decode(F.imm8.extract(word))
+        return .fpMoveImmediate(destination: floatRegister(number: F.rd.extract(word), width: width), value: value)
     }
 
     private static func decodeFPIntegerConversion(_ word: UInt32) -> Instruction? {

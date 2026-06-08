@@ -74,8 +74,8 @@ internal enum A64FloatEncoder {
         case .fminnm: opcode = 0b0111
         case .fnmul: opcode = 0b1000
         }
-        let head: UInt32 = 0x1e20_0800 | (type << 22)
-        return head | (rm.encodedNumber << 16) | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing2
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func dataProcessing1(_ kind: A64.FPDataProcessing1Kind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -83,8 +83,8 @@ internal enum A64FloatEncoder {
         let type = try ptype(rd, instruction: kind.rawValue)
         // frint32*/frint64* have no half-precision form.
         if !kind.allowsHalf, rd.width == 16 { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let head: UInt32 = 0x1e20_4000 | (type << 22)
-        return head | (kind.opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing1
+        return F.baseWord | F.type.insert(type) | F.opcode.insert(kind.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func dataProcessing3(_ kind: A64.FPDataProcessing3Kind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, third ra: FloatRegister) throws -> UInt32 {
@@ -92,8 +92,9 @@ internal enum A64FloatEncoder {
         let type = try ptype(rd, instruction: kind.rawValue)
         let o1: UInt32 = (kind == .fnmadd || kind == .fnmsub) ? 1 : 0
         let o0: UInt32 = (kind == .fmsub || kind == .fnmsub) ? 1 : 0
-        let head: UInt32 = 0x1f00_0000 | (type << 22) | (o1 << 21)
-        return head | (rm.encodedNumber << 16) | (o0 << 15) | (ra.encodedNumber << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing3
+        return F.baseWord | F.type.insert(type) | F.o1.insert(o1) | F.rm.insert(rm.encodedNumber)
+            | F.o0.insert(o0) | F.ra.insert(ra.encodedNumber) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func compare(_ kind: A64.FPCompareKind, first rn: FloatRegister, second: A64.FPCompareOperand) throws -> UInt32 {
@@ -107,8 +108,8 @@ internal enum A64FloatEncoder {
         case .zero:
             opcode2 |= 0b01000
         }
-        let head: UInt32 = 0x1e20_2000 | (type << 22)
-        return head | (rm << 16) | (rn.encodedNumber << 5) | opcode2
+        typealias F = A64.FPCompare
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm) | F.rn.insert(rn.encodedNumber) | F.opcode2.insert(opcode2)
     }
 
     static func convertPrecision(destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -137,8 +138,8 @@ internal enum A64FloatEncoder {
         guard let imm8 = A64FloatImmediate.encode(value) else {
             throw AssemblerError.invalidImmediate("#\(value)")
         }
-        let head: UInt32 = 0x1e20_1000 | (type << 22)
-        return head | (imm8 << 13) | rd.encodedNumber
+        typealias F = A64.FPMoveImmediate
+        return F.baseWord | F.type.insert(type) | F.imm8.insert(imm8) | F.rd.insert(rd.encodedNumber)
     }
 
     static func moveToGeneral(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -211,16 +212,17 @@ internal enum A64FloatEncoder {
     static func conditionalSelect(destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, condition: A64.Condition) throws -> UInt32 {
         try requireSameType(rd, rn, rm, instruction: "fcsel")
         let type = try ptype(rd, instruction: "fcsel")
-        let head: UInt32 = 0x1e20_0c00 | (type << 22)
-        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPConditionalSelect
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.cond.insert(condition.rawValue) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalCompare(_ kind: A64.FPConditionalCompareKind, first rn: FloatRegister, second rm: FloatRegister, nzcv: UInt32, condition: A64.Condition) throws -> UInt32 {
         try requireSameType(rn, rm, instruction: kind.rawValue)
         let type = try ptype(rn, instruction: kind.rawValue)
         guard nzcv <= 0xf else { throw AssemblerError.invalidImmediate("#\(nzcv)") }
-        let head: UInt32 = 0x1e20_0400 | (type << 22)
-        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (rn.encodedNumber << 5) | (kind.op << 4) | nzcv
+        typealias F = A64.FPConditionalCompare
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.cond.insert(condition.rawValue)
+            | F.rn.insert(rn.encodedNumber) | F.op.insert(kind.op) | F.nzcv.insert(nzcv)
     }
 
     static func fjcvtzs(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {

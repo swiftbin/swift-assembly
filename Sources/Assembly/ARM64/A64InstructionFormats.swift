@@ -514,6 +514,93 @@ extension A64 {
         static let rt = BitField(offset: 0, width: 5)
     }
 
+    /// Floating-point data-processing (2 source): `FMUL`/`FADD`/`FMAX`/...
+    /// `type`[23:22] is the precision; `opcode`[15:12] the operation.
+    enum FPDataProcessing2 {
+        static let baseWord: UInt32 = 0x1e20_0800
+        static let classMask: UInt32 = 0xff20_0c00
+
+        static let type = BitField(offset: 22, width: 2)
+        static let rm = BitField(offset: 16, width: 5)
+        static let opcode = BitField(offset: 12, width: 4)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Floating-point data-processing (1 source): `FMOV`/`FABS`/`FNEG`/`FSQRT`/
+    /// `FRINT*` and the `FCVT` precision conversions. `opcode`[20:15] selects.
+    enum FPDataProcessing1 {
+        static let baseWord: UInt32 = 0x1e20_4000
+        static let classMask: UInt32 = 0xff20_7c00
+
+        static let type = BitField(offset: 22, width: 2)
+        static let opcode = BitField(offset: 15, width: 6)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Floating-point data-processing (3 source): `FMADD`/`FMSUB`/`FNMADD`/
+    /// `FNMSUB`. `o1`[21]+`o0`[15] select; `Ra` is the addend.
+    enum FPDataProcessing3 {
+        static let baseWord: UInt32 = 0x1f00_0000
+        static let classMask: UInt32 = 0xff00_0000
+
+        static let type = BitField(offset: 22, width: 2)
+        static let o1 = BitField(offset: 21, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let o0 = BitField(offset: 15, width: 1)
+        static let ra = BitField(offset: 10, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Floating-point compare (`FCMP`/`FCMPE`). `opcode2`[4:0] selects the
+    /// zero/register form and the E variant.
+    enum FPCompare {
+        static let baseWord: UInt32 = 0x1e20_2000
+        static let classMask: UInt32 = 0xff20_fc07
+
+        static let type = BitField(offset: 22, width: 2)
+        static let rm = BitField(offset: 16, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let opcode2 = BitField(offset: 0, width: 5)
+    }
+
+    /// `FCSEL` — floating-point conditional select.
+    enum FPConditionalSelect {
+        static let baseWord: UInt32 = 0x1e20_0c00
+        static let classMask: UInt32 = 0xff20_0c00
+
+        static let type = BitField(offset: 22, width: 2)
+        static let rm = BitField(offset: 16, width: 5)
+        static let cond = BitField(offset: 12, width: 4)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// `FCCMP`/`FCCMPE` — floating-point conditional compare. `op`[4] selects E.
+    enum FPConditionalCompare {
+        static let baseWord: UInt32 = 0x1e20_0400
+        static let classMask: UInt32 = 0xff20_0c00
+
+        static let type = BitField(offset: 22, width: 2)
+        static let rm = BitField(offset: 16, width: 5)
+        static let cond = BitField(offset: 12, width: 4)
+        static let rn = BitField(offset: 5, width: 5)
+        static let op = BitField(offset: 4, width: 1)
+        static let nzcv = BitField(offset: 0, width: 4)
+    }
+
+    /// `FMOV` (scalar, immediate). `imm8`[20:13] is the modified FP immediate.
+    enum FPMoveImmediate {
+        static let baseWord: UInt32 = 0x1e20_1000
+        static let classMask: UInt32 = 0xff20_1fe0
+
+        static let type = BitField(offset: 22, width: 2)
+        static let imm8 = BitField(offset: 13, width: 8)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Load/store a single register. The family spans three addressing forms
     /// that share `size`/`opc`/`Rn`/`Rt` but differ in base word and offset
     /// encoding: unsigned-offset (`imm12`), unscaled/indexed (`imm9`+`mode`)
