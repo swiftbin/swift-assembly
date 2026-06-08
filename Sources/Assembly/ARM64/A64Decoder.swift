@@ -954,14 +954,7 @@ internal enum A64InstructionDecoder {
 
         if op2 != 0 {
             // STG/STZG/ST2G/STZ2G with an addressing mode.
-            let kind: A64.MTEStoreTagKind
-            switch opc {
-            case 0: kind = .stg
-            case 1: kind = .stzg
-            case 2: kind = .st2g
-            case 3: kind = .stz2g
-            default: return nil
-            }
+            guard let kind = A64.MTEStoreTagKind.decode(opc: opc) else { return nil }
             let memory: MemoryOperand
             switch op2 {
             case 0b10: memory = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
@@ -1788,14 +1781,7 @@ internal enum A64InstructionDecoder {
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
 
-        let kind: A64.VectorTwoRegisterMiscKind
-        switch (u, opcode) {
-        case (0, 0b11110): kind = .frint32z
-        case (1, 0b11110): kind = .frint32x
-        case (0, 0b11111): kind = .frint64z
-        case (1, 0b11111): kind = .frint64x
-        default: return nil
-        }
+        guard let kind = A64.VectorTwoRegisterMiscKind.decodeFRINT(u: u, opcode: opcode) else { return nil }
 
         let arrangement: A64.VectorArrangement
         switch (sz, q) {

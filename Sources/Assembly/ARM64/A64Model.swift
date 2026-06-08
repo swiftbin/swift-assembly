@@ -1466,6 +1466,10 @@ internal enum A64 {
             case .stz2g: return 3
             }
         }
+
+        static func decode(opc: UInt32) -> MTEStoreTagKind? {
+            allCases.first { $0.opc == opc }
+        }
     }
 
     /// Tag-multiple operations addressing only `[Xn|SP]` (the `op2 == 00` forms
@@ -2204,6 +2208,12 @@ internal enum A64 {
             if u == 1 && opcode == 0b00101 { return size == 0b01 ? .rbit : .mvn }
             let excluded: Set<VectorTwoRegisterMiscKind> = [.rbit, .mvn, .frint32z, .frint32x, .frint64z, .frint64x]
             return allCases.first { !excluded.contains($0) && $0.spec == (u, opcode) }
+        }
+
+        /// Decode just the `frint32*`/`frint64*` forms (their own decoder).
+        static func decodeFRINT(u: UInt32, opcode: UInt32) -> VectorTwoRegisterMiscKind? {
+            let frints: [VectorTwoRegisterMiscKind] = [.frint32z, .frint32x, .frint64z, .frint64x]
+            return frints.first { $0.spec == (u, opcode) }
         }
     }
 
