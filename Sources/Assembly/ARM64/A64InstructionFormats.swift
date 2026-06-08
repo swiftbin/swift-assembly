@@ -578,6 +578,47 @@ extension A64 {
         static let rt = BitField(offset: 0, width: 5)
     }
 
+    /// MTE load/store memory tags single (`STG`/`STZG`/`ST2G`/`STZ2G`/`LDG`/
+    /// `STGM`/...). `opc` selects the operation; `op2`[11:10] the addressing
+    /// form; `imm9` the (×16-scaled) signed offset.
+    enum MTEMemoryTag {
+        static let baseWord: UInt32 = 0xd920_0000
+        static let classMask: UInt32 = 0xff20_0000
+
+        static let opc = BitField(offset: 22, width: 2)
+        static let imm9 = BitField(offset: 12, width: 9)
+        static let op2 = BitField(offset: 10, width: 2)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// `STGP` — store allocation-tag and pair of registers. `mode`[24:23]
+    /// selects the addressing form; `imm7` the (×16-scaled) signed offset.
+    enum MTEStoreTagPair {
+        static let baseWord: UInt32 = 0x6800_0000
+        static let classMask: UInt32 = 0xfe40_0000
+
+        static let mode = BitField(offset: 23, width: 2)
+        static let imm7 = BitField(offset: 15, width: 7)
+        static let rt2 = BitField(offset: 10, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// `LDRAA`/`LDRAB` — load register with pointer authentication. `m`[23]
+    /// selects the B key; `s`+`imm9` form the signed offset; `w`[11] writeback.
+    enum PointerAuthLoad {
+        static let baseWord: UInt32 = 0xf820_0400
+        static let classMask: UInt32 = 0xff20_0400
+
+        static let m = BitField(offset: 23, width: 1)
+        static let s = BitField(offset: 22, width: 1)
+        static let imm9 = BitField(offset: 12, width: 9)
+        static let w = BitField(offset: 11, width: 1)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
     /// Load register (literal): integer `LDR`/`LDRSW`, the FP `LDR` (`v`=1) and
     /// `PRFM` (literal, `opc`=11). `opc`/`v` select the variant; `imm19` is the
     /// PC-relative word offset.

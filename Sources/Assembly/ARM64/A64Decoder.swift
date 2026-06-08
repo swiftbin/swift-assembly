@@ -961,13 +961,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMTEMemoryTag(_ word: UInt32) -> Instruction? {
-        // Load/store memory tags (single): bits[31:24]=11011001, bit21=1.
-        guard word & 0xff20_0000 == 0xd920_0000 else { return nil }
-        let opc = (word >> 22) & 3
-        let op2 = (word >> 10) & 3
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9) * 16
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: 64)
+        // Load/store memory tags (single).
+        typealias F = A64.MTEMemoryTag
+        guard word & F.classMask == F.baseWord else { return nil }
+        let opc = F.opc.extract(word)
+        let op2 = F.op2.extract(word)
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9) * 16
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: 64)
 
         if op2 != 0 {
             // STG/STZG/ST2G/STZ2G with an addressing mode.
@@ -1000,14 +1001,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMTEStoreTagPair(_ word: UInt32) -> Instruction? {
-        // STGP: bits[31:25]=0110100, L(bit22)=0.
-        guard word & 0xfe40_0000 == 0x6800_0000 else { return nil }
-        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * 16
-        let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: 64)
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: 64)
+        // STGP.
+        typealias F = A64.MTEStoreTagPair
+        guard word & F.classMask == F.baseWord else { return nil }
+        let offset = signExtend(F.imm7.extract(word), bitCount: 7) * 16
+        let rt2 = integerRegister(number: F.rt2.extract(word), width: 64)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: 64)
         let memory: MemoryOperand
-        switch (word >> 23) & 3 {
+        switch F.mode.extract(word) {
         case 1: memory = .postIndexed(base: base, offset: offset)
         case 2: memory = offset >= 0 ? .unsignedOffset(base: base, offset: offset) : .signedUnscaled(base: base, offset: offset)
         case 3: memory = .preIndexed(base: base, offset: offset)
@@ -1017,15 +1019,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodePointerAuthLoad(_ word: UInt32) -> Instruction? {
-        // LDRAA/LDRAB: size=11, bits[29:24]=111000, bit21=1, bit10=1.
-        guard word & 0xff20_0400 == 0xf820_0400 else { return nil }
-        let kind: A64.PointerAuthLoadKind = ((word >> 23) & 1) == 1 ? .ldrab : .ldraa
-        let s = (word >> 22) & 1
-        let imm9 = (word >> 12) & 0x1ff
-        let writeback = ((word >> 11) & 1) == 1
+        // LDRAA/LDRAB.
+        typealias F = A64.PointerAuthLoad
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind: A64.PointerAuthLoadKind = F.m.extract(word) == 1 ? .ldrab : .ldraa
+        let s = F.s.extract(word)
+        let imm9 = F.imm9.extract(word)
+        let writeback = F.w.extract(word) == 1
         let offset = signExtend((s << 9) | imm9, bitCount: 10) * 8
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let target = integerRegister(number: word & 0x1f, width: 64)
+        let base = xRegister(number: F.rn.extract(word))
+        let target = integerRegister(number: F.rt.extract(word), width: 64)
         let memory: MemoryOperand = writeback
             ? .preIndexed(base: base, offset: offset)
             : .unsignedOffset(base: base, offset: offset)

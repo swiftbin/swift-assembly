@@ -491,9 +491,14 @@ internal enum A64PointerAuthenticationEncoder {
         let imm10 = UInt32(bitPattern: Int32(scaled)) & 0x3ff
         let s = (imm10 >> 9) & 1
         let imm9 = imm10 & 0x1ff
-        let m: UInt32 = kind.isBKey ? 1 : 0
-        let w: UInt32 = writeback ? 1 : 0
-        return 0xf820_0400 | (m << 23) | (s << 22) | (imm9 << 12) | (w << 11) | (base.encodedNumber << 5) | target.encodedNumber
+        typealias F = A64.PointerAuthLoad
+        return F.baseWord
+            | F.m.insert(kind.isBKey ? 1 : 0)
+            | F.s.insert(s)
+            | F.imm9.insert(imm9)
+            | F.w.insert(writeback ? 1 : 0)
+            | F.rn.insert(base.encodedNumber)
+            | F.rt.insert(target.encodedNumber)
     }
 }
 
@@ -520,9 +525,6 @@ internal enum A64MTEEncoder {
             | F.rn.insert(source.encodedNumber)
             | F.rd.insert(destination.encodedNumber)
     }
-
-    /// Base of the "Load/store memory tags" single class (bit21 set, opc/op2 zero).
-    private static let memoryTagsBase: UInt32 = 0xd920_0000
 
     /// Decode a memory operand for the tag-store group into a base register, a
     /// signed offset (scaled by 16) and an `op2` addressing field.
@@ -552,8 +554,9 @@ internal enum A64MTEEncoder {
     static func storeTag(_ kind: A64.MTEStoreTagKind, source: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
         guard source.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
         let address = try tagAddress(memory, instruction: kind.rawValue)
-        return memoryTagsBase | (kind.opc << 22) | (address.imm9 << 12) | (address.op2 << 10)
-            | (address.base.encodedNumber << 5) | source.encodedNumber
+        typealias F = A64.MTEMemoryTag
+        return F.baseWord | F.opc.insert(kind.opc) | F.imm9.insert(address.imm9) | F.op2.insert(address.op2)
+            | F.rn.insert(address.base.encodedNumber) | F.rt.insert(source.encodedNumber)
     }
 
     static func loadTag(target: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
@@ -572,27 +575,29 @@ internal enum A64MTEEncoder {
         try checkRange(scaled, -256...255, instruction: "ldg")
         let imm9 = UInt32(bitPattern: Int32(scaled)) & 0x1ff
         // opc = 01, op2 = 00.
-        return memoryTagsBase | (1 << 22) | (imm9 << 12) | (base.encodedNumber << 5) | target.encodedNumber
+        typealias F = A64.MTEMemoryTag
+        return F.baseWord | F.opc.insert(1) | F.imm9.insert(imm9) | F.rn.insert(base.encodedNumber) | F.rt.insert(target.encodedNumber)
     }
 
     static func tagMultiple(_ kind: A64.MTETagMultipleKind, target: IntegerRegister, base: IntegerRegister) throws -> UInt32 {
         guard target.is64Bit, base.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
         // op2 = 00, imm9 = 0.
-        return memoryTagsBase | (kind.opc << 22) | (base.encodedNumber << 5) | target.encodedNumber
+        typealias F = A64.MTEMemoryTag
+        return F.baseWord | F.opc.insert(kind.opc) | F.rn.insert(base.encodedNumber) | F.rt.insert(target.encodedNumber)
     }
 
     static func storeTagPair(first: IntegerRegister, second: IntegerRegister, memory: A64.MemoryOperand) throws -> UInt32 {
         guard first.is64Bit, second.is64Bit else { throw AssemblerError.invalidRegister("stgp") }
         let base: IntegerRegister
         let offset: Int64
-        let modeBase: UInt32
+        let mode: UInt32
         switch memory {
         case .unsignedOffset(let b, let o), .signedUnscaled(let b, let o):
-            base = b; offset = o; modeBase = 0x6900_0000
+            base = b; offset = o; mode = 2
         case .preIndexed(let b, let o):
-            base = b; offset = o; modeBase = 0x6980_0000
+            base = b; offset = o; mode = 3
         case .postIndexed(let b, let o):
-            base = b; offset = o; modeBase = 0x6880_0000
+            base = b; offset = o; mode = 1
         default:
             throw AssemblerError.invalidMemoryOperand("stgp")
         }
@@ -600,8 +605,9 @@ internal enum A64MTEEncoder {
         guard offset % 16 == 0 else { throw AssemblerError.immediateAlignment(instruction: "stgp", value: offset, alignment: 16) }
         let scaled = offset / 16
         try checkRange(scaled, -64...63, instruction: "stgp")
-        let imm7 = UInt32(bitPattern: Int32(scaled)) & 0x7f
-        return modeBase | (imm7 << 15) | (second.encodedNumber << 10) | (base.encodedNumber << 5) | first.encodedNumber
+        typealias F = A64.MTEStoreTagPair
+        return F.baseWord | F.mode.insert(mode) | F.imm7.insert(UInt32(bitPattern: Int32(scaled)))
+            | F.rt2.insert(second.encodedNumber) | F.rn.insert(base.encodedNumber) | F.rt.insert(first.encodedNumber)
     }
 }
 
