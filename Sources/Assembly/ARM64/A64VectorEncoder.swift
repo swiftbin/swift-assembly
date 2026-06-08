@@ -16,17 +16,7 @@ internal enum A64VectorEncoder {
             throw AssemblerError.invalidRegister(kind.rawValue)
         }
 
-        let u: UInt32
-        let opcode: UInt32
-        switch kind {
-        case .saddlv: u = 0; opcode = 0b00011
-        case .uaddlv: u = 1; opcode = 0b00011
-        case .smaxv: u = 0; opcode = 0b01010
-        case .umaxv: u = 1; opcode = 0b01010
-        case .sminv: u = 0; opcode = 0b11010
-        case .uminv: u = 1; opcode = 0b11010
-        case .addv: u = 0; opcode = 0b11011
-        }
+        let (u, opcode) = kind.spec
 
         typealias F = A64.VectorAcrossLanes
         return F.baseWord | F.q.insert(rn.arrangement.q) | F.u.insert(u) | F.size.insert(rn.arrangement.elementSize)
@@ -34,14 +24,7 @@ internal enum A64VectorEncoder {
     }
 
     static func acrossLanesFP(_ kind: A64.AcrossLanesFPKind, destination rd: FloatRegister, source rn: VectorRegister) throws -> UInt32 {
-        let o1: UInt32
-        let opcode: UInt32
-        switch kind {
-        case .fmaxv: o1 = 0; opcode = 0b01111
-        case .fminv: o1 = 1; opcode = 0b01111
-        case .fmaxnmv: o1 = 0; opcode = 0b01100
-        case .fminnmv: o1 = 1; opcode = 0b01100
-        }
+        let (o1, opcode) = kind.spec
 
         typealias F = A64.VectorAcrossLanes
         let common = F.baseWord | F.size.insert(o1 << 1) | F.opcode.insert(opcode)

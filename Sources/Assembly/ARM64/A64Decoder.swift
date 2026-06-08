@@ -1632,14 +1632,7 @@ internal enum A64InstructionDecoder {
             let sz = (word >> 22) & 1
             let o1 = (word >> 23) & 1
             guard sz == 0, q == 1 else { return nil }   // only `.4s` supported
-            let kind: A64.AcrossLanesFPKind
-            switch (opcode, o1) {
-            case (0b01111, 0): kind = .fmaxv
-            case (0b01111, 1): kind = .fminv
-            case (0b01100, 0): kind = .fmaxnmv
-            case (0b01100, 1): kind = .fminnmv
-            default: return nil
-            }
+            guard let kind = A64.AcrossLanesFPKind.decode(o1: o1, opcode: opcode) else { return nil }
             return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 32), source: VectorRegister(number: rnNum, arrangement: .s4))
         }
 
@@ -1648,29 +1641,12 @@ internal enum A64InstructionDecoder {
             let sz = (word >> 22) & 1
             let o1 = (word >> 23) & 1
             guard sz == 0 else { return nil }
-            let kind: A64.AcrossLanesFPKind
-            switch (opcode, o1) {
-            case (0b01111, 0): kind = .fmaxv
-            case (0b01111, 1): kind = .fminv
-            case (0b01100, 0): kind = .fmaxnmv
-            case (0b01100, 1): kind = .fminnmv
-            default: return nil
-            }
+            guard let kind = A64.AcrossLanesFPKind.decode(o1: o1, opcode: opcode) else { return nil }
             let arrangement: A64.VectorArrangement = q == 1 ? .h8 : .h4
             return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 16), source: VectorRegister(number: rnNum, arrangement: arrangement))
         }
 
-        let kind: A64.AcrossLanesIntegerKind
-        switch (u, opcode) {
-        case (0, 0b00011): kind = .saddlv
-        case (1, 0b00011): kind = .uaddlv
-        case (0, 0b01010): kind = .smaxv
-        case (1, 0b01010): kind = .umaxv
-        case (0, 0b11010): kind = .sminv
-        case (1, 0b11010): kind = .uminv
-        case (0, 0b11011): kind = .addv
-        default: return nil
-        }
+        guard let kind = A64.AcrossLanesIntegerKind.decode(u: u, opcode: opcode) else { return nil }
         guard let arrangement = vectorArrangement(size: size, q: q) else { return nil }
         let isLong = kind == .saddlv || kind == .uaddlv
         let destinationWidth = isLong ? arrangement.elementWidth * 2 : arrangement.elementWidth

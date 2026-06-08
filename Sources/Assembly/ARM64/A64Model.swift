@@ -1598,8 +1598,25 @@ internal enum A64 {
         case zero
     }
 
-    enum AcrossLanesIntegerKind: String, Equatable {
+    enum AcrossLanesIntegerKind: String, Equatable, CaseIterable {
         case saddlv, uaddlv, smaxv, umaxv, sminv, uminv, addv
+
+        /// The `(U, opcode[16:12])` discriminator.
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .saddlv: return (0, 0b00011)
+            case .uaddlv: return (1, 0b00011)
+            case .smaxv: return (0, 0b01010)
+            case .umaxv: return (1, 0b01010)
+            case .sminv: return (0, 0b11010)
+            case .uminv: return (1, 0b11010)
+            case .addv: return (0, 0b11011)
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32) -> AcrossLanesIntegerKind? {
+            allCases.first { $0.spec == (u, opcode) }
+        }
     }
 
     /// Advanced SIMD table lookup (`TBL` / `TBX`).
@@ -1610,8 +1627,22 @@ internal enum A64 {
         var op: UInt32 { self == .tbx ? 1 : 0 }
     }
 
-    enum AcrossLanesFPKind: String, Equatable {
+    enum AcrossLanesFPKind: String, Equatable, CaseIterable {
         case fmaxv, fminv, fmaxnmv, fminnmv
+
+        /// The `(o1[23], opcode[16:12])` discriminator (`U` is fixed by the page).
+        var spec: (o1: UInt32, opcode: UInt32) {
+            switch self {
+            case .fmaxv: return (0, 0b01111)
+            case .fminv: return (1, 0b01111)
+            case .fmaxnmv: return (0, 0b01100)
+            case .fminnmv: return (1, 0b01100)
+            }
+        }
+
+        static func decode(o1: UInt32, opcode: UInt32) -> AcrossLanesFPKind? {
+            allCases.first { $0.spec == (o1, opcode) }
+        }
     }
 
     /// Advanced SIMD two-register-misc compare against zero (`Vd.T, Vn.T, #0` or `#0.0`).
