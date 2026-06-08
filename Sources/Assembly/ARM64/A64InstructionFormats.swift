@@ -542,6 +542,22 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Advanced SIMD shift-by-immediate (`SHL`/`SSHR`/`SHRN`/`SSHLL`/...).
+    /// `immh`[22:19]:`immb`[18:16] encode the element size and shift amount;
+    /// `opcode`[15:11] selects the operation.
+    enum VectorShiftImmediate {
+        static let baseWord: UInt32 = 0x0f00_0400
+        static let classMask: UInt32 = 0x9f80_0400
+
+        static let q = BitField(offset: 30, width: 1)
+        static let u = BitField(offset: 29, width: 1)
+        static let immh = BitField(offset: 19, width: 4)
+        static let immb = BitField(offset: 16, width: 3)
+        static let opcode = BitField(offset: 11, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Advanced SIMD permute (`ZIP`/`UZP`/`TRN`). `opcode`[14:12] selects.
     enum VectorPermute {
         static let baseWord: UInt32 = 0x0e00_0800

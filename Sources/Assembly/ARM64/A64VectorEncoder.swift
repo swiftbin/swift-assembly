@@ -180,14 +180,13 @@ internal enum A64VectorEncoder {
         guard shift == UInt32(rn.arrangement.elementWidth) else {
             throw AssemblerError.invalidImmediate("#\(shift)")
         }
-        let size = rn.arrangement.elementSize
-        let head: UInt32 = (rn.arrangement.q << 30) | (1 << 29) | 0x0e20_0800 | (size << 22)
-        return head | (0b10011 << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorTwoRegisterMisc
+        return F.baseWord | F.q.insert(rn.arrangement.q) | F.u.insert(1) | F.size.insert(rn.arrangement.elementSize)
+            | F.opcode.insert(0b10011) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func shiftImmediate(_ kind: A64.VectorShiftImmediateKind, destination rd: VectorRegister, source rn: VectorRegister, shift: Int) throws -> UInt32 {
         let spec = kind.spec
-        let base: UInt32 = 0x0f00_0400
 
         let q: UInt32
         let esize: Int
@@ -244,10 +243,9 @@ internal enum A64VectorEncoder {
             immhimmb = UInt32(2 * esize - shift)
         }
 
-        let immh = immhimmb >> 3
-        let immb = immhimmb & 0b111
-        let head = (q << 30) | (spec.u << 29) | base | (immh << 19) | (immb << 16)
-        return head | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorShiftImmediate
+        return F.baseWord | F.q.insert(q) | F.u.insert(spec.u) | F.immh.insert(immhimmb >> 3) | F.immb.insert(immhimmb & 0b111)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func modifiedImmediate(_ kind: A64.VectorModifiedImmediateKind, destination rd: VectorRegister, imm8: UInt8, shift: A64.VectorImmediateShift) throws -> UInt32 {

@@ -2378,11 +2378,12 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorShiftLeftLong(_ word: UInt32) -> Instruction? {
         // Advanced SIMD two-register-misc, U=1, opcode=0b10011 (SHLL/SHLL2).
+        typealias F = A64.VectorTwoRegisterMisc
         guard word & 0xbf3f_fc00 == 0x2e21_3800 else { return nil }
-        let q = (word >> 30) & 1
-        let size = (word >> 22) & 3
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let q = F.q.extract(word)
+        let size = F.size.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         let dst: A64.VectorArrangement
         let src: A64.VectorArrangement
         switch size {
@@ -2400,17 +2401,17 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorShiftImmediate(_ word: UInt32) -> Instruction? {
-        // bits[28:23]=011110, bit10=1; `immh` (22:19) must be non-zero (immh=0
-        // is the modified-immediate group).
-        guard word & 0x9f80_0400 == 0x0f00_0400 else { return nil }
-        let immh = (word >> 19) & 0xf
+        // `immh` (22:19) must be non-zero (immh=0 is the modified-immediate group).
+        typealias F = A64.VectorShiftImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let immh = F.immh.extract(word)
         guard immh != 0 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let immb = (word >> 16) & 0x7
-        let opcode = (word >> 11) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let immb = F.immb.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         let immhimmb = Int((immh << 3) | immb)
 
         guard let kind = A64.VectorShiftImmediateKind.allCases.first(where: {
