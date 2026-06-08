@@ -831,9 +831,9 @@ internal enum A64VectorEncoder {
             }
         }
 
-        // Base: bit30=1, bits[28:24]=11110, bit21=1, bit10=1.
-        let base: UInt32 = 0x5e20_0400
-        return base | (spec.u << 29) | (size << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ScalarAdvSIMD
+        return F.threeSameBase | F.u.insert(spec.u) | F.size.insert(size) | F.rm.insert(rm.encodedNumber)
+            | (spec.opcode << 11) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func scalarShiftImmediate(_ kind: A64.ScalarShiftImmediateKind, destination rd: FloatRegister, source rn: FloatRegister, shift: Int) throws -> UInt32 {
@@ -880,9 +880,9 @@ internal enum A64VectorEncoder {
         default: throw fail()
         }
 
-        // Base: bit30=1, bits[28:24]=11110, bit21=1, bit10=1.
-        let base: UInt32 = 0x5e20_0400
-        return base | (spec.u << 29) | (spec.hi << 23) | (sz << 22) | (rm.encodedNumber << 16) | (spec.opcode << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ScalarAdvSIMD
+        return F.threeSameBase | F.u.insert(spec.u) | (spec.hi << 23) | (sz << 22) | F.rm.insert(rm.encodedNumber)
+            | (spec.opcode << 11) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func scalarFPTwoRegisterMisc(_ kind: A64.ScalarFPTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -1029,9 +1029,9 @@ internal enum A64VectorEncoder {
         default: throw fail()
         }
 
-        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
-        let base: UInt32 = 0x5e20_0800
-        return base | (spec.u << 29) | (size << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ScalarAdvSIMD
+        return F.twoRegisterMiscBase | F.u.insert(spec.u) | F.size.insert(size)
+            | (spec.opcode << 12) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func scalarShiftNarrow(_ kind: A64.ScalarShiftNarrowKind, destination rd: FloatRegister, source rn: FloatRegister, shift: Int) throws -> UInt32 {
@@ -1097,9 +1097,9 @@ internal enum A64VectorEncoder {
         default: throw fail()
         }
 
-        // Base: bit30=1, bits[28:24]=11110, bit21=1, bits[11:10]=00.
-        let base: UInt32 = 0x5e20_0000
-        return base | (size << 22) | (rm.encodedNumber << 16) | (kind.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ScalarAdvSIMD
+        return F.threeDifferentBase | F.size.insert(size) | F.rm.insert(rm.encodedNumber)
+            | (kind.opcode << 12) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func scalarTwoRegisterMisc(_ kind: A64.ScalarTwoRegisterMiscKind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -1123,24 +1123,24 @@ internal enum A64VectorEncoder {
             }
         }
 
-        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
-        let base: UInt32 = 0x5e20_0800
-        return base | (spec.u << 29) | (size << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ScalarAdvSIMD
+        return F.twoRegisterMiscBase | F.u.insert(spec.u) | F.size.insert(size)
+            | (spec.opcode << 12) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func scalarPairwise(_ kind: A64.ScalarPairwiseKind, destination rd: FloatRegister, source rn: VectorRegister) throws -> UInt32 {
         let spec = kind.spec
         func fail() -> AssemblerError { .invalidRegister(kind.rawValue) }
 
-        // Base: bit30=1, bits[28:24]=11110, bits[21:17]=11000, bits[11:10]=10.
-        let base: UInt32 = 0x5e30_0800
+        typealias F = A64.ScalarAdvSIMD
+        let regs = (spec.opcode << 12) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
 
         if spec.fp {
             // Half-precision form: `.2h` source reducing into a scalar `h`. This
             // variant clears U (the FP32/64 forms set it) and uses sz=0.
             if rn.arrangement == .h2 {
                 guard rd.width == 16 else { throw fail() }
-                return base | (spec.o1 << 23) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+                return F.pairwiseBase | (spec.o1 << 23) | regs
             }
             let sz: UInt32
             switch rn.arrangement {
@@ -1148,11 +1148,11 @@ internal enum A64VectorEncoder {
             case .d2: guard rd.width == 64 else { throw fail() }; sz = 1
             default: throw fail()
             }
-            return base | (spec.u << 29) | (spec.o1 << 23) | (sz << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return F.pairwiseBase | F.u.insert(spec.u) | (spec.o1 << 23) | (sz << 22) | regs
         } else {
             // `addp` reduces a `2d` source into a scalar `d`.
             guard rn.arrangement == .d2, rd.width == 64 else { throw fail() }
-            return base | (spec.u << 29) | (0b11 << 22) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return F.pairwiseBase | F.u.insert(spec.u) | F.size.insert(0b11) | regs
         }
     }
 

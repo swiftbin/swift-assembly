@@ -542,6 +542,23 @@ extension A64 {
         static let rd = BitField(offset: 0, width: 5)
     }
 
+    /// Scalar Advanced SIMD instructions. Like the vector forms but with
+    /// scalar operands; the classes share the register fields and each has its
+    /// own base word. `opcode`/`size` positions differ per class (kept at the
+    /// call sites).
+    enum ScalarAdvSIMD {
+        static let rd = BitField(offset: 0, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rm = BitField(offset: 16, width: 5)
+        static let u = BitField(offset: 29, width: 1)
+        static let size = BitField(offset: 22, width: 2)
+
+        static let threeSameBase: UInt32 = 0x5e20_0400
+        static let threeDifferentBase: UInt32 = 0x5e20_0000
+        static let twoRegisterMiscBase: UInt32 = 0x5e20_0800
+        static let pairwiseBase: UInt32 = 0x5e30_0800
+    }
+
     /// Cryptographic extension instructions. The classes share the register
     /// fields (`Rd`/`Rn`/`Rm`/`Ra`) but each has its own base word; opcode/imm
     /// positions differ per class and stay at their call sites.

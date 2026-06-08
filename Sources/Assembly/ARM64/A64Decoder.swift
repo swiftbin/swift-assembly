@@ -2915,7 +2915,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarThreeSame(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bit21=1, bit10=1.
-        guard word & 0xdf20_0400 == 0x5e20_0400 else { return nil }
+        guard word & 0xdf20_0400 == A64.ScalarAdvSIMD.threeSameBase else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let opcode = (word >> 11) & 0x1f
@@ -2952,7 +2952,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarTwoRegisterMiscNarrow(_ word: UInt32) -> Instruction? {
         // Shares the scalar two-register misc base; distinguished by the narrowing
         // opcodes (0x12 / 0x14). The destination element size comes from `size`.
-        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.twoRegisterMiscBase else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let opcode = (word >> 12) & 0x1f
@@ -3098,7 +3098,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarThreeSameFP(_ word: UInt32) -> Instruction? {
         // Shares the scalar three-same base (bit21=1, bit10=1), distinguished by
         // (U, bit23, opcode[15:11]); bit22 is the `sz` (single/double) bit.
-        guard word & 0xdf20_0400 == 0x5e20_0400 else { return nil }
+        guard word & 0xdf20_0400 == A64.ScalarAdvSIMD.threeSameBase else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let sz = (word >> 22) & 1
@@ -3143,7 +3143,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarFPTwoRegisterMisc(_ word: UInt32) -> Instruction? {
         // Shares the scalar two-register misc base (bits[21:17]=10000, bits[11:10]=10),
         // distinguished by (U, bit23, opcode). bit22 is the `sz` (single/double) bit.
-        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.twoRegisterMiscBase else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let sz = (word >> 22) & 1
@@ -3266,7 +3266,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarThreeDifferent(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bit21=1, bits[11:10]=00.
-        guard word & 0xdf20_0c00 == 0x5e20_0000 else { return nil }
+        guard word & 0xdf20_0c00 == A64.ScalarAdvSIMD.threeDifferentBase else { return nil }
         let size = (word >> 22) & 0x3
         let opcode = (word >> 12) & 0xf
         let rmNum = (word >> 16) & 0x1f
@@ -3291,7 +3291,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarTwoRegisterMisc(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
-        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.twoRegisterMiscBase else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let opcode = (word >> 12) & 0x1f
@@ -3321,7 +3321,7 @@ internal enum A64InstructionDecoder {
         // Half-precision scalar pairwise: like the FP32/64 form but with U=0 and
         // sz=0, reducing a `.2h` source into a scalar `h`. Distinguished by
         // (o1=bit23, opcode[16:12]).
-        guard word & 0xff7e_0c00 == 0x5e30_0800 else { return nil }
+        guard word & 0xff7e_0c00 == A64.ScalarAdvSIMD.pairwiseBase else { return nil }
         let o1 = (word >> 23) & 1
         let opcode = (word >> 12) & 0x1f
         let rnNum = (word >> 5) & 0x1f
@@ -3339,7 +3339,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarPairwise(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bits[21:17]=11000, bits[11:10]=10.
-        guard word & 0xdf3e_0c00 == 0x5e30_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.pairwiseBase else { return nil }
         let u = (word >> 29) & 1
         let o1 = (word >> 23) & 1
         let sz = (word >> 22) & 1
