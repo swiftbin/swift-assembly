@@ -1432,25 +1432,18 @@ internal enum A64DataProcessingEncoder {
     static func multiply(_ kind: A64.MultiplyKind, destination rd: IntegerRegister, first rn: IntegerRegister, second rm: IntegerRegister, accumulator: IntegerRegister?) throws -> UInt32 {
         guard rd.width == rn.width, rn.width == rm.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
         let ra: IntegerRegister
-        let o0: UInt32
-        switch kind {
-        case .mul:
-            ra = zeroRegister(width: rd.width); o0 = 0
-        case .mneg:
-            ra = zeroRegister(width: rd.width); o0 = 1
-        case .madd:
-            guard let accumulator else { throw AssemblerError.invalidOperandCount(instruction: "madd", expected: "4", actual: 3) }
-            ra = accumulator; o0 = 0
-        case .msub:
-            guard let accumulator else { throw AssemblerError.invalidOperandCount(instruction: "msub", expected: "4", actual: 3) }
-            ra = accumulator; o0 = 1
+        if kind.hasAccumulator {
+            guard let accumulator else { throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "4", actual: 3) }
+            ra = accumulator
+        } else {
+            ra = zeroRegister(width: rd.width)
         }
         guard ra.width == rd.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
         typealias F = A64.DataProcessing3Source
         return F.baseWord
             | F.sf.insert(rd.is64Bit ? 1 : 0)
             | F.rm.insert(rm.encodedNumber)
-            | F.o0.insert(o0)
+            | F.o0.insert(kind.o0)
             | F.ra.insert(ra.encodedNumber)
             | F.rn.insert(rn.encodedNumber)
             | F.rd.insert(rd.encodedNumber)

@@ -569,9 +569,9 @@ internal enum A64InstructionDecoder {
         let rn = integerRegister(number: F.rn.extract(word), width: width)
         let rd = integerRegister(number: F.rd.extract(word), width: width)
         if ra == 31 {
-            return .multiply(o0 == 1 ? .mneg : .mul, destination: rd, first: rn, second: rm, accumulator: nil)
+            return .multiply(A64.MultiplyKind.decode(o0: o0, hasAccumulator: false), destination: rd, first: rn, second: rm, accumulator: nil)
         }
-        return .multiply(o0 == 1 ? .msub : .madd, destination: rd, first: rn, second: rm, accumulator: integerRegister(number: ra, width: width))
+        return .multiply(A64.MultiplyKind.decode(o0: o0, hasAccumulator: true), destination: rd, first: rn, second: rm, accumulator: integerRegister(number: ra, width: width))
     }
 
     private static func decodeDivide(_ word: UInt32) -> Instruction? {

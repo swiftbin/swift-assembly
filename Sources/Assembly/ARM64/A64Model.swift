@@ -313,6 +313,21 @@ internal enum A64 {
 
     enum MultiplyKind: String, Equatable {
         case mul, mneg, madd, msub
+
+        /// The `o0` bit at [15] (set for the subtracting variants).
+        var o0: UInt32 { (self == .mneg || self == .msub) ? 1 : 0 }
+        /// Whether the mnemonic takes an explicit accumulator (`madd`/`msub`);
+        /// the `mul`/`mneg` forms use the zero register.
+        var hasAccumulator: Bool { self == .madd || self == .msub }
+
+        static func decode(o0: UInt32, hasAccumulator: Bool) -> MultiplyKind {
+            switch (o0, hasAccumulator) {
+            case (0, false): return .mul
+            case (_, false): return .mneg
+            case (0, true): return .madd
+            default: return .msub
+            }
+        }
     }
 
     enum DivideKind: String, Equatable, CaseIterable {
