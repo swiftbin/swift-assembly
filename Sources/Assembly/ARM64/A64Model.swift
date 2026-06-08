@@ -1516,10 +1516,14 @@ internal enum A64 {
         }
     }
 
-    enum FPDataProcessing1Kind: String, Equatable {
+    enum FPDataProcessing1Kind: String, Equatable, CaseIterable {
         case fmov, fabs, fneg, fsqrt
         case frintn, frintp, frintm, frintz, frinta, frintx, frinti
         case frint32z, frint32x, frint64z, frint64x
+
+        static func decode(opcode: UInt32) -> FPDataProcessing1Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
 
         /// The 6-bit opcode field at [20:15].
         var opcode: UInt32 {
