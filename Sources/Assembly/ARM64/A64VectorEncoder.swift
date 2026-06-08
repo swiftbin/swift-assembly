@@ -465,7 +465,7 @@ internal enum A64VectorEncoder {
         let h = (index >> 1) & 1
         let m = (elementRegister >> 4) & 1
         let rmLow = elementRegister & 0xf
-        let us: UInt32 = kind == .usdot ? 1 : 0
+        let us: UInt32 = kind.us
         let head = (q << 30) | A64.AdvSIMD.mixedDotByElement | (us << 23)
         return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }

@@ -2082,6 +2082,13 @@ internal enum A64 {
     /// by-element forms) and `sudot` (by-element form only).
     enum VectorMixedDotProductKind: String, Equatable, CaseIterable {
         case usdot, sudot
+
+        /// The `US` bit at [23] (1 for `usdot`).
+        var us: UInt32 { self == .usdot ? 1 : 0 }
+
+        static func decode(us: UInt32) -> VectorMixedDotProductKind {
+            us == 1 ? .usdot : .sudot
+        }
     }
 
     /// Advanced SIMD Int8 matrix multiply-accumulate (FEAT_I8MM): `smmla`,
@@ -2093,6 +2100,10 @@ internal enum A64 {
         var u: UInt32 { self == .ummla ? 1 : 0 }
         /// The `B` bit at [11] (distinguishes usmmla from smmla).
         var b: UInt32 { self == .usmmla ? 1 : 0 }
+
+        static func decode(u: UInt32, b: UInt32) -> VectorMatrixMultiplyKind? {
+            allCases.first { $0.u == u && $0.b == b }
+        }
     }
 
     /// Advanced SIMD three-same-extra saturating rounding multiply-accumulate

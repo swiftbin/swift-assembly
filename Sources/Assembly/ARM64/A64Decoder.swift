@@ -2583,7 +2583,7 @@ internal enum A64InstructionDecoder {
         // USDOT/SUDOT (by element): U=0, bits[28:24]=01111, bit22=0,
         // bits[15:12]=1111, bit10=0; bit23 selects usdot(1)/sudot(0).
         if word & 0xbf40_f400 == A64.AdvSIMD.mixedDotByElement {
-            let kind: A64.VectorMixedDotProductKind = ((word >> 23) & 1) == 1 ? .usdot : .sudot
+            let kind = A64.VectorMixedDotProductKind.decode(us: (word >> 23) & 1)
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
             let rmLow = (word >> 16) & 0xf
@@ -2605,13 +2605,7 @@ internal enum A64InstructionDecoder {
         guard word & 0xcee0_f400 == A64.AdvSIMD.matrixMultiply else { return nil }
         let u = (word >> 29) & 1
         let b = (word >> 11) & 1
-        let kind: A64.VectorMatrixMultiplyKind
-        switch (u, b) {
-        case (1, 0): kind = .ummla
-        case (0, 1): kind = .usmmla
-        case (0, 0): kind = .smmla
-        default: return nil
-        }
+        guard let kind = A64.VectorMatrixMultiplyKind.decode(u: u, b: b) else { return nil }
         let rmNum = (word >> 16) & 0x1f
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
