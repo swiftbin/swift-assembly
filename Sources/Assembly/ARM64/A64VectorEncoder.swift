@@ -124,33 +124,27 @@ internal enum A64VectorEncoder {
         }
 
         let spec = kind.spec
-        // Base: bits[28:24]=01110, bit21=1, bit10=1.
-        let base: UInt32 = 0x0e20_0400
-        let registers = (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorThreeSame
+        let regs = F.q.insert(arrangement.q) | F.u.insert(spec.u)
+            | F.rm.insert(rm.encodedNumber) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
 
         switch spec.family {
         case .integer:
-            let head = (arrangement.q << 30) | (spec.u << 29) | base | (arrangement.elementSize << 22)
-            return head | (spec.opcode << 11) | registers
+            return F.baseWord | regs | F.size.insert(arrangement.elementSize) | F.opcode.insert(spec.opcode)
         case .logical:
             // The element-`size` field carries the operation selector.
-            let head = (arrangement.q << 30) | (spec.u << 29) | base | (spec.variant << 22)
-            return head | (spec.opcode << 11) | registers
+            return F.baseWord | regs | F.size.insert(spec.variant) | F.opcode.insert(spec.opcode)
         case .floatingPoint:
             if arrangement.elementWidth == 16 {
-                // Three-same (FP16): `.4h`/`.8h`. Base bits[28:24]=01110,
-                // [22:21]=10, [15:14]=00, bit10=1; opcode is the low 3 bits of
-                // the regular 5-bit FP opcode and `a` selects the sub-group at
-                // bit23.
+                // Three-same (FP16): `.4h`/`.8h`. Distinct base ([22:21]=10);
+                // opcode is the low 3 bits and `a` selects the sub-group at bit23.
                 let fp16Base: UInt32 = 0x0e40_0400
-                let head = (arrangement.q << 30) | (spec.u << 29) | fp16Base | (spec.variant << 23)
-                return head | ((spec.opcode & 0b111) << 11) | registers
+                return fp16Base | regs | F.size.insert(spec.variant << 1) | F.opcode.insert(spec.opcode & 0b111)
             }
             // `a` selects the operation sub-group at bit23; `sz` (bit22) is 0 for
             // single precision (`.2s`/`.4s`) and 1 for double precision (`.2d`).
             let sz: UInt32 = arrangement.elementWidth == 64 ? 1 : 0
-            let head = (arrangement.q << 30) | (spec.u << 29) | base | (spec.variant << 23) | (sz << 22)
-            return head | (spec.opcode << 11) | registers
+            return F.baseWord | regs | F.size.insert((spec.variant << 1) | sz) | F.opcode.insert(spec.opcode)
         }
     }
 
@@ -419,13 +413,17 @@ internal enum A64VectorEncoder {
         // PMULL/PMULL2 also have a 64→128 polynomial form whose source is the
         // doubleword arrangement (`1d`/`2d`) and whose destination is `1q`. This
         // does not fit the regular "doubled element" long form, so handle it here.
+        typealias F = A64.VectorThreeDifferent
+        func encode(q: UInt32, size: UInt32) -> UInt32 {
+            F.baseWord | F.q.insert(q) | F.u.insert(spec.u) | F.size.insert(size)
+                | F.rm.insert(rm.encodedNumber) | F.opcode.insert(spec.opcode)
+                | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
+        }
+
         if kind == .pmull, rd.arrangement == .q1 {
             guard rn.arrangement == rm.arrangement,
                   rn.arrangement == .d1 || rn.arrangement == .d2 else { throw fail() }
-            let q = rn.arrangement.q
-            let base: UInt32 = 0x0e20_0000
-            let head = (q << 30) | (spec.u << 29) | base | (0b11 << 22)
-            return head | (rm.encodedNumber << 16) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return encode(q: rn.arrangement.q, size: 0b11)
         }
 
         // The narrow operand fixes both `size` and `Q`.
@@ -456,9 +454,7 @@ internal enum A64VectorEncoder {
             break
         }
 
-        let base: UInt32 = 0x0e20_0000
-        let head = (narrow.q << 30) | (spec.u << 29) | base | (size << 22)
-        return head | (rm.encodedNumber << 16) | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return encode(q: narrow.q, size: size)
     }
 
     // MARK: - Dot product

@@ -2238,15 +2238,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorThreeSame(_ word: UInt32) -> Instruction? {
-        // bits[28:24]=01110, bit21=1, bit10=1 — unique to the three-same group.
-        guard word & 0x9f20_0400 == 0x0e20_0400 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 11) & 0x1f
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        // Three-same group.
+        typealias F = A64.VectorThreeSame
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         let family: A64.VectorThreeSameKind.Family
         let variant: UInt32
@@ -2560,15 +2561,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorThreeDifferent(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[28:24]=01110, bit21=1, bits[11:10]=00.
-        guard word & 0x9f20_0c00 == 0x0e20_0000 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 0x3
-        let opcode = (word >> 12) & 0xf
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        // Three-different group.
+        typealias F = A64.VectorThreeDifferent
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         guard let kind = A64.VectorThreeDifferentKind.allCases.first(where: {
             let spec = $0.spec

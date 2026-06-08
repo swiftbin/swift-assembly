@@ -514,6 +514,36 @@ extension A64 {
         static let rt = BitField(offset: 0, width: 5)
     }
 
+    /// Advanced SIMD three-same (`ADD`/`AND`/`FADD`/...). `q`/`u`/`size`(or the
+    /// FP `a`/`sz` packed into the same [23:22] field)/`opcode`[15:11] select.
+    enum VectorThreeSame {
+        static let baseWord: UInt32 = 0x0e20_0400
+        static let classMask: UInt32 = 0x9f20_0400
+
+        static let q = BitField(offset: 30, width: 1)
+        static let u = BitField(offset: 29, width: 1)
+        static let size = BitField(offset: 22, width: 2)
+        static let opcode = BitField(offset: 11, width: 5)
+        static let rm = BitField(offset: 16, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Advanced SIMD three-different (`SADDL`/`UMULL`/`PMULL`/...). `opcode` is
+    /// at [15:12].
+    enum VectorThreeDifferent {
+        static let baseWord: UInt32 = 0x0e20_0000
+        static let classMask: UInt32 = 0x9f20_0c00
+
+        static let q = BitField(offset: 30, width: 1)
+        static let u = BitField(offset: 29, width: 1)
+        static let size = BitField(offset: 22, width: 2)
+        static let opcode = BitField(offset: 12, width: 4)
+        static let rm = BitField(offset: 16, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Floating-point data-processing (2 source): `FMUL`/`FADD`/`FMAX`/...
     /// `type`[23:22] is the precision; `opcode`[15:12] the operation.
     enum FPDataProcessing2 {
