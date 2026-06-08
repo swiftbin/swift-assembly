@@ -2,8 +2,8 @@ import Foundation
 
 internal enum A64InstructionDecoder {
     static func decode(_ word: UInt32) throws -> Instruction {
-        if word == 0xd503201f { return .nop }
-        if word == 0xd69f03e0 { return .exceptionReturn }
+        if word == A64.SpecialInstruction.nop { return .nop }
+        if word == A64.SpecialInstruction.exceptionReturn { return .exceptionReturn }
         if let kind = PStateFlagKind.allCases.first(where: { $0.word == word }) {
             return .pstateFlag(kind)
         }

@@ -418,6 +418,12 @@ extension A64 {
         static let imm = BitField(offset: 5, width: 7)
     }
 
+    /// Fully-fixed single-word instructions. `nop` is `HINT #0`.
+    enum SpecialInstruction {
+        static let nop: UInt32 = Hint.baseWord
+        static let exceptionReturn: UInt32 = 0xd69f_03e0
+    }
+
     /// `UDF` — permanently undefined; `imm16` at [15:0].
     enum PermanentlyUndefined {
         static let baseWord: UInt32 = 0x0000_0000

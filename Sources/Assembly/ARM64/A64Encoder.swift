@@ -13,7 +13,7 @@ internal enum A64InstructionEncoder {
     static func encode(_ instruction: Instruction) throws -> UInt32 {
         switch instruction {
         case .nop:
-            return 0xd503201f
+            return A64.SpecialInstruction.nop
         case .hint(let immediate):
             try checkRange(Int64(immediate), 0...0x7f, instruction: "hint")
             return A64.Hint.baseWord | A64.Hint.imm.insert(immediate)
@@ -82,7 +82,7 @@ internal enum A64InstructionEncoder {
         case .exception(let kind, let immediate):
             return kind.baseWord | (UInt32(immediate) << 5)
         case .exceptionReturn:
-            return 0xd69f03e0
+            return A64.SpecialInstruction.exceptionReturn
         case .barrier(.speculation, _):
             return A64.BarrierKind.speculation.baseWord
         case .barrier(let kind, let option):
