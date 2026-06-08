@@ -151,7 +151,7 @@ internal enum A64FloatEncoder {
     static func convertFromInt(_ kind: A64.FPConvertFromIntKind, destination rd: FloatRegister, source rn: IntegerRegister) throws -> UInt32 {
         let sf: UInt32 = rn.is64Bit ? 1 : 0
         let type = try ptype(rd, instruction: kind.rawValue)
-        let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
+        let opcode = kind.opcode
         typealias F = A64.FPIntegerConversion
         return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
@@ -191,7 +191,7 @@ internal enum A64FloatEncoder {
         let maxFbits: UInt32 = rn.is64Bit ? 64 : 32
         guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
         let scale = 64 - fbits
-        let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
+        let opcode = kind.opcode
         typealias F = A64.FPFixedConversion
         return F.baseWord | F.sf.insert(sf) | F.type.insert(type)
             | F.opcode.insert(opcode) | F.scale.insert(scale) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)

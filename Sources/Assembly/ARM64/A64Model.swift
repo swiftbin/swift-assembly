@@ -1621,8 +1621,15 @@ internal enum A64 {
         }
     }
 
-    enum FPConvertFromIntKind: String, Equatable {
+    enum FPConvertFromIntKind: String, Equatable, CaseIterable {
         case scvtf, ucvtf
+
+        /// The `opcode` field at [18:16] (signed vs unsigned conversion).
+        var opcode: UInt32 { self == .scvtf ? 0b010 : 0b011 }
+
+        static func decode(opcode: UInt32) -> FPConvertFromIntKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     enum FPCompareOperand: Equatable {

@@ -1505,7 +1505,7 @@ internal enum A64InstructionDecoder {
             let kind: A64.FPConvertToIntKind = opcode == 0b000 ? .fcvtzs : .fcvtzu
             return .fpConvertToFixed(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width), fbits: fbits)
         case (0b00, 0b010), (0b00, 0b011):
-            let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
+            guard let kind = A64.FPConvertFromIntKind.decode(opcode: opcode) else { return nil }
             return .fpConvertFromFixed(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth), fbits: fbits)
         default:
             return nil
@@ -1563,7 +1563,7 @@ internal enum A64InstructionDecoder {
         }
         switch (rmode, opcode) {
         case (0b00, 0b010), (0b00, 0b011):
-            let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
+            guard let kind = A64.FPConvertFromIntKind.decode(opcode: opcode) else { return nil }
             return .fpConvertFromInt(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
         case (0b00, 0b110):
             // Half-precision (type=11) pairs with either a 32- or 64-bit register;
