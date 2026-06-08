@@ -1140,16 +1140,17 @@ internal enum A64LoadStoreEncoder {
         let q = list.arrangement.q
         let size = list.arrangement.elementSize
         let l: UInt32 = kind.isLoad ? 1 : 0
-        let common = (q << 30) | (l << 22) | (opcode << 12) | (size << 10) | list.encodedNumber
+        typealias F = A64.LoadStoreMultiple
+        let common = F.baseWord | F.q.insert(q) | F.l.insert(l) | F.opcode.insert(opcode) | F.size.insert(size) | F.rt.insert(list.encodedNumber)
 
         switch address {
         case .base(let rn):
-            return 0x0c00_0000 | common | (rn.encodedNumber << 5)
+            return common | F.rn.insert(rn.encodedNumber)
         case .postImmediate(let rn):
             // Immediate post-index: Rm = 0b11111, the transfer size is implicit.
-            return 0x0c80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
+            return common | F.post.insert(1) | F.rm.insert(0x1f) | F.rn.insert(rn.encodedNumber)
         case .postRegister(let rn, let rm):
-            return 0x0c80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
+            return common | F.post.insert(1) | F.rm.insert(rm.encodedNumber) | F.rn.insert(rn.encodedNumber)
         }
     }
 
@@ -1193,15 +1194,17 @@ internal enum A64LoadStoreEncoder {
         }
         let opcode = (sizeClass << 1) | opcode0
         let l: UInt32 = kind.isLoad ? 1 : 0
-        let common = (q << 30) | (l << 22) | (r << 21) | (opcode << 13) | (s << 12) | (size << 10) | list.encodedNumber
+        typealias F = A64.LoadStoreSingleStructure
+        let common = F.baseWord | F.q.insert(q) | F.l.insert(l) | F.r.insert(r)
+            | F.opcode.insert(opcode) | F.s.insert(s) | F.size.insert(size) | F.rt.insert(list.encodedNumber)
 
         switch address {
         case .base(let rn):
-            return 0x0d00_0000 | common | (rn.encodedNumber << 5)
+            return common | F.rn.insert(rn.encodedNumber)
         case .postImmediate(let rn):
-            return 0x0d80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
+            return common | F.post.insert(1) | F.rm.insert(0x1f) | F.rn.insert(rn.encodedNumber)
         case .postRegister(let rn, let rm):
-            return 0x0d80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
+            return common | F.post.insert(1) | F.rm.insert(rm.encodedNumber) | F.rn.insert(rn.encodedNumber)
         }
     }
 
@@ -1216,15 +1219,17 @@ internal enum A64LoadStoreEncoder {
         let q = list.arrangement.q
         let size = list.arrangement.elementSize
         // Replicate is load-only (L = 1) with S = 0.
-        let common = (q << 30) | (1 << 22) | (r << 21) | (opcode << 13) | (size << 10) | list.encodedNumber
+        typealias F = A64.LoadStoreSingleStructure
+        let common = F.baseWord | F.q.insert(q) | F.l.insert(1) | F.r.insert(r)
+            | F.opcode.insert(opcode) | F.size.insert(size) | F.rt.insert(list.encodedNumber)
 
         switch address {
         case .base(let rn):
-            return 0x0d00_0000 | common | (rn.encodedNumber << 5)
+            return common | F.rn.insert(rn.encodedNumber)
         case .postImmediate(let rn):
-            return 0x0d80_0000 | common | (0x1f << 16) | (rn.encodedNumber << 5)
+            return common | F.post.insert(1) | F.rm.insert(0x1f) | F.rn.insert(rn.encodedNumber)
         case .postRegister(let rn, let rm):
-            return 0x0d80_0000 | common | (rm.encodedNumber << 16) | (rn.encodedNumber << 5)
+            return common | F.post.insert(1) | F.rm.insert(rm.encodedNumber) | F.rn.insert(rn.encodedNumber)
         }
     }
 

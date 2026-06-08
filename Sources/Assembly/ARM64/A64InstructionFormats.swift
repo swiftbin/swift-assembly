@@ -543,6 +543,41 @@ extension A64 {
         static let s = BitField(offset: 12, width: 1)
     }
 
+    /// Advanced SIMD load/store multiple structures (`LD1`..`LD4`/`ST1`..`ST4`).
+    /// `post`[23] selects the post-indexed form; `opcode`[15:12] the structure.
+    enum LoadStoreMultiple {
+        static let baseWord: UInt32 = 0x0c00_0000
+        static let classMask: UInt32 = 0xbf00_0000
+
+        static let q = BitField(offset: 30, width: 1)
+        static let post = BitField(offset: 23, width: 1)
+        static let l = BitField(offset: 22, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let opcode = BitField(offset: 12, width: 4)
+        static let size = BitField(offset: 10, width: 2)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
+    /// Advanced SIMD load/store single structure & replicate (`LD1`..`LD4`
+    /// single-lane and `LD1R`..`LD4R`). `opcode`[15:13]+`s`[12] form the
+    /// size-class/lane discriminator; `r`[21] is part of the structure count.
+    enum LoadStoreSingleStructure {
+        static let baseWord: UInt32 = 0x0d00_0000
+        static let classMask: UInt32 = 0xbf00_0000
+
+        static let q = BitField(offset: 30, width: 1)
+        static let post = BitField(offset: 23, width: 1)
+        static let l = BitField(offset: 22, width: 1)
+        static let r = BitField(offset: 21, width: 1)
+        static let rm = BitField(offset: 16, width: 5)
+        static let opcode = BitField(offset: 13, width: 3)
+        static let s = BitField(offset: 12, width: 1)
+        static let size = BitField(offset: 10, width: 2)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rt = BitField(offset: 0, width: 5)
+    }
+
     /// Load register (literal): integer `LDR`/`LDRSW`, the FP `LDR` (`v`=1) and
     /// `PRFM` (literal, `opc`=11). `opc`/`v` select the variant; `imm19` is the
     /// PC-relative word offset.

@@ -1258,19 +1258,20 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStoreMultiple(_ word: UInt32) -> Instruction? {
-        // Advanced SIMD load/store multiple structures: bit31=0, bits[29:24]=001100, bit24=0.
-        guard word & 0xbf00_0000 == 0x0c00_0000 else { return nil }
-        let post = (word >> 23) & 1
+        // Advanced SIMD load/store multiple structures.
+        typealias F = A64.LoadStoreMultiple
+        guard word & F.classMask == F.baseWord else { return nil }
+        let post = F.post.extract(word)
         if post == 0 {
             // The non-post form requires bits[21:16] == 0.
             guard (word >> 16) & 0x3f == 0 else { return nil }
         }
-        let q = (word >> 30) & 1
-        let l = (word >> 22) & 1
-        let opcode = (word >> 12) & 0xf
-        let size = (word >> 10) & 3
-        let rn = (word >> 5) & 0x1f
-        let rt = word & 0x1f
+        let q = F.q.extract(word)
+        let l = F.l.extract(word)
+        let opcode = F.opcode.extract(word)
+        let size = F.size.extract(word)
+        let rn = F.rn.extract(word)
+        let rt = F.rt.extract(word)
 
         guard let (structure, count) = A64.LoadStoreMultipleKind.decode(opcode: opcode),
               let kind = A64.LoadStoreMultipleKind.forStructure(structure, isLoad: l == 1),
@@ -1282,28 +1283,29 @@ internal enum A64InstructionDecoder {
         if post == 0 {
             address = .base(base)
         } else {
-            let rm = (word >> 16) & 0x1f
+            let rm = F.rm.extract(word)
             address = rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
         }
         return .loadStoreMultiple(kind, registers: list, address: address)
     }
 
     private static func decodeLoadStoreSingleStructure(_ word: UInt32) -> Instruction? {
-        // Advanced SIMD load/store single structure & replicate: bit31=0, bits[29:23]=0011010, bit24=1.
-        guard word & 0xbf00_0000 == 0x0d00_0000 else { return nil }
-        let post = (word >> 23) & 1
+        // Advanced SIMD load/store single structure & replicate.
+        typealias F = A64.LoadStoreSingleStructure
+        guard word & F.classMask == F.baseWord else { return nil }
+        let post = F.post.extract(word)
         if post == 0 {
             // Non-post form: the Rm field (bits[20:16]) must be 0.
             guard (word >> 16) & 0x1f == 0 else { return nil }
         }
-        let q = (word >> 30) & 1
-        let l = (word >> 22) & 1
-        let r = (word >> 21) & 1
-        let opcode = (word >> 13) & 0b111
-        let s = (word >> 12) & 1
-        let size = (word >> 10) & 3
-        let rn = (word >> 5) & 0x1f
-        let rt = word & 0x1f
+        let q = F.q.extract(word)
+        let l = F.l.extract(word)
+        let r = F.r.extract(word)
+        let opcode = F.opcode.extract(word)
+        let s = F.s.extract(word)
+        let size = F.size.extract(word)
+        let rn = F.rn.extract(word)
+        let rt = F.rt.extract(word)
         let sizeClass = opcode >> 1
         let opcode0 = opcode & 1
         let selem = Int((opcode0 << 1) | r) + 1
@@ -1311,7 +1313,7 @@ internal enum A64InstructionDecoder {
         let base = xRegister(number: rn)
         func address() -> A64.VectorMemoryOperand {
             if post == 0 { return .base(base) }
-            let rm = (word >> 16) & 0x1f
+            let rm = F.rm.extract(word)
             return rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
         }
 
