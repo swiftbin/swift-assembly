@@ -514,6 +514,34 @@ extension A64 {
         static let rt = BitField(offset: 0, width: 5)
     }
 
+    /// Advanced SIMD two-register misc (`REV*`/`CNT`/`ABS`/`FABS`/...).
+    /// `q`/`u`/`size`/`opcode`[16:12] select; the main (non-FP16) page uses base
+    /// `0x0e20_0800`.
+    enum VectorTwoRegisterMisc {
+        static let baseWord: UInt32 = 0x0e20_0800
+        static let classMask: UInt32 = 0x9f20_0c00
+
+        static let q = BitField(offset: 30, width: 1)
+        static let u = BitField(offset: 29, width: 1)
+        static let size = BitField(offset: 22, width: 2)
+        static let opcode = BitField(offset: 12, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
+    /// Advanced SIMD across-lanes (`ADDV`/`SMAXV`/`FMAXV`/...). `opcode`[16:12].
+    enum VectorAcrossLanes {
+        static let baseWord: UInt32 = 0x0e30_0800
+        static let classMask: UInt32 = 0x9f3e_0c00
+
+        static let q = BitField(offset: 30, width: 1)
+        static let u = BitField(offset: 29, width: 1)
+        static let size = BitField(offset: 22, width: 2)
+        static let opcode = BitField(offset: 12, width: 5)
+        static let rn = BitField(offset: 5, width: 5)
+        static let rd = BitField(offset: 0, width: 5)
+    }
+
     /// Advanced SIMD three-same (`ADD`/`AND`/`FADD`/...). `q`/`u`/`size`(or the
     /// FP `a`/`sz` packed into the same [23:22] field)/`opcode`[15:11] select.
     enum VectorThreeSame {

@@ -28,8 +28,9 @@ internal enum A64VectorEncoder {
         case .addv: u = 0; opcode = 0b11011
         }
 
-        let head: UInt32 = (rn.arrangement.q << 30) | (u << 29) | 0x0e30_0800 | (rn.arrangement.elementSize << 22)
-        return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorAcrossLanes
+        return F.baseWord | F.q.insert(rn.arrangement.q) | F.u.insert(u) | F.size.insert(rn.arrangement.elementSize)
+            | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func acrossLanesFP(_ kind: A64.AcrossLanesFPKind, destination rd: FloatRegister, source rn: VectorRegister) throws -> UInt32 {
@@ -42,19 +43,21 @@ internal enum A64VectorEncoder {
         case .fminnmv: o1 = 1; opcode = 0b01100
         }
 
+        typealias F = A64.VectorAcrossLanes
+        let common = F.baseWord | F.size.insert(o1 << 1) | F.opcode.insert(opcode)
+            | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
+
         // Half-precision (FP16) form: source `.4h`/`.8h`, destination `h` (U=0).
         if rn.arrangement == .h4 || rn.arrangement == .h8 {
             guard rd.width == 16 else { throw AssemblerError.invalidRegister(kind.rawValue) }
-            let head: UInt32 = (rn.arrangement.q << 30) | 0x0e30_0800 | (o1 << 23)
-            return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return common | F.q.insert(rn.arrangement.q)
         }
 
-        // Single-precision `.4s` form (sz=0).
+        // Single-precision `.4s` form (sz=0): Q=1, U=1.
         guard rn.arrangement == .s4, rd.width == 32 else {
             throw AssemblerError.invalidRegister(kind.rawValue)
         }
-        let head: UInt32 = 0x6e30_0800 | (o1 << 23)
-        return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return common | F.q.insert(1) | F.u.insert(1)
     }
 
     static func twoRegisterMisc(_ kind: A64.VectorTwoRegisterMiscKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {
@@ -91,11 +94,14 @@ internal enum A64VectorEncoder {
         case .frint64x: u = 1; opcode = 0b11111
         }
 
+        typealias F = A64.VectorTwoRegisterMisc
+        let regs = F.q.insert(rn.arrangement.q) | F.u.insert(u)
+            | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
+
         let isFloat = kind == .fabs || kind == .fneg || kind == .fsqrt
         if isFloat, rn.arrangement.elementWidth == 16 {
             // FP16 form (`.4h`/`.8h`): the FP16 misc page fixes `a` (bit23) = 1.
-            let head = (rn.arrangement.q << 30) | (u << 29) | fp16TwoRegisterMiscBase | (1 << 23)
-            return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return fp16TwoRegisterMiscBase | regs | (1 << 23)
         }
 
         // frint32/frint64 carry the FP `sz` at bit22 with size-hi (bit23) = 0,
@@ -103,15 +109,13 @@ internal enum A64VectorEncoder {
         switch kind {
         case .frint32z, .frint32x, .frint64z, .frint64x:
             let sz: UInt32 = rn.arrangement.elementWidth == 64 ? 1 : 0
-            let head = (rn.arrangement.q << 30) | (u << 29) | 0x0e20_0800 | (sz << 22)
-            return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+            return F.baseWord | regs | F.size.insert(sz)
         default:
             break
         }
 
         let size = kind == .rbit ? UInt32(0b01) : rn.arrangement.elementSize
-        let head = (rn.arrangement.q << 30) | (u << 29) | 0x0e20_0800 | (size << 22)
-        return head | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        return F.baseWord | regs | F.size.insert(size)
     }
 
     static func threeSame(_ kind: A64.VectorThreeSameKind, destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {

@@ -1639,13 +1639,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAcrossLanes(_ word: UInt32) -> Instruction? {
-        guard word & 0x9f3e_0c00 == 0x0e30_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorAcrossLanes
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         // Floating-point across lanes (U=1, opcode 01100 / 01111).
         if u == 1 && (opcode == 0b01100 || opcode == 0b01111) {
@@ -1880,13 +1881,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         let kind: A64.VectorTwoRegisterMiscKind
         switch (u, opcode) {
