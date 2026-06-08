@@ -123,8 +123,8 @@ internal enum A64FloatEncoder {
         default: throw AssemblerError.invalidRegister("fcvt")
         }
         let opcode: UInt32 = 0b0001_00 | targetOpc
-        let head: UInt32 = 0x1e20_4000 | (sourceType << 22)
-        return head | (opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing1
+        return F.baseWord | F.type.insert(sourceType) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func bfloat16Convert(destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {

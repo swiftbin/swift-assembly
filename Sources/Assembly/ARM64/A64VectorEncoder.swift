@@ -142,7 +142,7 @@ internal enum A64VectorEncoder {
             if arrangement.elementWidth == 16 {
                 // Three-same (FP16): `.4h`/`.8h`. Distinct base ([22:21]=10);
                 // opcode is the low 3 bits and `a` selects the sub-group at bit23.
-                let fp16Base: UInt32 = 0x0e40_0400
+                let fp16Base: UInt32 = A64.AdvSIMD.threeSameFP16
                 return fp16Base | regs | F.size.insert(spec.variant << 1) | F.opcode.insert(spec.opcode & 0b111)
             }
             // `a` selects the operation sub-group at bit23; `sz` (bit22) is 0 for
@@ -494,7 +494,7 @@ internal enum A64VectorEncoder {
     static func usDotProduct(destination rd: VectorRegister, first rn: VectorRegister, second rm: VectorRegister) throws -> UInt32 {
         func fail() -> AssemblerError { .invalidRegister("usdot") }
         guard let q = dotProductQ(destination: rd, first: rn), rn.arrangement == rm.arrangement else { throw fail() }
-        let head = (q << 30) | 0x0e80_9c00
+        let head = (q << 30) | A64.AdvSIMD.usDotProduct
         return head | (rm.encodedNumber << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -507,7 +507,7 @@ internal enum A64VectorEncoder {
         let m = (elementRegister >> 4) & 1
         let rmLow = elementRegister & 0xf
         let us: UInt32 = kind == .usdot ? 1 : 0
-        let head = (q << 30) | 0x0f00_f000 | (us << 23)
+        let head = (q << 30) | A64.AdvSIMD.mixedDotByElement | (us << 23)
         return head | (l << 21) | (m << 20) | (rmLow << 16) | (h << 11) | (rn.encodedNumber << 5) | rd.encodedNumber
     }
 
@@ -1327,9 +1327,9 @@ internal enum A64VectorEncoder {
         }
 
         let spec = kind.spec
-        let q: UInt32 = upper ? 1 : 0
-        let head = (q << 30) | (spec.u << 29) | 0x0e20_0800 | (sz << 22)
-        return head | (spec.opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.VectorTwoRegisterMisc
+        return F.baseWord | F.q.insert(upper ? 1 : 0) | F.u.insert(spec.u) | F.size.insert(sz)
+            | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func roundReciprocal(_ kind: A64.VectorRoundReciprocalKind, destination rd: VectorRegister, source rn: VectorRegister) throws -> UInt32 {

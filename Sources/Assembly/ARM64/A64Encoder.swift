@@ -438,7 +438,7 @@ internal enum A64PointerAuthenticationEncoder {
                 throw AssemblerError.invalidRegister(kind.rawValue)
             }
             // PACGA: data-processing (2 source).
-            return 0x9ac0_3000 | (modifier.encodedNumber << 16) | (source.encodedNumber << 5) | destination.encodedNumber
+            return A64.PointerAuthData.pacga | (modifier.encodedNumber << 16) | (source.encodedNumber << 5) | destination.encodedNumber
         }
         // Data-processing (1 source). The `*Z*` forms have an implicit `xzr` source.
         let rn: UInt32
@@ -449,7 +449,7 @@ internal enum A64PointerAuthenticationEncoder {
             guard let source, source.is64Bit else { throw AssemblerError.invalidRegister(kind.rawValue) }
             rn = source.encodedNumber
         }
-        return 0xdac1_0000 | (kind.opcode << 10) | (rn << 5) | destination.encodedNumber
+        return A64.PointerAuthData.dataBase | (kind.opcode << 10) | (rn << 5) | destination.encodedNumber
     }
 
     static func encodeBranch(_ kind: A64.PointerAuthBranchKind, target: IntegerRegister?, modifier: IntegerRegister?) throws -> UInt32 {
@@ -1643,11 +1643,10 @@ internal enum A64DataProcessingEncoder {
         // inverted condition; the inversion is undefined for AL/NV.
         guard condition.rawValue < 0b1110 else { throw AssemblerError.unsupportedCondition(kind.rawValue) }
         let base = kind.base
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (base.op << 30) | 0x1a80_0000
         let invertedCondition = condition.rawValue ^ 1
-        let zr: UInt32 = 31
-        return head | (zr << 16) | (invertedCondition << 12) | (base.o2 << 10) | (zr << 5) | rd.encodedNumber
+        typealias F = A64.ConditionalSelect
+        return F.baseWord | F.sf.insert(rd.is64Bit ? 1 : 0) | F.op.insert(base.op) | F.rm.insert(31)
+            | F.cond.insert(invertedCondition) | F.o2.insert(base.o2) | F.rn.insert(31) | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalSelectAlias(_ kind: A64.ConditionalSelectAliasKind, destination rd: IntegerRegister, source rn: IntegerRegister, condition: A64.Condition) throws -> UInt32 {
@@ -1656,9 +1655,9 @@ internal enum A64DataProcessingEncoder {
         guard rd.width == rn.width else { throw AssemblerError.invalidRegister(kind.rawValue) }
         guard condition.rawValue < 0b1110 else { throw AssemblerError.unsupportedCondition(kind.rawValue) }
         let base = kind.base
-        let sf: UInt32 = rd.is64Bit ? 1 : 0
-        let head = (sf << 31) | (base.op << 30) | 0x1a80_0000
         let invertedCondition = condition.rawValue ^ 1
-        return head | (rn.encodedNumber << 16) | (invertedCondition << 12) | (base.o2 << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.ConditionalSelect
+        return F.baseWord | F.sf.insert(rd.is64Bit ? 1 : 0) | F.op.insert(base.op) | F.rm.insert(rn.encodedNumber)
+            | F.cond.insert(invertedCondition) | F.o2.insert(base.o2) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 }

@@ -567,6 +567,17 @@ extension A64 {
         static let scalarFPTwoRegisterMiscFP16: UInt32 = 0x5e78_0800
         static let scalarCopy: UInt32 = 0x5e00_0400
         static let scalarIndexed: UInt32 = 0x5f00_0000
+        static let threeSameFP16: UInt32 = 0x0e40_0400
+        static let usDotProduct: UInt32 = 0x0e80_9c00
+        static let mixedDotByElement: UInt32 = 0x0f00_f000
+    }
+
+    /// Pointer-authentication data-processing base words. `PACGA` is a
+    /// data-processing (2-source) form; the `PAC*`/`AUT*` data forms are
+    /// data-processing (1-source) with the key/op in the `opcode` field.
+    enum PointerAuthData {
+        static let pacga: UInt32 = 0x9ac0_3000
+        static let dataBase: UInt32 = 0xdac1_0000
     }
 
     /// Scalar Advanced SIMD instructions. Like the vector forms but with

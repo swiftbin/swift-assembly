@@ -312,14 +312,14 @@ internal enum A64InstructionDecoder {
 
     private static func decodePointerAuthData(_ word: UInt32) -> Instruction? {
         // PACGA: data-processing (2 source), opcode[15:10]=001100.
-        if word & 0xffe0_fc00 == 0x9ac0_3000 {
+        if word & 0xffe0_fc00 == A64.PointerAuthData.pacga {
             let rd = integerRegister(number: word & 0x1f, width: 64)
             let rn = integerRegister(number: (word >> 5) & 0x1f, width: 64)
             let rm = integerRegister(number: (word >> 16) & 0x1f, width: 64)
             return .pointerAuthData(.pacga, destination: rd, source: rn, modifier: rm)
         }
         // Data-processing (1 source): bit31=1, op[30:21]=1011000001, opcode[15:10]=0000xx..0011xx.
-        guard word & 0xffff_0000 == 0xdac1_0000 else { return nil }
+        guard word & 0xffff_0000 == A64.PointerAuthData.dataBase else { return nil }
         let opcode = (word >> 10) & 0x3f
         guard let kind = A64.PointerAuthDataKind.decodeOneSource(opcode: opcode) else { return nil }
         let rd = integerRegister(number: word & 0x1f, width: 64)
@@ -2310,7 +2310,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorThreeSameFP16(_ word: UInt32) -> Instruction? {
         // Three-same (FP16): bits[28:24]=01110, [22:21]=10, [15:14]=00, bit10=1.
-        guard word & 0x9f60_c400 == 0x0e40_0400 else { return nil }
+        guard word & 0x9f60_c400 == A64.AdvSIMD.threeSameFP16 else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let a = (word >> 23) & 1
@@ -2671,7 +2671,7 @@ internal enum A64InstructionDecoder {
         let rdNum = word & 0x1f
 
         // USDOT (vector): U=0, size=10, bit21=0, bits[15:10]=100111.
-        if word & 0xbfe0_fc00 == 0x0e80_9c00 {
+        if word & 0xbfe0_fc00 == A64.AdvSIMD.usDotProduct {
             let rmNum = (word >> 16) & 0x1f
             return .vectorUSDotProduct(
                 destination: VectorRegister(number: rdNum, arrangement: destination),
@@ -2681,7 +2681,7 @@ internal enum A64InstructionDecoder {
 
         // USDOT/SUDOT (by element): U=0, bits[28:24]=01111, bit22=0,
         // bits[15:12]=1111, bit10=0; bit23 selects usdot(1)/sudot(0).
-        if word & 0xbf40_f400 == 0x0f00_f000 {
+        if word & 0xbf40_f400 == A64.AdvSIMD.mixedDotByElement {
             let kind: A64.VectorMixedDotProductKind = ((word >> 23) & 1) == 1 ? .usdot : .sudot
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
