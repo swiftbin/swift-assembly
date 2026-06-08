@@ -576,6 +576,8 @@ extension A64 {
         static let threeSameFP16: UInt32 = 0x0e40_0400
         static let usDotProduct: UInt32 = 0x0e80_9c00
         static let mixedDotByElement: UInt32 = 0x0f00_f000
+        /// Two-register-misc FP16 page (shared by misc/compare-zero/convert/...).
+        static let twoRegisterMiscFP16: UInt32 = 0x0e78_0800
     }
 
     /// Pointer-authentication data-processing base words. `PACGA` is a

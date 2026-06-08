@@ -1810,7 +1810,7 @@ internal enum A64InstructionDecoder {
         // Advanced SIMD two-register miscellaneous (FP16): bits[28:24]=01110,
         // [22]=1, [21:17]=11100, [11:10]=10. `a`=bit23 carries the regular form's
         // high `size` bit and selects the operation sub-page.
-        guard word & 0x9f7e_0c00 == 0x0e78_0800 else { return nil }
+        guard word & 0x9f7e_0c00 == A64.AdvSIMD.twoRegisterMiscFP16 else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let a = (word >> 23) & 1

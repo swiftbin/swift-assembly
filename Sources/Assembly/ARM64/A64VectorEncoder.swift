@@ -101,7 +101,7 @@ internal enum A64VectorEncoder {
         let isFloat = kind == .fabs || kind == .fneg || kind == .fsqrt
         if isFloat, rn.arrangement.elementWidth == 16 {
             // FP16 form (`.4h`/`.8h`): the FP16 misc page fixes `a` (bit23) = 1.
-            return fp16TwoRegisterMiscBase | regs | (1 << 23)
+            return A64.AdvSIMD.twoRegisterMiscFP16 | regs | (1 << 23)
         }
 
         // frint32/frint64 carry the FP `sz` at bit22 with size-hi (bit23) = 0,
@@ -1188,7 +1188,6 @@ internal enum A64VectorEncoder {
     /// class: bits[28:24]=01110, [22]=1, [21:17]=11100, [11:10]=10. The `a` bit
     /// at [23] (which equals the regular form's high `size` bit) and the 5-bit
     /// `opcode` at [16:12] select the operation.
-    static let fp16TwoRegisterMiscBase: UInt32 = 0x0e78_0800
 
     /// Arrangements permitted by the integer compare-against-zero forms.
     private static let allowedCompareZeroInteger: Set<A64.VectorArrangement> = [.b8, .b16, .h4, .h8, .s2, .s4, .d2]
@@ -1206,7 +1205,7 @@ internal enum A64VectorEncoder {
             | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
         if kind.isFloat, rd.arrangement.elementWidth == 16 {
             // FP16 form: the compare-against-#0.0 opcodes live on the `a`=1 page.
-            return fp16TwoRegisterMiscBase | regs | (1 << 23)
+            return A64.AdvSIMD.twoRegisterMiscFP16 | regs | (1 << 23)
         }
         return F.baseWord | regs | F.size.insert(rd.arrangement.elementSize)
     }
@@ -1221,7 +1220,7 @@ internal enum A64VectorEncoder {
             | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
         if rd.arrangement.elementWidth == 16 {
             // FP16 form: `a` (bit23) carries the high `size` bit selector.
-            return fp16TwoRegisterMiscBase | regs | (spec.sizeHi << 23)
+            return A64.AdvSIMD.twoRegisterMiscFP16 | regs | (spec.sizeHi << 23)
         }
         let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
         return F.baseWord | regs | F.size.insert((spec.sizeHi << 1) | sz)
@@ -1345,7 +1344,7 @@ internal enum A64VectorEncoder {
             | F.opcode.insert(spec.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
         if rd.arrangement.elementWidth == 16 {
             // FP16 form: `a` (bit23) carries the high `size` bit selector.
-            return fp16TwoRegisterMiscBase | regs | (spec.sizeHi << 23)
+            return A64.AdvSIMD.twoRegisterMiscFP16 | regs | (spec.sizeHi << 23)
         }
         let sz: UInt32 = rd.arrangement.elementWidth == 64 ? 1 : 0
         return F.baseWord | regs | F.size.insert((spec.sizeHi << 1) | sz)
