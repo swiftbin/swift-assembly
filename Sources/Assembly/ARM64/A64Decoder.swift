@@ -470,6 +470,10 @@ internal enum A64InstructionDecoder {
         let maxShift = UInt32(width - 1)
         let immr = (word >> 16) & 0x3f
         let imms = (word >> 10) & 0x3f
+        // For the 32-bit form (sf=0) the high bit of immr/imms must be clear;
+        // otherwise the encoding is UNALLOCATED. Reject it here so the alias
+        // arithmetic below cannot underflow.
+        if sf == 0 && (immr > 31 || imms > 31) { return nil }
         let rd = integerRegister(number: word & 0x1f, width: width)
         let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
         switch (word >> 29) & 3 {
@@ -503,6 +507,9 @@ internal enum A64InstructionDecoder {
         let width = sf == 1 ? 64 : 32
         let immr = F.immr.extract(word)
         let imms = F.imms.extract(word)
+        // The 32-bit form (sf=0) requires immr/imms < 32; larger values are
+        // UNALLOCATED and would underflow the alias arithmetic in the formatter.
+        if sf == 0 && (immr > 31 || imms > 31) { return nil }
         let rd = integerRegister(number: F.rd.extract(word), width: width)
         let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .bitfield(kind, destination: rd, source: rn, immr: immr, imms: imms)

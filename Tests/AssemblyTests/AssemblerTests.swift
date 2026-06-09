@@ -5407,4 +5407,53 @@ final class AssemblerTests: XCTestCase {
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("dsb invalid"))
         XCTAssertThrowsError(try ARM64Assembler.assembleWord("b missing_label"))
     }
+
+    /// Regression: these invalid bitfield/extract encodings used to trap
+    /// (SIGTRAP from an unchecked `UInt32` subtraction underflow) instead of
+    /// throwing. For the 32-bit form (sf=0) immr/imms must be < 32; larger
+    /// values are UNALLOCATED and must throw cleanly, never crash.
+    func testInvalidBitfieldEncodingsThrowInsteadOfTrapping() throws {
+        // sf=0 ubfm with immr=39, imms=38 (immr == imms+1 would compute
+        // maxShift(31) - imms(38) and underflow).
+        XCTAssertThrowsError(try ARM64Assembler.disassembleWord(0x53279b68))
+        // sf=0 sbfm with immr=52, imms=19 (imms < immr would compute
+        // (32 - immr) and underflow in the formatter).
+        XCTAssertThrowsError(try ARM64Assembler.disassembleWord(0x13344c55))
+    }
+
+    /// Property: every 32-bit word must either decode/format successfully or
+    /// throw `AssemblerError` — it must never trap the process. This walks a
+    /// large deterministic LCG sample to surface any remaining trapping words.
+    /// (If any word traps, the whole test process dies with SIGTRAP, which the
+    /// test runner reports as a crash rather than a failure.)
+    func testDisassembleWordNeverTrapsOverDeterministicSample() throws {
+        var state: UInt64 = 0x123456789abcdef0
+        for _ in 0..<2_000_000 {
+            state = state &* 6364136223846793005 &+ 1442695040888963407
+            let word = UInt32(truncatingIfNeeded: state >> 32)
+            // Either outcome is acceptable; we only require that it returns.
+            _ = try? ARM64Assembler.disassembleWord(word)
+        }
+    }
+
+    /// Property: exhaustively cover the bitfield + extract DP-immediate classes
+    /// (op0 = 110/111), which are the families that previously trapped. Every
+    /// combination of sf/opc/N/immr/imms must decode-or-throw, never trap.
+    func testBitfieldAndExtractClassesNeverTrap() throws {
+        for base: UInt32 in [0x13000000, 0x13800000] {
+            for opc in UInt32(0)...3 {
+                for sf in UInt32(0)...1 {
+                    for n in UInt32(0)...1 {
+                        let header = (sf << 31) | (opc << 29) | base | (n << 22)
+                        for immr in UInt32(0)...63 {
+                            for imms in UInt32(0)...63 {
+                                let word = header | (immr << 16) | (imms << 10)
+                                _ = try? ARM64Assembler.disassembleWord(word)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
