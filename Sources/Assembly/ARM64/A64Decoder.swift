@@ -2,8 +2,8 @@ import Foundation
 
 internal enum A64InstructionDecoder {
     static func decode(_ word: UInt32) throws -> Instruction {
-        if word == 0xd503201f { return .nop }
-        if word == 0xd69f03e0 { return .exceptionReturn }
+        if word == A64.SpecialInstruction.nop { return .nop }
+        if word == A64.SpecialInstruction.exceptionReturn { return .exceptionReturn }
         if let kind = PStateFlagKind.allCases.first(where: { $0.word == word }) {
             return .pstateFlag(kind)
         }
@@ -139,18 +139,8 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeBranchRegister(_ word: UInt32) -> Instruction? {
-        let mask: UInt32 = 0xffff_fc1f
-        let rn = xRegister(number: (word >> 5) & 0x1f)
-        switch word & mask {
-        case 0xd65f0000:
-            return .branchRegister(.ret, rn)
-        case 0xd61f0000:
-            return .branchRegister(.br, rn)
-        case 0xd63f0000:
-            return .branchRegister(.blr, rn)
-        default:
-            return nil
-        }
+        guard let kind = A64.BranchRegisterKind.decode(masked: word & 0xffff_fc1f) else { return nil }
+        return .branchRegister(kind, xRegister(number: (word >> 5) & 0x1f))
     }
 
     private static func decodePointerAuthBranch(_ word: UInt32) -> Instruction? {
@@ -180,197 +170,144 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeUnconditionalBranch(_ word: UInt32) -> Instruction? {
-        switch word & 0xfc00_0000 {
-        case 0x14000000:
-            return .unconditionalBranch(link: false, offset: signExtend(word & 0x03ff_ffff, bitCount: 26) * 4)
-        case 0x94000000:
-            return .unconditionalBranch(link: true, offset: signExtend(word & 0x03ff_ffff, bitCount: 26) * 4)
-        default:
-            return nil
-        }
+        typealias F = A64.UnconditionalBranchImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let offset = signExtend(F.imm26.extract(word), bitCount: 26) * 4
+        return .unconditionalBranch(link: F.op.extract(word) == 1, offset: offset)
     }
 
     private static func decodeConditionalBranch(_ word: UInt32) -> Instruction? {
-        guard word & 0xff00_0010 == 0x5400_0000 else { return nil }
-        guard let condition = Condition(rawValue: word & 0xf) else { return nil }
-        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
+        typealias F = A64.ConditionalBranchImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let offset = signExtend(F.imm19.extract(word), bitCount: 19) * 4
         return .conditionalBranch(condition, offset: offset)
     }
 
     private static func decodeCompareAndBranch(_ word: UInt32) -> Instruction? {
-        guard word & 0x7e00_0000 == 0x3400_0000 else { return nil }
-        let is64Bit = (word >> 31) & 1 == 1
-        let nonzero = (word >> 24) & 1 == 1
-        let rt = integerRegister(number: word & 0x1f, width: is64Bit ? 64 : 32)
-        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
+        typealias F = A64.CompareAndBranch
+        guard word & F.classMask == F.baseWord else { return nil }
+        let is64Bit = F.sf.extract(word) == 1
+        let nonzero = F.op.extract(word) == 1
+        let rt = integerRegister(number: F.rt.extract(word), width: is64Bit ? 64 : 32)
+        let offset = signExtend(F.imm19.extract(word), bitCount: 19) * 4
         return .compareAndBranch(nonzero: nonzero, rt, offset: offset)
     }
 
     private static func decodeTestAndBranch(_ word: UInt32) -> Instruction? {
-        guard word & 0x7e00_0000 == 0x3600_0000 else { return nil }
-        let bit = Int64(((word >> 31) & 1) << 5) | Int64((word >> 19) & 0x1f)
-        let nonzero = (word >> 24) & 1 == 1
-        let rt = integerRegister(number: word & 0x1f, width: bit >= 32 ? 64 : 32)
-        let offset = signExtend((word >> 5) & 0x3fff, bitCount: 14) * 4
+        typealias F = A64.TestAndBranch
+        guard word & F.classMask == F.baseWord else { return nil }
+        let bit = Int64(F.b5.extract(word) << 5) | Int64(F.b40.extract(word))
+        let nonzero = F.op.extract(word) == 1
+        let rt = integerRegister(number: F.rt.extract(word), width: bit >= 32 ? 64 : 32)
+        let offset = signExtend(F.imm14.extract(word), bitCount: 14) * 4
         return .testAndBranch(nonzero: nonzero, rt, bit: bit, offset: offset)
     }
 
     private static func decodeAddress(_ word: UInt32) -> Instruction? {
-        let page: Bool
-        switch word & 0x9f00_0000 {
-        case 0x1000_0000:
-            page = false
-        case 0x9000_0000:
-            page = true
-        default:
-            return nil
-        }
-        let immlo = (word >> 29) & 0x3
-        let immhi = (word >> 5) & 0x7ffff
+        typealias F = A64.PCRelativeAddressing
+        guard word & F.classMask == F.baseWord else { return nil }
+        let page = F.op.extract(word) == 1
+        let immlo = F.immlo.extract(word)
+        let immhi = F.immhi.extract(word)
         let immediate = signExtend((immhi << 2) | immlo, bitCount: 21)
-        return .address(page: page, xRegister(number: word & 0x1f), offset: page ? immediate * 4096 : immediate)
+        return .address(page: page, xRegister(number: F.rd.extract(word)), offset: page ? immediate * 4096 : immediate)
     }
 
     private static func decodeUDF(_ word: UInt32) -> Instruction? {
-        // UDF (permanently undefined): bits[31:16] are zero, imm16 at [15:0].
-        guard word & 0xffff_0000 == 0 else { return nil }
-        return .permanentlyUndefined(word & 0xffff)
+        typealias F = A64.PermanentlyUndefined
+        guard word & F.classMask == F.baseWord else { return nil }
+        return .permanentlyUndefined(F.imm16.extract(word))
     }
 
     private static func decodeException(_ word: UInt32) -> Instruction? {
-        let mask: UInt32 = 0xffe0_001f
-        let immediate = Int64((word >> 5) & 0xffff)
-        switch word & mask {
-        case 0xd4000001:
-            return .exception(.supervisorCall, immediate: immediate)
-        case 0xd4200000:
-            return .exception(.breakpoint, immediate: immediate)
-        case 0xd4400000:
-            return .exception(.halt, immediate: immediate)
-        case 0xd4000002:
-            return .exception(.hypervisorCall, immediate: immediate)
-        case 0xd4000003:
-            return .exception(.secureMonitorCall, immediate: immediate)
-        case 0xd4a00001:
-            return .exception(.debugChangeState1, immediate: immediate)
-        case 0xd4a00002:
-            return .exception(.debugChangeState2, immediate: immediate)
-        case 0xd4a00003:
-            return .exception(.debugChangeState3, immediate: immediate)
-        default:
-            return nil
-        }
+        guard let kind = A64.ExceptionKind.decode(masked: word & 0xffe0_001f) else { return nil }
+        return .exception(kind, immediate: Int64((word >> 5) & 0xffff))
     }
 
     private static func decodeBarrier(_ word: UInt32) -> Instruction? {
-        let mask: UInt32 = 0xffff_f0ff
-        let option = (word >> 8) & 0xf
-        switch word & mask {
-        case 0xd50330df:
-            return .barrier(.instructionSynchronization, option: option)
-        case 0xd503309f:
-            return .barrier(.dataSynchronization, option: option)
-        case 0xd50330bf:
-            return .barrier(.dataMemory, option: option)
-        case 0xd50330ff:
-            // SB (speculation barrier): op2=111, CRm fixed at 0.
-            return .barrier(.speculation, option: 0)
-        default:
-            return nil
-        }
+        guard let kind = A64.BarrierKind.decode(masked: word & 0xffff_f0ff) else { return nil }
+        // SB (speculation barrier) has a fixed CRm of 0; the others carry the option.
+        let option = kind == .speculation ? 0 : (word >> 8) & 0xf
+        return .barrier(kind, option: option)
     }
 
     private static func decodeClearExclusive(_ word: UInt32) -> Instruction? {
-        // CLREX (CRn=0011, op2=010, Rt=11111); only the CRm immediate at [11:8] varies.
-        guard word & 0xffff_f0ff == 0xd503_305f else { return nil }
-        return .clearExclusive((word >> 8) & 0xf)
+        typealias F = A64.ClearExclusive
+        guard word & F.classMask == F.baseWord else { return nil }
+        return .clearExclusive(F.crm.extract(word))
     }
 
     private static func decodeWaitWithTimeout(_ word: UInt32) -> Instruction? {
-        // WFET/WFIT: fixed bits[31:6]=0xd503_1000>>6, op2 (bit5) selects, Rt at [4:0].
-        guard word & 0xffff_ffc0 == 0xd503_1000 else { return nil }
-        let isEvent = ((word >> 5) & 1) == 0
-        return .waitWithTimeout(isEvent: isEvent, register: xRegister(number: word & 0x1f))
+        typealias F = A64.WaitWithTimeout
+        guard word & F.classMask == F.baseWord else { return nil }
+        let isEvent = F.op2.extract(word) == 0
+        return .waitWithTimeout(isEvent: isEvent, register: xRegister(number: F.rt.extract(word)))
     }
 
     private static func decodeHint(_ word: UInt32) -> Instruction? {
-        // HINT space (CRn=0010): only the 7-bit CRm:op2 immediate at [11:5] varies.
         // nop (#0) and the paciasp-family hints are claimed earlier in the chain.
-        guard word & 0xffff_f01f == 0xd503_201f else { return nil }
-        return .hint((word >> 5) & 0x7f)
+        typealias F = A64.Hint
+        guard word & F.classMask == F.baseWord else { return nil }
+        return .hint(F.imm.extract(word))
     }
 
     private static func decodeSystemRegisterMove(_ word: UInt32) -> Instruction? {
-        // MRS/MSR (register): bits[31:22]=1101010100, bit20=1; bit21=L (read), bit19=o0.
-        guard word & 0xffd0_0000 == 0xd510_0000 else { return nil }
-        let read = (word >> 21) & 1 == 1
-        let op0 = ((word >> 19) & 1) + 2
+        typealias F = A64.SystemRegisterMove
+        guard word & F.classMask == F.baseWord else { return nil }
         let register = SystemRegister(
-            op0: op0,
-            op1: (word >> 16) & 0x7,
-            crn: (word >> 12) & 0xf,
-            crm: (word >> 8) & 0xf,
-            op2: (word >> 5) & 0x7
+            op0: F.o0.extract(word) + 2,
+            op1: F.op1.extract(word),
+            crn: F.crn.extract(word),
+            crm: F.crm.extract(word),
+            op2: F.op2.extract(word)
         )
-        let value = integerRegister(number: word & 0x1f, width: 64)
-        return .systemRegisterMove(read: read, register: register, value: value)
+        let value = integerRegister(number: F.rt.extract(word), width: 64)
+        return .systemRegisterMove(read: F.l.extract(word) == 1, register: register, value: value)
     }
 
     private static func decodePStateImmediate(_ word: UInt32) -> Instruction? {
-        // MSR (immediate): bits[31:19]=1101010100000, CRn=0100, Rt=11111.
-        guard word & 0xfff8_f01f == 0xd500_401f else { return nil }
-        let op1 = (word >> 16) & 0x7
-        let op2 = (word >> 5) & 0x7
-        guard let field = PStateField.decode(op1: op1, op2: op2) else { return nil }
-        let immediate = (word >> 8) & 0xf
-        return .pstate(field, immediate: immediate)
+        typealias F = A64.PStateImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let field = PStateField.decode(op1: F.op1.extract(word), op2: F.op2.extract(word)) else { return nil }
+        return .pstate(field, immediate: F.crm.extract(word))
     }
 
     private static func decodeSystemInstruction(_ word: UInt32) -> Instruction? {
-        // SYS/SYSL: bits[31:22]=1101010100, bits[20:19]=01; bit21=L selects SYSL.
-        guard word & 0xffd8_0000 == 0xd508_0000 else { return nil }
-        let read = (word >> 21) & 1 == 1
-        let op1 = (word >> 16) & 0x7
-        let crn = (word >> 12) & 0xf
-        let crm = (word >> 8) & 0xf
-        let op2 = (word >> 5) & 0x7
-        let rt = word & 0x1f
+        typealias F = A64.SystemInstruction
+        guard word & F.classMask == F.baseWord else { return nil }
+        let rt = F.rt.extract(word)
         let register: IntegerRegister? = rt == 31 ? nil : integerRegister(number: rt, width: 64)
-        return .systemInstruction(read: read, op1: op1, crn: crn, crm: crm, op2: op2, register: register)
+        return .systemInstruction(
+            read: F.l.extract(word) == 1,
+            op1: F.op1.extract(word),
+            crn: F.crn.extract(word),
+            crm: F.crm.extract(word),
+            op2: F.op2.extract(word),
+            register: register
+        )
     }
 
     private static func decodePointerAuthentication(_ word: UInt32) -> Instruction? {
-        switch word {
-        case 0xd503233f: return .pointerAuthentication(.paciasp, register: nil, architecture: .arm64e)
-        case 0xd50323bf: return .pointerAuthentication(.autiasp, register: nil, architecture: .arm64e)
-        case 0xd503237f: return .pointerAuthentication(.pacibsp, register: nil, architecture: .arm64e)
-        case 0xd50323ff: return .pointerAuthentication(.autibsp, register: nil, architecture: .arm64e)
-        case 0xd503211f: return .pointerAuthentication(.pacia1716, register: nil, architecture: .arm64e)
-        case 0xd503215f: return .pointerAuthentication(.pacib1716, register: nil, architecture: .arm64e)
-        case 0xd503219f: return .pointerAuthentication(.autia1716, register: nil, architecture: .arm64e)
-        case 0xd50321df: return .pointerAuthentication(.autib1716, register: nil, architecture: .arm64e)
-        case 0xd50320ff: return .pointerAuthentication(.xpaclri, register: nil, architecture: .arm64e)
-        default: break
+        if let kind = A64.PointerAuthenticationKind.decodeFixed(word) {
+            return .pointerAuthentication(kind, register: nil, architecture: .arm64e)
         }
-        if word & 0xffff_ffe0 == 0xdac1_43e0 {
-            return .pointerAuthentication(.xpaci, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
-        }
-        if word & 0xffff_ffe0 == 0xdac1_47e0 {
-            return .pointerAuthentication(.xpacd, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
+        if let kind = A64.PointerAuthenticationKind.decodeWithRegister(word) {
+            return .pointerAuthentication(kind, register: integerRegister(number: word & 0x1f, width: 64), architecture: .arm64e)
         }
         return nil
     }
 
     private static func decodePointerAuthData(_ word: UInt32) -> Instruction? {
         // PACGA: data-processing (2 source), opcode[15:10]=001100.
-        if word & 0xffe0_fc00 == 0x9ac0_3000 {
+        if word & 0xffe0_fc00 == A64.PointerAuthData.pacga {
             let rd = integerRegister(number: word & 0x1f, width: 64)
             let rn = integerRegister(number: (word >> 5) & 0x1f, width: 64)
             let rm = integerRegister(number: (word >> 16) & 0x1f, width: 64)
             return .pointerAuthData(.pacga, destination: rd, source: rn, modifier: rm)
         }
         // Data-processing (1 source): bit31=1, op[30:21]=1011000001, opcode[15:10]=0000xx..0011xx.
-        guard word & 0xffff_0000 == 0xdac1_0000 else { return nil }
+        guard word & 0xffff_0000 == A64.PointerAuthData.dataBase else { return nil }
         let opcode = (word >> 10) & 0x3f
         guard let kind = A64.PointerAuthDataKind.decodeOneSource(opcode: opcode) else { return nil }
         let rd = integerRegister(number: word & 0x1f, width: 64)
@@ -382,32 +319,27 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMoveWide(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f80_0000 == 0x1280_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let kind: A64.MoveWideKind
-        switch (word >> 29) & 3 {
-        case 0: kind = .movn
-        case 2: kind = .movz
-        case 3: kind = .movk
-        default: return nil
-        }
-        let hw = (word >> 21) & 3
+        typealias F = A64.MoveWide
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        guard let kind = A64.MoveWideKind.decode(opc: F.opc.extract(word)) else { return nil }
+        let hw = F.hw.extract(word)
         if sf == 0 && hw > 1 { return nil }
-        let imm = Int64((word >> 5) & 0xffff)
-        let rd = integerRegister(number: word & 0x1f, width: sf == 1 ? 64 : 32)
+        let imm = Int64(F.imm16.extract(word))
+        let rd = integerRegister(number: F.rd.extract(word), width: sf == 1 ? 64 : 32)
         let shift = hw == 0 ? nil : Int(hw) * 16
         return .moveWide(kind, destination: rd, immediate: imm, shift: shift)
     }
 
     private static func decodeMTEAddSubTag(_ word: UInt32) -> Instruction? {
-        // ADDG/SUBG (add/subtract immediate, with tags): sf=1, S=0,
-        // bits[28:23]=100011, bit22(o2)=0, bits[15:14]=00.
-        guard word & 0xbfc0_c000 == 0x9180_0000 else { return nil }
-        let subtract = ((word >> 30) & 1) == 1
-        let uimm6 = (word >> 16) & 0x3f
-        let tag = (word >> 10) & 0xf
-        let rn = xRegister(number: (word >> 5) & 0x1f)
-        let rd = xRegister(number: word & 0x1f)
+        // ADDG/SUBG (add/subtract immediate, with tags).
+        typealias F = A64.AddSubTag
+        guard word & F.classMask == F.baseWord else { return nil }
+        let subtract = F.op.extract(word) == 1
+        let uimm6 = F.uimm6.extract(word)
+        let tag = F.uimm4.extract(word)
+        let rn = xRegister(number: F.rn.extract(word))
+        let rd = xRegister(number: F.rd.extract(word))
         return .mteAddSubTag(subtract: subtract, destination: rd, source: rn, offset: uimm6 * 16, tag: tag)
     }
 
@@ -432,109 +364,93 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeRMIF(_ word: UInt32) -> Instruction? {
-        // RMIF: bits[31:21]=10111010000, bits[14:10]=00001, bit4=0.
-        guard word & 0xffe0_7c10 == 0xba00_0400 else { return nil }
-        let rotate = (word >> 15) & 0x3f
-        let mask = word & 0xf
-        let source = xRegister(number: (word >> 5) & 0x1f)
+        typealias F = A64.RMIF
+        guard word & F.classMask == F.baseWord else { return nil }
+        let rotate = F.rotate.extract(word)
+        let mask = F.mask.extract(word)
+        let source = xRegister(number: F.rn.extract(word))
         return .rmif(source: source, rotate: rotate, mask: mask)
     }
 
     private static func decodeEvaluateIntoFlags(_ word: UInt32) -> Instruction? {
-        // SETF8/SETF16: bits fixed except sz (bit14) and Rn.
-        guard word & 0xffff_bc1f == 0x3a00_080d else { return nil }
-        let kind: A64.EvaluateFlagsKind = ((word >> 14) & 1) == 1 ? .setf16 : .setf8
-        let source = integerRegister(number: (word >> 5) & 0x1f, width: 32)
+        typealias F = A64.EvaluateIntoFlags
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind: A64.EvaluateFlagsKind = F.sz.extract(word) == 1 ? .setf16 : .setf8
+        let source = integerRegister(number: F.rn.extract(word), width: 32)
         return .evaluateIntoFlags(kind, source: source)
     }
 
     private static func decodeAddSubImmediate(_ word: UInt32) -> Instruction? {
-        // bits[28:23]=100010 (bit23=0 excludes the FEAT_CSSC min/max immediate space).
-        guard word & 0x1f80_0000 == 0x1100_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let s = (word >> 29) & 1
-        let sh = (word >> 22) & 1
-        let imm12 = (word >> 10) & 0xfff
+        // bit23=0 excludes the FEAT_CSSC min/max immediate space.
+        typealias F = A64.AddSubImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let op = F.op.extract(word)
+        let s = F.s.extract(word)
+        let sh = F.sh.extract(word)
+        let imm12 = F.imm12.extract(word)
         let width = sf == 1 ? 64 : 32
-        let rnNum = (word >> 5) & 0x1f
+        let rnNum = F.rn.extract(word)
         let operand = A64.AddSubOperand.immediate(Int64(imm12), shift: sh == 1 ? 12 : nil)
-        if s == 1 && word & 0x1f == 31 {
+        if s == 1 && F.rd.extract(word) == 31 {
             return .compareAlias(op == 1 ? .cmp : .cmn, first: baseRegister(number: rnNum, width: width), operand: operand)
         }
         let rn = baseRegister(number: rnNum, width: width)
-        let rd: IntegerRegister = s == 0 ? baseRegister(number: word & 0x1f, width: width) : integerRegister(number: word & 0x1f, width: width)
+        let rd: IntegerRegister = s == 0 ? baseRegister(number: F.rd.extract(word), width: width) : integerRegister(number: F.rd.extract(word), width: width)
         let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
         return .addSub(kind, destination: rd, first: rn, operand: operand)
     }
 
     private static func decodeAddSubShiftedRegister(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f20_0000 == 0x0b00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let s = (word >> 29) & 1
-        let shiftField = (word >> 22) & 3
-        guard let shiftKind = ShiftKind(rawValue: shiftField), shiftKind != .ror else { return nil }
-        let amount = (word >> 10) & 0x3f
+        typealias F = A64.AddSubShiftedRegister
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let op = F.op.extract(word)
+        let s = F.s.extract(word)
+        guard let shiftKind = ShiftKind(rawValue: F.shift.extract(word)), shiftKind != .ror else { return nil }
+        let amount = F.imm6.extract(word)
         let width = sf == 1 ? 64 : 32
         if sf == 0 && amount > 31 { return nil }
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rnNum = (word >> 5) & 0x1f
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let rnNum = F.rn.extract(word)
         let shift: ParsedShift? = (amount == 0 && shiftKind == .lsl) ? nil : ParsedShift(kind: shiftKind, amount: Int(amount))
         let operand = A64.AddSubOperand.shiftedRegister(rm, shift: shift)
-        if s == 1 && word & 0x1f == 31 {
+        if s == 1 && F.rd.extract(word) == 31 {
             return .compareAlias(op == 1 ? .cmp : .cmn, first: integerRegister(number: rnNum, width: width), operand: operand)
         }
         let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
-        return .addSub(kind, destination: integerRegister(number: word & 0x1f, width: width), first: integerRegister(number: rnNum, width: width), operand: operand)
+        return .addSub(kind, destination: integerRegister(number: F.rd.extract(word), width: width), first: integerRegister(number: rnNum, width: width), operand: operand)
     }
 
     private static func decodeLogicalImmediate(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f80_0000 == 0x1200_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let n = (word >> 22) & 1
+        typealias F = A64.LogicalImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let n = F.n.extract(word)
         if sf == 0 && n != 0 { return nil }
         let width = sf == 1 ? 64 : 32
-        let immr = (word >> 16) & 0x3f
-        let imms = (word >> 10) & 0x3f
+        let immr = F.immr.extract(word)
+        let imms = F.imms.extract(word)
         guard let value = A64BitmaskImmediate.decode(n: n, immr: immr, imms: imms, width: width) else { return nil }
-        let kind: A64.LogicalKind
-        switch (word >> 29) & 3 {
-        case 0: kind = .and
-        case 1: kind = .orr
-        case 2: kind = .eor
-        case 3: kind = .ands
-        default: return nil
-        }
-        let rd = integerRegister(number: word & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        guard let kind = A64.LogicalKind.decodeImmediate(opc: F.opc.extract(word)) else { return nil }
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .logical(kind, destination: rd, first: rn, operand: .immediate(Int64(bitPattern: value)))
     }
 
     private static func decodeLogicalShiftedRegister(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f00_0000 == 0x0a00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let shiftField = (word >> 22) & 3
-        let n = (word >> 21) & 1
-        guard let shiftKind = ShiftKind(rawValue: shiftField) else { return nil }
-        let amount = (word >> 10) & 0x3f
+        typealias F = A64.LogicalShiftedRegister
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let n = F.n.extract(word)
+        guard let shiftKind = ShiftKind(rawValue: F.shift.extract(word)) else { return nil }
+        let amount = F.imm6.extract(word)
         let width = sf == 1 ? 64 : 32
         if sf == 0 && amount > 31 { return nil }
-        let kind: A64.LogicalKind
-        switch ((word >> 29) & 3, n) {
-        case (0, 0): kind = .and
-        case (0, 1): kind = .bic
-        case (1, 0): kind = .orr
-        case (1, 1): kind = .orn
-        case (2, 0): kind = .eor
-        case (2, 1): kind = .eon
-        case (3, 0): kind = .ands
-        case (3, 1): kind = .bics
-        default: return nil
-        }
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rnNum = (word >> 5) & 0x1f
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        guard let kind = A64.LogicalKind.decodeShifted(opc: F.opc.extract(word), n: n) else { return nil }
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let rnNum = F.rn.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         let shift: ParsedShift? = (amount == 0 && shiftKind == .lsl) ? nil : ParsedShift(kind: shiftKind, amount: Int(amount))
         if kind == .orn && rnNum == 31 {
             return .mvnAlias(destination: rd, source: rm, shift: shift)
@@ -546,7 +462,7 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeBitfieldShiftAlias(_ word: UInt32) -> Instruction? {
-        guard word & 0x1f80_0000 == 0x1300_0000 else { return nil }
+        guard word & A64.Bitfield.classMask == A64.Bitfield.baseWord else { return nil }
         let sf = (word >> 31) & 1
         let n = (word >> 22) & 1
         guard n == sf else { return nil }
@@ -579,30 +495,30 @@ internal enum A64InstructionDecoder {
         // Bitfield group fixed field [28:23]=100110. The shift-alias decoder
         // runs first and claims the asr/lsl/lsr patterns; everything else
         // (all bfm, plus the remaining sbfm/ubfm forms) lands here.
-        guard word & 0x1f80_0000 == 0x1300_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let n = (word >> 22) & 1
-        guard n == sf else { return nil }
-        guard let kind = A64.BitfieldKind.decode(opc: (word >> 29) & 3) else { return nil }
+        typealias F = A64.Bitfield
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        guard F.n.extract(word) == sf else { return nil }
+        guard let kind = A64.BitfieldKind.decode(opc: F.opc.extract(word)) else { return nil }
         let width = sf == 1 ? 64 : 32
-        let immr = (word >> 16) & 0x3f
-        let imms = (word >> 10) & 0x3f
-        let rd = integerRegister(number: word & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let immr = F.immr.extract(word)
+        let imms = F.imms.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .bitfield(kind, destination: rd, source: rn, immr: immr, imms: imms)
     }
 
     private static func decodeExtract(_ word: UInt32) -> Instruction? {
-        guard word & 0x7fa0_0000 == 0x1380_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let n = (word >> 22) & 1
-        guard n == sf else { return nil }
+        typealias F = A64.Extract
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        guard F.n.extract(word) == sf else { return nil }
         let width = sf == 1 ? 64 : 32
-        let imms = (word >> 10) & 0x3f
+        let imms = F.imms.extract(word)
         if sf == 0 && imms > 31 { return nil }
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         let rn = integerRegister(number: rnNum, width: width)
         if rmNum == rnNum {
             return .extractOrRotateAlias(.ror, destination: rd, first: rn, operand: .rotate(amount: Int64(imms)))
@@ -611,165 +527,169 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMultiplyWide(_ word: UInt32) -> Instruction? {
-        // Data-processing 3-source group, bits[30:24]=0011011; the wide forms
-        // are always 64-bit (sf=1).
-        guard word & 0x7f00_0000 == 0x1b00_0000, ((word >> 31) & 1) == 1 else { return nil }
-        let op31 = (word >> 21) & 0x7
-        let o0 = (word >> 15) & 1
-        let ra = (word >> 10) & 0x1f
+        // Data-processing 3-source group; the wide forms are always 64-bit (sf=1).
+        typealias F = A64.DataProcessing3Source
+        guard word & F.classMask == F.baseWord, F.sf.extract(word) == 1 else { return nil }
+        let op31 = F.op31.extract(word)
+        let o0 = F.o0.extract(word)
+        let ra = F.ra.extract(word)
         // High-half multiplies ignore Ra (always XZR); the long forms treat an
         // XZR accumulator as the no-accumulator (`mull`/`negl`) mnemonic.
         let isHighOpcode = op31 == 0b010 || op31 == 0b110
         let hasAccumulator = !isHighOpcode && ra != 31
         guard let kind = A64.MultiplyWideKind.decode(op31: op31, o0: o0, hasAccumulator: hasAccumulator) else { return nil }
         let sourceWidth = kind.isHigh ? 64 : 32
-        let rd = integerRegister(number: word & 0x1f, width: 64)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: sourceWidth)
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: sourceWidth)
+        let rd = integerRegister(number: F.rd.extract(word), width: 64)
+        let rn = integerRegister(number: F.rn.extract(word), width: sourceWidth)
+        let rm = integerRegister(number: F.rm.extract(word), width: sourceWidth)
         let accumulator = hasAccumulator ? integerRegister(number: ra, width: 64) : nil
         return .multiplyWide(kind, destination: rd, first: rn, second: rm, accumulator: accumulator)
     }
 
     private static func decodeMultiply(_ word: UInt32) -> Instruction? {
-        guard word & 0x7fe0_0000 == 0x1b00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let o0 = (word >> 15) & 1
-        let width = sf == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let ra = (word >> 10) & 0x1f
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        // Data-processing 3-source with op31=000 (the MADD/MSUB/MUL/MNEG forms).
+        typealias F = A64.DataProcessing3Source
+        guard word & F.classMask == F.baseWord, F.op31.extract(word) == 0 else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let o0 = F.o0.extract(word)
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let ra = F.ra.extract(word)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         if ra == 31 {
-            return .multiply(o0 == 1 ? .mneg : .mul, destination: rd, first: rn, second: rm, accumulator: nil)
+            return .multiply(A64.MultiplyKind.decode(o0: o0, hasAccumulator: false), destination: rd, first: rn, second: rm, accumulator: nil)
         }
-        return .multiply(o0 == 1 ? .msub : .madd, destination: rd, first: rn, second: rm, accumulator: integerRegister(number: ra, width: width))
+        return .multiply(A64.MultiplyKind.decode(o0: o0, hasAccumulator: true), destination: rd, first: rn, second: rm, accumulator: integerRegister(number: ra, width: width))
     }
 
     private static func decodeDivide(_ word: UInt32) -> Instruction? {
-        guard word & 0x7fe0_f800 == 0x1ac0_0800 else { return nil }
-        let sf = (word >> 31) & 1
-        let o1 = (word >> 10) & 1
-        let width = sf == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
-        return .divide(o1 == 1 ? .sdiv : .udiv, destination: rd, first: rn, second: rm)
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.DivideKind.decode(opcode: F.opcode.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        return .divide(
+            kind,
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            first: integerRegister(number: F.rn.extract(word), width: width),
+            second: integerRegister(number: F.rm.extract(word), width: width)
+        )
     }
 
     private static func decodeVariableShift(_ word: UInt32) -> Instruction? {
-        // Data-processing-2-source, opcode[15:12]=0010 (LSLV/LSRV/ASRV/RORV).
-        guard word & 0x7fe0_f000 == 0x1ac0_2000 else { return nil }
-        guard let kind = A64.VariableShiftKind.decode(opcode: (word >> 10) & 0x3f) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        // Data-processing-2-source class; the LSLV/LSRV/ASRV/RORV variants are
+        // selected by decoding the `opcode` field (other opcodes fall through).
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.VariableShiftKind.decode(opcode: F.opcode.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
         return .variableShift(
             kind,
-            destination: integerRegister(number: word & 0x1f, width: width),
-            first: integerRegister(number: (word >> 5) & 0x1f, width: width),
-            second: integerRegister(number: (word >> 16) & 0x1f, width: width)
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            first: integerRegister(number: F.rn.extract(word), width: width),
+            second: integerRegister(number: F.rm.extract(word), width: width)
         )
     }
 
     private static func decodeMinMaxRegister(_ word: UInt32) -> Instruction? {
-        // FEAT_CSSC min/max (register): data-processing-2-source, opcode[15:12]=0110.
-        guard word & 0x7fe0_f000 == 0x1ac0_6000 else { return nil }
-        guard let kind = A64.MinMaxKind.decodeRegister(opcode: (word >> 10) & 0x3f) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
+        // FEAT_CSSC min/max (register): data-processing-2-source class.
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.MinMaxKind.decodeRegister(opcode: F.opcode.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
         return .minMaxRegister(
             kind,
-            destination: integerRegister(number: word & 0x1f, width: width),
-            first: integerRegister(number: (word >> 5) & 0x1f, width: width),
-            second: integerRegister(number: (word >> 16) & 0x1f, width: width)
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            first: integerRegister(number: F.rn.extract(word), width: width),
+            second: integerRegister(number: F.rm.extract(word), width: width)
         )
     }
 
     private static func decodeMinMaxImmediate(_ word: UInt32) -> Instruction? {
-        // FEAT_CSSC min/max (immediate): bits[30:20] fixed, opc[19:18], imm8[17:10].
-        guard word & 0x7ff0_0000 == 0x11c0_0000 else { return nil }
-        guard let kind = A64.MinMaxKind.decodeImmediate(opc: (word >> 18) & 3) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let imm8 = (word >> 10) & 0xff
+        // FEAT_CSSC min/max (immediate).
+        typealias F = A64.MinMaxImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.MinMaxKind.decodeImmediate(opc: F.opc.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let imm8 = F.imm8.extract(word)
         let immediate: Int64 = kind.isSigned ? Int64(signExtend(imm8, bitCount: 8)) : Int64(imm8)
         return .minMaxImmediate(
             kind,
-            destination: integerRegister(number: word & 0x1f, width: width),
-            source: integerRegister(number: (word >> 5) & 0x1f, width: width),
+            destination: integerRegister(number: F.rd.extract(word), width: width),
+            source: integerRegister(number: F.rn.extract(word), width: width),
             immediate: immediate
         )
     }
 
     private static func decodeAddSubExtendedRegister(_ word: UInt32) -> Instruction? {
-        // op[28:24]=01011, opt[23:22]=00, and bit21=1 distinguish this from the
-        // shifted-register form (bit21=0).
-        guard word & 0x1fe0_0000 == 0x0b20_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let s = (word >> 29) & 1
-        guard let extend = ExtendKind(rawValue: (word >> 13) & 7) else { return nil }
-        let imm3 = (word >> 10) & 7
+        // bit21=1 distinguishes this from the shifted-register form (bit21=0).
+        typealias F = A64.AddSubExtendedRegister
+        guard word & F.classMask == F.baseWord else { return nil }
+        let sf = F.sf.extract(word)
+        let op = F.op.extract(word)
+        let s = F.s.extract(word)
+        guard let extend = ExtendKind(rawValue: F.option.extract(word)) else { return nil }
+        let imm3 = F.imm3.extract(word)
         guard imm3 <= 4 else { return nil }
         let width = sf == 1 ? 64 : 32
         let rmWidth = (extend == .uxtx || extend == .sxtx) ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
-        let rnNum = (word >> 5) & 0x1f
+        let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
+        let rnNum = F.rn.extract(word)
         let amount = imm3 == 0 ? nil : Int(imm3)
         let operand = A64.AddSubOperand.extendedRegister(rm, extend: extend, amount: amount)
-        if s == 1 && word & 0x1f == 31 {
+        if s == 1 && F.rd.extract(word) == 31 {
             return .compareAlias(op == 1 ? .cmp : .cmn, first: baseRegister(number: rnNum, width: width), operand: operand)
         }
         let kind: A64.AddSubKind = op == 0 ? (s == 0 ? .add : .adds) : (s == 0 ? .sub : .subs)
-        let rd: IntegerRegister = s == 0 ? baseRegister(number: word & 0x1f, width: width) : integerRegister(number: word & 0x1f, width: width)
+        let rd: IntegerRegister = s == 0 ? baseRegister(number: F.rd.extract(word), width: width) : integerRegister(number: F.rd.extract(word), width: width)
         return .addSub(kind, destination: rd, first: baseRegister(number: rnNum, width: width), operand: operand)
     }
 
     private static func decodeAddSubCarry(_ word: UInt32) -> Instruction? {
-        // op[28:21]=11010000 and the fixed opcode field [15:10]=000000.
-        guard word & 0x1fe0_fc00 == 0x1a00_0000 else { return nil }
-        let sf = (word >> 31) & 1
-        let op = (word >> 30) & 1
-        let setsFlags = (word >> 29) & 1
-        let kind = A64.AddSubCarryKind.decode(op: op, setsFlags: setsFlags)
-        let width = sf == 1 ? 64 : 32
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: width)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        typealias F = A64.AddSubWithCarry
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind = A64.AddSubCarryKind.decode(op: F.op.extract(word), setsFlags: F.s.extract(word))
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let rm = integerRegister(number: F.rm.extract(word), width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         return .addSubCarry(kind, destination: rd, first: rn, second: rm)
     }
 
     private static func decodeCRC32(_ word: UInt32) -> Instruction? {
-        // Data-processing 2-source group: bit30=0, S=0, op[28:21]=11010110.
-        guard word & 0x7fe0_0000 == 0x1ac0_0000 else { return nil }
-        let opcode = (word >> 10) & 0x3f
-        guard let kind = A64.CRC32Kind.decode(opcode: opcode) else { return nil }
+        // Data-processing 2-source class.
+        typealias F = A64.DataProcessing2Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let kind = A64.CRC32Kind.decode(opcode: F.opcode.extract(word)) else { return nil }
         // Rd and Rn are 32-bit; Rm is 64-bit only for the `x` variants.
-        let rd = integerRegister(number: word & 0x1f, width: 32)
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: 32)
-        let rm = integerRegister(number: (word >> 16) & 0x1f, width: kind.usesDoubleWordSource ? 64 : 32)
+        let rd = integerRegister(number: F.rd.extract(word), width: 32)
+        let rn = integerRegister(number: F.rn.extract(word), width: 32)
+        let rm = integerRegister(number: F.rm.extract(word), width: kind.usesDoubleWordSource ? 64 : 32)
         return .crc32(kind, destination: rd, first: rn, data: rm)
     }
 
     private static func decodeDataProcessingOneSource(_ word: UInt32) -> Instruction? {
-        // Fix bit30=1, S=0, op[28:21]=11010110, opcode2[20:16]=00000.
-        guard word & 0x7fff_0000 == 0x5ac0_0000 else { return nil }
-        let is64Bit = ((word >> 31) & 1) == 1
-        let opcode = (word >> 10) & 0x3f
-        guard let kind = A64.DataProcessingOneSourceKind.decode(opcode: opcode, is64Bit: is64Bit) else { return nil }
+        typealias F = A64.DataProcessing1Source
+        guard word & F.classMask == F.baseWord else { return nil }
+        let is64Bit = F.sf.extract(word) == 1
+        guard let kind = A64.DataProcessingOneSourceKind.decode(opcode: F.opcode.extract(word), is64Bit: is64Bit) else { return nil }
         let width = is64Bit ? 64 : 32
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
-        let rd = integerRegister(number: word & 0x1f, width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
         return .dataProcessingOneSource(kind, destination: rd, source: rn)
     }
 
     private static func decodeConditionalSelect(_ word: UInt32) -> Instruction? {
-        guard word & 0x3fe0_0800 == 0x1a80_0000 else { return nil }
-        let op = (word >> 30) & 1
-        let o2 = (word >> 10) & 1
+        typealias F = A64.ConditionalSelect
+        guard word & F.classMask == F.baseWord else { return nil }
+        let op = F.op.extract(word)
+        let o2 = F.o2.extract(word)
         guard let kind = A64.ConditionalSelectKind.decode(op: op, o2: o2),
-              let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rawCond = (word >> 12) & 0xf
-        let rd = integerRegister(number: word & 0x1f, width: width)
+              let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rawCond = F.cond.extract(word)
+        let rd = integerRegister(number: F.rd.extract(word), width: width)
 
         // Prefer the conditional-set / conditional-select aliases when the
         // register pattern and condition (not AL/NV) match. The displayed
@@ -796,28 +716,30 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeConditionalCompare(_ word: UInt32) -> Instruction? {
-        guard word & 0x3fe0_0410 == 0x3a40_0000 else { return nil }
-        let kind: A64.ConditionalCompareKind = ((word >> 30) & 1) == 1 ? .ccmp : .ccmn
-        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
-        let width = ((word >> 31) & 1) == 1 ? 64 : 32
-        let nzcv = word & 0xf
+        typealias F = A64.ConditionalCompare
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind: A64.ConditionalCompareKind = F.op.extract(word) == 1 ? .ccmp : .ccmn
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let width = F.sf.extract(word) == 1 ? 64 : 32
+        let nzcv = F.nzcv.extract(word)
         let second: A64.ConditionalCompareOperand
-        if (word >> 11) & 1 == 1 {
-            second = .immediate((word >> 16) & 0x1f)
+        if F.immFlag.extract(word) == 1 {
+            second = .immediate(F.imm5OrRm.extract(word))
         } else {
-            second = .register(integerRegister(number: (word >> 16) & 0x1f, width: width))
+            second = .register(integerRegister(number: F.imm5OrRm.extract(word), width: width))
         }
-        let rn = integerRegister(number: (word >> 5) & 0x1f, width: width)
+        let rn = integerRegister(number: F.rn.extract(word), width: width)
         return .conditionalCompare(kind, first: rn, second: second, nzcv: nzcv, condition: condition)
     }
 
     private static func decodeLoadStoreExclusive(_ word: UInt32) -> Instruction? {
-        guard word & 0x3f00_0000 == 0x0800_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let o2 = (word >> 23) & 1
-        let l = (word >> 22) & 1
-        let o1 = (word >> 21) & 1
-        let o0 = (word >> 15) & 1
+        typealias F = A64.LoadStoreExclusive
+        guard word & F.classMask == F.baseWord else { return nil }
+        let size = F.size.extract(word)
+        let o2 = F.o2.extract(word)
+        let l = F.l.extract(word)
+        let o1 = F.o1.extract(word)
+        let o0 = F.o0.extract(word)
 
         let fixedSize: UInt32?
         if o1 == 1 {
@@ -838,25 +760,26 @@ internal enum A64InstructionDecoder {
 
         let valueWidth = fixedSize == nil ? (size == 3 ? 64 : 32) : 32
         let status: IntegerRegister? = kind.hasStatusRegister
-            ? integerRegister(number: (word >> 16) & 0x1f, width: 32) : nil
-        let value = integerRegister(number: word & 0x1f, width: valueWidth)
+            ? integerRegister(number: F.rs.extract(word), width: 32) : nil
+        let value = integerRegister(number: F.rt.extract(word), width: valueWidth)
         let value2: IntegerRegister? = kind.isPair
-            ? integerRegister(number: (word >> 10) & 0x1f, width: valueWidth) : nil
-        let base = xRegister(number: (word >> 5) & 0x1f)
+            ? integerRegister(number: F.rt2.extract(word), width: valueWidth) : nil
+        let base = xRegister(number: F.rn.extract(word))
         return .loadStoreExclusive(kind, status: status, value: value, value2: value2, base: base)
     }
 
     private static func decodeCompareAndSwap(_ word: UInt32) -> Instruction? {
-        guard word & 0x3f00_0000 == 0x0800_0000 else { return nil }
-        let o2 = (word >> 23) & 1
-        let o1 = (word >> 21) & 1
+        typealias F = A64.LoadStoreExclusive
+        guard word & F.classMask == F.baseWord else { return nil }
+        let o2 = F.o2.extract(word)
+        let o1 = F.o1.extract(word)
         guard o1 == 1 else { return nil }
-        let size = (word >> 30) & 3
-        let acquire = (word >> 22) & 1
-        let release = (word >> 15) & 1
-        let rsNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rtNum = word & 0x1f
+        let size = F.size.extract(word)
+        let acquire = F.l.extract(word)
+        let release = F.o0.extract(word)
+        let rsNum = F.rs.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rtNum = F.rt.extract(word)
 
         if o2 == 1 {
             // Compare and swap (single register).
@@ -899,9 +822,10 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAtomicMemory(_ word: UInt32) -> Instruction? {
-        guard word & 0x3f20_0c00 == 0x3820_0000 else { return nil }
-        let o3 = (word >> 15) & 1
-        let opc = (word >> 12) & 7
+        typealias F = A64.AtomicMemory
+        guard word & F.classMask == F.baseWord else { return nil }
+        let o3 = F.o3.extract(word)
+        let opc = F.opc.extract(word)
         let operation: A64.AtomicMemoryOperation
         if o3 == 1 {
             guard opc == 0 else { return nil }
@@ -913,9 +837,9 @@ internal enum A64InstructionDecoder {
             operation = op
         }
 
-        let size = (word >> 30) & 3
-        let acquire = (word >> 23) & 1 == 1
-        let release = (word >> 22) & 1 == 1
+        let size = F.size.extract(word)
+        let acquire = F.a.extract(word) == 1
+        let release = F.r.extract(word) == 1
         let fixedSize: UInt32?
         let width: Int
         switch size {
@@ -926,9 +850,9 @@ internal enum A64InstructionDecoder {
         default: return nil
         }
 
-        let rsNum = (word >> 16) & 0x1f
-        let rtNum = word & 0x1f
-        let base = xRegister(number: (word >> 5) & 0x1f)
+        let rsNum = F.rs.extract(word)
+        let rtNum = F.rt.extract(word)
+        let base = xRegister(number: F.rn.extract(word))
         let source = integerRegister(number: rsNum, width: width)
 
         // Prefer the ST<op> alias when the result register is discarded and the
@@ -947,11 +871,11 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadAcquireRCpc(_ word: UInt32) -> Instruction? {
-        guard word & 0x3fff_fc00 == 0x38bf_c000 else { return nil }
-        let size = (word >> 30) & 3
+        typealias F = A64.LoadAcquireRCpc
+        guard word & F.classMask == F.baseWord else { return nil }
         let kind: A64.LoadAcquireRCpcKind
         let width: Int
-        switch size {
+        switch F.size.extract(word) {
         case 0: kind = .ldaprb; width = 32
         case 1: kind = .ldaprh; width = 32
         case 2: kind = .ldapr; width = 32
@@ -960,33 +884,36 @@ internal enum A64InstructionDecoder {
         }
         return .loadAcquireRCpc(
             kind,
-            value: integerRegister(number: word & 0x1f, width: width),
-            base: xRegister(number: (word >> 5) & 0x1f)
+            value: integerRegister(number: F.rt.extract(word), width: width),
+            base: xRegister(number: F.rn.extract(word))
         )
     }
 
     private static func decodePrefetch(_ word: UInt32) -> Instruction? {
-        let operation = word & 0x1f
-        let base = xRegister(number: (word >> 5) & 0x1f)
+        // PRFM/PRFUM are load/store single forms with size=11, opc=10, V=0.
+        typealias F = A64.LoadStoreSingle
+        let sizeOpc = F.size.insert(0b11) | F.opc.insert(0b10)
+        let operation = F.rt.extract(word)
+        let base = xRegister(number: F.rn.extract(word))
 
-        // PRFM (immediate, unsigned offset): size=11, opc=10, scaled by 8.
-        if word & 0xffc0_0000 == 0xf980_0000 {
-            let offset = Int64((word >> 10) & 0xfff) * 8
+        // PRFM (immediate, unsigned offset), scaled by 8.
+        if word & 0xffc0_0000 == F.unsignedBase | sizeOpc {
+            let offset = Int64(F.imm12.extract(word)) * 8
             return .prefetch(.prfm, operation: operation, memory: .unsignedOffset(base: base, offset: offset))
         }
-        // PRFM (register offset): size=11, opc=10, bit21=1, bits[11:10]=10.
-        if word & 0xffe0_0c00 == 0xf8a0_0800 {
-            let option = (word >> 13) & 7
-            let s = (word >> 12) & 1
+        // PRFM (register offset): bit21=1, bits[11:10]=10.
+        if word & 0xffe0_0c00 == F.registerOffsetBase | sizeOpc {
+            let option = F.option.extract(word)
+            let s = F.s.extract(word)
             let shift = s == 1 ? 3 : 0
             let rmWidth = (option == 2 || option == 6) ? 32 : 64
-            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
             let extend: ExtendKind? = option == 3 ? nil : ExtendKind(rawValue: option)
             return .prefetch(.prfm, operation: operation, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
         }
-        // PRFUM (unscaled immediate): size=11, opc=10, bit21=0, bits[11:10]=00.
-        if word & 0xffe0_0c00 == 0xf880_0000 {
-            let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        // PRFUM (unscaled immediate): bit21=0, bits[11:10]=00.
+        if word & 0xffe0_0c00 == F.unscaledBase | sizeOpc {
+            let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
             let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
             return .prefetch(.prfum, operation: operation, memory: mem)
         }
@@ -994,36 +921,28 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeRCpcUnscaled(_ word: UInt32) -> Instruction? {
-        // LDAPUR/STLUR: bits[29:24]=011001, bit21=0, bits[11:10]=00.
-        guard word & 0x3f20_0c00 == 0x1900_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
-        guard let info = RCpcUnscaledKind.decode(size: size, opc: opc) else { return nil }
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let target = integerRegister(number: word & 0x1f, width: info.width)
-        let offset = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        typealias F = A64.RCpcUnscaledImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let info = RCpcUnscaledKind.decode(size: F.size.extract(word), opc: F.opc.extract(word)) else { return nil }
+        let base = xRegister(number: F.rn.extract(word))
+        let target = integerRegister(number: F.rt.extract(word), width: info.width)
+        let offset = signExtend(F.imm9.extract(word), bitCount: 9)
         return .rcpcUnscaled(info.kind, target: target, base: base, offset: offset)
     }
 
     private static func decodeMTEMemoryTag(_ word: UInt32) -> Instruction? {
-        // Load/store memory tags (single): bits[31:24]=11011001, bit21=1.
-        guard word & 0xff20_0000 == 0xd920_0000 else { return nil }
-        let opc = (word >> 22) & 3
-        let op2 = (word >> 10) & 3
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9) * 16
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: 64)
+        // Load/store memory tags (single).
+        typealias F = A64.MTEMemoryTag
+        guard word & F.classMask == F.baseWord else { return nil }
+        let opc = F.opc.extract(word)
+        let op2 = F.op2.extract(word)
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9) * 16
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: 64)
 
         if op2 != 0 {
             // STG/STZG/ST2G/STZ2G with an addressing mode.
-            let kind: A64.MTEStoreTagKind
-            switch opc {
-            case 0: kind = .stg
-            case 1: kind = .stzg
-            case 2: kind = .st2g
-            case 3: kind = .stz2g
-            default: return nil
-            }
+            guard let kind = A64.MTEStoreTagKind.decode(opc: opc) else { return nil }
             let memory: MemoryOperand
             switch op2 {
             case 0b10: memory = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
@@ -1045,14 +964,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeMTEStoreTagPair(_ word: UInt32) -> Instruction? {
-        // STGP: bits[31:25]=0110100, L(bit22)=0.
-        guard word & 0xfe40_0000 == 0x6800_0000 else { return nil }
-        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * 16
-        let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: 64)
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: 64)
+        // STGP.
+        typealias F = A64.MTEStoreTagPair
+        guard word & F.classMask == F.baseWord else { return nil }
+        let offset = signExtend(F.imm7.extract(word), bitCount: 7) * 16
+        let rt2 = integerRegister(number: F.rt2.extract(word), width: 64)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: 64)
         let memory: MemoryOperand
-        switch (word >> 23) & 3 {
+        switch F.mode.extract(word) {
         case 1: memory = .postIndexed(base: base, offset: offset)
         case 2: memory = offset >= 0 ? .unsignedOffset(base: base, offset: offset) : .signedUnscaled(base: base, offset: offset)
         case 3: memory = .preIndexed(base: base, offset: offset)
@@ -1062,15 +982,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodePointerAuthLoad(_ word: UInt32) -> Instruction? {
-        // LDRAA/LDRAB: size=11, bits[29:24]=111000, bit21=1, bit10=1.
-        guard word & 0xff20_0400 == 0xf820_0400 else { return nil }
-        let kind: A64.PointerAuthLoadKind = ((word >> 23) & 1) == 1 ? .ldrab : .ldraa
-        let s = (word >> 22) & 1
-        let imm9 = (word >> 12) & 0x1ff
-        let writeback = ((word >> 11) & 1) == 1
+        // LDRAA/LDRAB.
+        typealias F = A64.PointerAuthLoad
+        guard word & F.classMask == F.baseWord else { return nil }
+        let kind: A64.PointerAuthLoadKind = F.m.extract(word) == 1 ? .ldrab : .ldraa
+        let s = F.s.extract(word)
+        let imm9 = F.imm9.extract(word)
+        let writeback = F.w.extract(word) == 1
         let offset = signExtend((s << 9) | imm9, bitCount: 10) * 8
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let target = integerRegister(number: word & 0x1f, width: 64)
+        let base = xRegister(number: F.rn.extract(word))
+        let target = integerRegister(number: F.rt.extract(word), width: 64)
         let memory: MemoryOperand = writeback
             ? .preIndexed(base: base, offset: offset)
             : .unsignedOffset(base: base, offset: offset)
@@ -1078,12 +999,12 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadLiteral(_ word: UInt32) -> Instruction? {
-        // Load register (literal): bits[29:27]=011, bits[25:24]=00; bit26=V selects FP.
-        guard word & 0x3b00_0000 == 0x1800_0000 else { return nil }
-        let opc = (word >> 30) & 3
-        let v = (word >> 26) & 1
-        let offset = signExtend((word >> 5) & 0x7ffff, bitCount: 19) * 4
-        let rt = word & 0x1f
+        typealias F = A64.LoadLiteral
+        guard word & F.classMask == F.baseWord else { return nil }
+        let opc = F.opc.extract(word)
+        let v = F.v.extract(word)
+        let offset = signExtend(F.imm19.extract(word), bitCount: 19) * F.scale
+        let rt = F.rt.extract(word)
         if v == 1 {
             let width: Int
             switch opc {
@@ -1103,47 +1024,46 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStoreUnprivileged(_ word: UInt32) -> Instruction? {
-        // size 111 0 00 opc 0 imm9 10 Rn Rt (V=0, bit21=0, bits[11:10]=10).
-        guard word & 0x3f20_0c00 == 0x3800_0800 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
-        guard let info = A64.LoadStoreUnprivilegedKind.decode(size: size, opc: opc) else { return nil }
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: info.width)
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
+        typealias F = A64.LoadStoreUnprivileged
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let info = A64.LoadStoreUnprivilegedKind.decode(size: F.size.extract(word), opc: F.opc.extract(word)) else { return nil }
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: info.width)
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
         let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
         return .loadStoreUnprivileged(info.kind, target: rt, memory: mem)
     }
 
     private static func decodeLoadStoreSingle(_ word: UInt32) -> Instruction? {
+        typealias F = A64.LoadStoreSingle
         let op = word & 0x3f00_0000
-        guard op == 0x3800_0000 || op == 0x3900_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
+        guard op == A64.LoadStoreSingle.unscaledBase || op == A64.LoadStoreSingle.unsignedBase else { return nil }
+        let size = F.size.extract(word)
+        let opc = F.opc.extract(word)
         guard let info = loadStoreSingleKind(size: size, opc: opc) else { return nil }
         let scaledKind = info.scaled
         let unscaledKind = info.unscaled
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: info.rtWidth)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: info.rtWidth)
 
-        if op == 0x3900_0000 {
-            let offset = Int64((word >> 10) & 0xfff) * info.byteSize
+        if op == A64.LoadStoreSingle.unsignedBase {
+            let offset = Int64(F.imm12.extract(word)) * info.byteSize
             return .loadStoreSingle(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
         }
 
         if (word >> 21) & 1 == 1 {
-            guard (word >> 10) & 3 == 2 else { return nil }
-            let optionRaw = (word >> 13) & 7
-            let s = (word >> 12) & 1
+            guard F.mode.extract(word) == 2 else { return nil }
+            let optionRaw = F.option.extract(word)
+            let s = F.s.extract(word)
             let rmWidth = (optionRaw == 2 || optionRaw == 6) ? 32 : 64
-            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
             let shift = s == 1 ? Int(size) : 0
             let extend: ExtendKind? = optionRaw == 3 ? nil : ExtendKind(rawValue: optionRaw)
             return .loadStoreSingle(scaledKind, target: rt, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
         }
 
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
-        switch (word >> 10) & 3 {
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
+        switch F.mode.extract(word) {
         case 0:
             let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
             return .loadStoreSingle(unscaledKind, target: rt, memory: mem)
@@ -1157,19 +1077,20 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStorePair(_ word: UInt32) -> Instruction? {
-        guard word & 0x3e00_0000 == 0x2800_0000 else { return nil }
-        let opc2 = (word >> 30) & 3
-        let l = (word >> 22) & 1
+        typealias F = A64.LoadStorePair
+        guard word & F.classMask == F.baseWord else { return nil }
+        let opc2 = F.opc.extract(word)
+        let l = F.l.extract(word)
         // opc=01 is LDPSW (load-only, signed word into 64-bit registers).
         if opc2 == 1 {
             guard l == 1 else { return nil }
             let scale: Int64 = 4
-            let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
-            let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: 64)
-            let base = xRegister(number: (word >> 5) & 0x1f)
-            let rt = integerRegister(number: word & 0x1f, width: 64)
+            let offset = signExtend(F.imm7.extract(word), bitCount: 7) * scale
+            let rt2 = integerRegister(number: F.rt2.extract(word), width: 64)
+            let base = xRegister(number: F.rn.extract(word))
+            let rt = integerRegister(number: F.rt.extract(word), width: 64)
             let memory: MemoryOperand
-            switch (word >> 23) & 3 {
+            switch F.mode.extract(word) {
             case 1: memory = .postIndexed(base: base, offset: offset)
             case 2: memory = .unsignedOffset(base: base, offset: offset)
             case 3: memory = .preIndexed(base: base, offset: offset)
@@ -1181,13 +1102,13 @@ internal enum A64InstructionDecoder {
         let is64 = opc2 == 2
         let width = is64 ? 64 : 32
         let scale: Int64 = is64 ? 8 : 4
-        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
-        let rt2 = integerRegister(number: (word >> 10) & 0x1f, width: width)
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = integerRegister(number: word & 0x1f, width: width)
+        let offset = signExtend(F.imm7.extract(word), bitCount: 7) * scale
+        let rt2 = integerRegister(number: F.rt2.extract(word), width: width)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = integerRegister(number: F.rt.extract(word), width: width)
         let memory: MemoryOperand
         let kind: A64.LoadStorePairKind
-        switch (word >> 23) & 3 {
+        switch F.mode.extract(word) {
         case 0:
             kind = l == 1 ? .ldnp : .stnp
             memory = .unsignedOffset(base: base, offset: offset)
@@ -1207,10 +1128,11 @@ internal enum A64InstructionDecoder {
 
     private static func decodeLoadStoreSingleFP(_ word: UInt32) -> Instruction? {
         // SIMD&FP load/store register: the integer forms with the V (bit 26) set.
+        typealias F = A64.LoadStoreSingle
         let op = word & 0x3f00_0000
-        guard op == 0x3c00_0000 || op == 0x3d00_0000 else { return nil }
-        let size = (word >> 30) & 3
-        let opc = (word >> 22) & 3
+        guard op == (A64.LoadStoreSingle.unscaledBase | A64.LoadStoreSingle.v.insert(1)) || op == (A64.LoadStoreSingle.unsignedBase | A64.LoadStoreSingle.v.insert(1)) else { return nil }
+        let size = F.size.extract(word)
+        let opc = F.opc.extract(word)
         // opc bit 1 selects the 128-bit (Q) form; opc bit 0 selects load.
         let isLoad = (opc & 1) == 1
         let isQuad = (opc & 2) == 2
@@ -1230,27 +1152,27 @@ internal enum A64InstructionDecoder {
         }
         let scaledKind: A64.LoadStoreSingleKind = isLoad ? .ldr : .str
         let unscaledKind: A64.LoadStoreSingleKind = isLoad ? .ldur : .stur
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = floatRegister(number: word & 0x1f, width: width)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = floatRegister(number: F.rt.extract(word), width: width)
 
-        if op == 0x3d00_0000 {
-            let offset = Int64((word >> 10) & 0xfff) * byteSize
+        if op == (A64.LoadStoreSingle.unsignedBase | A64.LoadStoreSingle.v.insert(1)) {
+            let offset = Int64(F.imm12.extract(word)) * byteSize
             return .loadStoreSingleFP(scaledKind, target: rt, memory: .unsignedOffset(base: base, offset: offset))
         }
 
         if (word >> 21) & 1 == 1 {
-            guard (word >> 10) & 3 == 2 else { return nil }
-            let optionRaw = (word >> 13) & 7
-            let s = (word >> 12) & 1
+            guard F.mode.extract(word) == 2 else { return nil }
+            let optionRaw = F.option.extract(word)
+            let s = F.s.extract(word)
             let rmWidth = (optionRaw == 2 || optionRaw == 6) ? 32 : 64
-            let rm = integerRegister(number: (word >> 16) & 0x1f, width: rmWidth)
+            let rm = integerRegister(number: F.rm.extract(word), width: rmWidth)
             let shift = s == 1 ? Int(log2(Double(byteSize))) : 0
             let extend: ExtendKind? = optionRaw == 3 ? nil : ExtendKind(rawValue: optionRaw)
             return .loadStoreSingleFP(scaledKind, target: rt, memory: .registerOffset(base: base, offset: rm, extend: extend, shift: shift))
         }
 
-        let imm9 = signExtend((word >> 12) & 0x1ff, bitCount: 9)
-        switch (word >> 10) & 3 {
+        let imm9 = signExtend(F.imm9.extract(word), bitCount: 9)
+        switch F.mode.extract(word) {
         case 0:
             let mem: MemoryOperand = imm9 >= 0 ? .unsignedOffset(base: base, offset: imm9) : .signedUnscaled(base: base, offset: imm9)
             return .loadStoreSingleFP(unscaledKind, target: rt, memory: mem)
@@ -1265,8 +1187,9 @@ internal enum A64InstructionDecoder {
 
     private static func decodeLoadStorePairFP(_ word: UInt32) -> Instruction? {
         // SIMD&FP load/store pair: the integer pair forms with the V (bit 26) set.
-        guard word & 0x3e00_0000 == 0x2c00_0000 else { return nil }
-        let opc2 = (word >> 30) & 3
+        typealias F = A64.LoadStorePair
+        guard word & A64.LoadStorePair.classMask == (A64.LoadStorePair.baseWord | A64.LoadStorePair.v.insert(1)) else { return nil }
+        let opc2 = F.opc.extract(word)
         let width: Int
         let scale: Int64
         switch opc2 {
@@ -1275,14 +1198,14 @@ internal enum A64InstructionDecoder {
         case 2: width = 128; scale = 16
         default: return nil
         }
-        let l = (word >> 22) & 1
-        let offset = signExtend((word >> 15) & 0x7f, bitCount: 7) * scale
-        let rt2 = floatRegister(number: (word >> 10) & 0x1f, width: width)
-        let base = xRegister(number: (word >> 5) & 0x1f)
-        let rt = floatRegister(number: word & 0x1f, width: width)
+        let l = F.l.extract(word)
+        let offset = signExtend(F.imm7.extract(word), bitCount: 7) * scale
+        let rt2 = floatRegister(number: F.rt2.extract(word), width: width)
+        let base = xRegister(number: F.rn.extract(word))
+        let rt = floatRegister(number: F.rt.extract(word), width: width)
         let memory: MemoryOperand
         let kind: A64.LoadStorePairKind
-        switch (word >> 23) & 3 {
+        switch F.mode.extract(word) {
         case 0:
             kind = l == 1 ? .ldnp : .stnp
             memory = .unsignedOffset(base: base, offset: offset)
@@ -1301,19 +1224,20 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeLoadStoreMultiple(_ word: UInt32) -> Instruction? {
-        // Advanced SIMD load/store multiple structures: bit31=0, bits[29:24]=001100, bit24=0.
-        guard word & 0xbf00_0000 == 0x0c00_0000 else { return nil }
-        let post = (word >> 23) & 1
+        // Advanced SIMD load/store multiple structures.
+        typealias F = A64.LoadStoreMultiple
+        guard word & F.classMask == F.baseWord else { return nil }
+        let post = F.post.extract(word)
         if post == 0 {
             // The non-post form requires bits[21:16] == 0.
             guard (word >> 16) & 0x3f == 0 else { return nil }
         }
-        let q = (word >> 30) & 1
-        let l = (word >> 22) & 1
-        let opcode = (word >> 12) & 0xf
-        let size = (word >> 10) & 3
-        let rn = (word >> 5) & 0x1f
-        let rt = word & 0x1f
+        let q = F.q.extract(word)
+        let l = F.l.extract(word)
+        let opcode = F.opcode.extract(word)
+        let size = F.size.extract(word)
+        let rn = F.rn.extract(word)
+        let rt = F.rt.extract(word)
 
         guard let (structure, count) = A64.LoadStoreMultipleKind.decode(opcode: opcode),
               let kind = A64.LoadStoreMultipleKind.forStructure(structure, isLoad: l == 1),
@@ -1325,28 +1249,29 @@ internal enum A64InstructionDecoder {
         if post == 0 {
             address = .base(base)
         } else {
-            let rm = (word >> 16) & 0x1f
+            let rm = F.rm.extract(word)
             address = rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
         }
         return .loadStoreMultiple(kind, registers: list, address: address)
     }
 
     private static func decodeLoadStoreSingleStructure(_ word: UInt32) -> Instruction? {
-        // Advanced SIMD load/store single structure & replicate: bit31=0, bits[29:23]=0011010, bit24=1.
-        guard word & 0xbf00_0000 == 0x0d00_0000 else { return nil }
-        let post = (word >> 23) & 1
+        // Advanced SIMD load/store single structure & replicate.
+        typealias F = A64.LoadStoreSingleStructure
+        guard word & F.classMask == F.baseWord else { return nil }
+        let post = F.post.extract(word)
         if post == 0 {
             // Non-post form: the Rm field (bits[20:16]) must be 0.
             guard (word >> 16) & 0x1f == 0 else { return nil }
         }
-        let q = (word >> 30) & 1
-        let l = (word >> 22) & 1
-        let r = (word >> 21) & 1
-        let opcode = (word >> 13) & 0b111
-        let s = (word >> 12) & 1
-        let size = (word >> 10) & 3
-        let rn = (word >> 5) & 0x1f
-        let rt = word & 0x1f
+        let q = F.q.extract(word)
+        let l = F.l.extract(word)
+        let r = F.r.extract(word)
+        let opcode = F.opcode.extract(word)
+        let s = F.s.extract(word)
+        let size = F.size.extract(word)
+        let rn = F.rn.extract(word)
+        let rt = F.rt.extract(word)
         let sizeClass = opcode >> 1
         let opcode0 = opcode & 1
         let selem = Int((opcode0 << 1) | r) + 1
@@ -1354,7 +1279,7 @@ internal enum A64InstructionDecoder {
         let base = xRegister(number: rn)
         func address() -> A64.VectorMemoryOperand {
             if post == 0 { return .base(base) }
-            let rm = (word >> 16) & 0x1f
+            let rm = F.rm.extract(word)
             return rm == 0x1f ? .postImmediate(base) : .postRegister(base, offset: xRegister(number: rm))
         }
 
@@ -1398,15 +1323,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorTableLookup(_ word: UInt32) -> Instruction? {
-        // Advanced SIMD table lookup: bit31=0, bits[29:24]=001110, bits[23:21]=000,
-        // bit15=0, bits[11:10]=00.
-        guard word & 0xbfe0_8c00 == 0x0e00_0000 else { return nil }
-        let q = (word >> 30) & 1
-        let rm = (word >> 16) & 0x1f
-        let len = (word >> 13) & 3
-        let op = (word >> 12) & 1
-        let rn = (word >> 5) & 0x1f
-        let rd = word & 0x1f
+        // Advanced SIMD table lookup.
+        typealias F = A64.VectorTableLookup
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let rm = F.rm.extract(word)
+        let len = F.len.extract(word)
+        let op = F.op.extract(word)
+        let rn = F.rn.extract(word)
+        let rd = F.rd.extract(word)
         let arrangement: A64.VectorArrangement = q == 1 ? .b16 : .b8
         let kind: A64.VectorTableLookupKind = op == 1 ? .tbx : .tbl
         let table = A64.VectorRegisterList(firstNumber: rn, count: Int(len) + 1, arrangement: .b16)
@@ -1452,32 +1377,21 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPDataProcessing2(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_0c00 == 0x1e20_0800 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let kind: A64.FPDataProcessing2Kind
-        switch (word >> 12) & 0xf {
-        case 0b0000: kind = .fmul
-        case 0b0001: kind = .fdiv
-        case 0b0010: kind = .fadd
-        case 0b0011: kind = .fsub
-        case 0b0100: kind = .fmax
-        case 0b0101: kind = .fmin
-        case 0b0110: kind = .fmaxnm
-        case 0b0111: kind = .fminnm
-        case 0b1000: kind = .fnmul
-        default: return nil
-        }
+        typealias F = A64.FPDataProcessing2
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        guard let kind = A64.FPDataProcessing2Kind.decode(opcode: F.opcode.extract(word)) else { return nil }
         return .fpDataProcessing2(
             kind,
-            destination: floatRegister(number: word & 0x1f, width: width),
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width)
+            destination: floatRegister(number: F.rd.extract(word), width: width),
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width)
         )
     }
 
     private static func decodeBFloat16Convert(_ word: UInt32) -> Instruction? {
         // BFCVT Hd, Sn: fixed encoding (ptype=01, opcode=000110); only Rn/Rd vary.
-        guard word & 0xffff_fc00 == 0x1e63_4000 else { return nil }
+        guard word & 0xffff_fc00 == A64.FPMisc.bfcvt else { return nil }
         return .bfloat16Convert(
             destination: floatRegister(number: word & 0x1f, width: 16),
             source: floatRegister(number: (word >> 5) & 0x1f, width: 32)
@@ -1485,82 +1399,59 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPDataProcessing1(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_7c00 == 0x1e20_4000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let opcode = (word >> 15) & 0x3f
-        let rn = floatRegister(number: (word >> 5) & 0x1f, width: width)
-        let kind: A64.FPDataProcessing1Kind
-        switch opcode {
-        case 0b000000: kind = .fmov
-        case 0b000001: kind = .fabs
-        case 0b000010: kind = .fneg
-        case 0b000011: kind = .fsqrt
-        case 0b001000: kind = .frintn
-        case 0b001001: kind = .frintp
-        case 0b001010: kind = .frintm
-        case 0b001011: kind = .frintz
-        case 0b001100: kind = .frinta
-        case 0b001110: kind = .frintx
-        case 0b001111: kind = .frinti
-        case 0b010000: kind = .frint32z
-        case 0b010001: kind = .frint32x
-        case 0b010010: kind = .frint64z
-        case 0b010011: kind = .frint64x
-        case 0b000100, 0b000101, 0b000111:
+        typealias F = A64.FPDataProcessing1
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let opcode = F.opcode.extract(word)
+        let rn = floatRegister(number: F.rn.extract(word), width: width)
+        // FCVT (precision conversion) shares this page at opcodes 0001xx.
+        if opcode == 0b000100 || opcode == 0b000101 || opcode == 0b000111 {
             guard let target = floatWidth(forPtype: opcode & 3), target != width else { return nil }
             return .fpConvertPrecision(
-                destination: floatRegister(number: word & 0x1f, width: target),
+                destination: floatRegister(number: F.rd.extract(word), width: target),
                 source: rn
             )
-        default:
-            return nil
         }
+        guard let kind = A64.FPDataProcessing1Kind.decode(opcode: opcode) else { return nil }
         // frint32*/frint64* have no half-precision form.
         if !kind.allowsHalf, width == 16 { return nil }
-        return .fpDataProcessing1(kind, destination: floatRegister(number: word & 0x1f, width: width), source: rn)
+        return .fpDataProcessing1(kind, destination: floatRegister(number: F.rd.extract(word), width: width), source: rn)
     }
 
     private static func decodeFPDataProcessing3(_ word: UInt32) -> Instruction? {
-        guard word & 0xff00_0000 == 0x1f00_0000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let o1 = (word >> 21) & 1
-        let o0 = (word >> 15) & 1
-        let kind: A64.FPDataProcessing3Kind
-        switch (o1, o0) {
-        case (0, 0): kind = .fmadd
-        case (0, 1): kind = .fmsub
-        case (1, 0): kind = .fnmadd
-        case (1, 1): kind = .fnmsub
-        default: return nil
-        }
+        typealias F = A64.FPDataProcessing3
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        guard let kind = A64.FPDataProcessing3Kind.decode(o1: F.o1.extract(word), o0: F.o0.extract(word)) else { return nil }
         return .fpDataProcessing3(
             kind,
-            destination: floatRegister(number: word & 0x1f, width: width),
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
-            third: floatRegister(number: (word >> 10) & 0x1f, width: width)
+            destination: floatRegister(number: F.rd.extract(word), width: width),
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width),
+            third: floatRegister(number: F.ra.extract(word), width: width)
         )
     }
 
     private static func decodeFPCompare(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_fc07 == 0x1e20_2000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let opcode2 = word & 0x1f
+        typealias F = A64.FPCompare
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let opcode2 = F.opcode2.extract(word)
         let kind: A64.FPCompareKind = (opcode2 >> 4) & 1 == 1 ? .fcmpe : .fcmp
-        let rn = floatRegister(number: (word >> 5) & 0x1f, width: width)
+        let rn = floatRegister(number: F.rn.extract(word), width: width)
         let second: A64.FPCompareOperand
         if (opcode2 >> 3) & 1 == 1 {
-            guard (word >> 16) & 0x1f == 0 else { return nil }
+            guard F.rm.extract(word) == 0 else { return nil }
             second = .zero
         } else {
-            second = .register(floatRegister(number: (word >> 16) & 0x1f, width: width))
+            second = .register(floatRegister(number: F.rm.extract(word), width: width))
         }
         return .fpCompare(kind, first: rn, second: second)
     }
 
     private static func decodeFPMoveVectorHigh(_ word: UInt32) -> Instruction? {
         // `fmov x<d>, v<n>.d[1]` (opcode 110) / `fmov v<d>.d[1], x<n>` (opcode 111).
-        guard word & 0xfffe_fc00 == 0x9eae_0000 else { return nil }
+        guard word & 0xfffe_fc00 == A64.FPMisc.fmovVectorHighToGeneral else { return nil }
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
         if (word >> 16) & 1 == 0 {
@@ -1576,25 +1467,26 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPFixedPointConvert(_ word: UInt32) -> Instruction? {
-        guard word & 0x7f20_0000 == 0x1e00_0000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let sf = (word >> 31) & 1
+        typealias F = A64.FPFixedConversion
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let sf = F.sf.extract(word)
         let generalWidth = sf == 1 ? 64 : 32
-        let rmode = (word >> 19) & 3
-        let opcode = (word >> 16) & 7
-        let scale = (word >> 10) & 0x3f
+        let rmode = F.rmode.extract(word)
+        let opcode = F.opcode.extract(word)
+        let scale = F.scale.extract(word)
         // For 32-bit general registers `scale` must have its high bit set (fbits 1...32).
         if sf == 0 { guard scale >= 32 else { return nil } }
         let fbits = 64 - scale
         guard fbits >= 1 else { return nil }
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         switch (rmode, opcode) {
         case (0b11, 0b000), (0b11, 0b001):
             let kind: A64.FPConvertToIntKind = opcode == 0b000 ? .fcvtzs : .fcvtzu
             return .fpConvertToFixed(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width), fbits: fbits)
         case (0b00, 0b010), (0b00, 0b011):
-            let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
+            guard let kind = A64.FPConvertFromIntKind.decode(opcode: opcode) else { return nil }
             return .fpConvertFromFixed(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth), fbits: fbits)
         default:
             return nil
@@ -1602,53 +1494,57 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeFPConditionalSelect(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_0c00 == 0x1e20_0c00 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
+        typealias F = A64.FPConditionalSelect
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
         return .fpConditionalSelect(
-            destination: floatRegister(number: word & 0x1f, width: width),
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
+            destination: floatRegister(number: F.rd.extract(word), width: width),
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width),
             condition: condition
         )
     }
 
     private static func decodeFPConditionalCompare(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_0c00 == 0x1e20_0400 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        guard let condition = Condition(rawValue: (word >> 12) & 0xf) else { return nil }
-        let kind: A64.FPConditionalCompareKind = ((word >> 4) & 1) == 1 ? .fccmpe : .fccmp
+        typealias F = A64.FPConditionalCompare
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        guard let condition = Condition(rawValue: F.cond.extract(word)) else { return nil }
+        let kind: A64.FPConditionalCompareKind = F.op.extract(word) == 1 ? .fccmpe : .fccmp
         return .fpConditionalCompare(
             kind,
-            first: floatRegister(number: (word >> 5) & 0x1f, width: width),
-            second: floatRegister(number: (word >> 16) & 0x1f, width: width),
-            nzcv: word & 0xf,
+            first: floatRegister(number: F.rn.extract(word), width: width),
+            second: floatRegister(number: F.rm.extract(word), width: width),
+            nzcv: F.nzcv.extract(word),
             condition: condition
         )
     }
 
     private static func decodeFPMoveImmediate(_ word: UInt32) -> Instruction? {
-        guard word & 0xff20_1fe0 == 0x1e20_1000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let value = A64FloatImmediate.decode((word >> 13) & 0xff)
-        return .fpMoveImmediate(destination: floatRegister(number: word & 0x1f, width: width), value: value)
+        typealias F = A64.FPMoveImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let value = A64FloatImmediate.decode(F.imm8.extract(word))
+        return .fpMoveImmediate(destination: floatRegister(number: F.rd.extract(word), width: width), value: value)
     }
 
     private static func decodeFPIntegerConversion(_ word: UInt32) -> Instruction? {
-        guard word & 0x7f20_fc00 == 0x1e20_0000 else { return nil }
-        guard let width = floatWidth(forPtype: (word >> 22) & 3) else { return nil }
-        let sf = (word >> 31) & 1
+        typealias F = A64.FPIntegerConversion
+        guard word & F.classMask == F.baseWord else { return nil }
+        guard let width = floatWidth(forPtype: F.type.extract(word)) else { return nil }
+        let sf = F.sf.extract(word)
         let generalWidth = sf == 1 ? 64 : 32
-        let rmode = (word >> 19) & 3
-        let opcode = (word >> 16) & 7
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let rmode = F.rmode.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         if let kind = A64.FPConvertToIntKind.decode(rmode: rmode, opcode: opcode) {
             return .fpConvertToInt(kind, destination: integerRegister(number: rdNum, width: generalWidth), source: floatRegister(number: rnNum, width: width))
         }
         switch (rmode, opcode) {
         case (0b00, 0b010), (0b00, 0b011):
-            let kind: A64.FPConvertFromIntKind = opcode == 0b010 ? .scvtf : .ucvtf
+            guard let kind = A64.FPConvertFromIntKind.decode(opcode: opcode) else { return nil }
             return .fpConvertFromInt(kind, destination: floatRegister(number: rdNum, width: width), source: integerRegister(number: rnNum, width: generalWidth))
         case (0b00, 0b110):
             // Half-precision (type=11) pairs with either a 32- or 64-bit register;
@@ -1668,27 +1564,21 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeAcrossLanes(_ word: UInt32) -> Instruction? {
-        guard word & 0x9f3e_0c00 == 0x0e30_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorAcrossLanes
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         // Floating-point across lanes (U=1, opcode 01100 / 01111).
         if u == 1 && (opcode == 0b01100 || opcode == 0b01111) {
             let sz = (word >> 22) & 1
             let o1 = (word >> 23) & 1
             guard sz == 0, q == 1 else { return nil }   // only `.4s` supported
-            let kind: A64.AcrossLanesFPKind
-            switch (opcode, o1) {
-            case (0b01111, 0): kind = .fmaxv
-            case (0b01111, 1): kind = .fminv
-            case (0b01100, 0): kind = .fmaxnmv
-            case (0b01100, 1): kind = .fminnmv
-            default: return nil
-            }
+            guard let kind = A64.AcrossLanesFPKind.decode(o1: o1, opcode: opcode) else { return nil }
             return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 32), source: VectorRegister(number: rnNum, arrangement: .s4))
         }
 
@@ -1697,29 +1587,12 @@ internal enum A64InstructionDecoder {
             let sz = (word >> 22) & 1
             let o1 = (word >> 23) & 1
             guard sz == 0 else { return nil }
-            let kind: A64.AcrossLanesFPKind
-            switch (opcode, o1) {
-            case (0b01111, 0): kind = .fmaxv
-            case (0b01111, 1): kind = .fminv
-            case (0b01100, 0): kind = .fmaxnmv
-            case (0b01100, 1): kind = .fminnmv
-            default: return nil
-            }
+            guard let kind = A64.AcrossLanesFPKind.decode(o1: o1, opcode: opcode) else { return nil }
             let arrangement: A64.VectorArrangement = q == 1 ? .h8 : .h4
             return .acrossLanesFP(kind, destination: floatRegister(number: rdNum, width: 16), source: VectorRegister(number: rnNum, arrangement: arrangement))
         }
 
-        let kind: A64.AcrossLanesIntegerKind
-        switch (u, opcode) {
-        case (0, 0b00011): kind = .saddlv
-        case (1, 0b00011): kind = .uaddlv
-        case (0, 0b01010): kind = .smaxv
-        case (1, 0b01010): kind = .umaxv
-        case (0, 0b11010): kind = .sminv
-        case (1, 0b11010): kind = .uminv
-        case (0, 0b11011): kind = .addv
-        default: return nil
-        }
+        guard let kind = A64.AcrossLanesIntegerKind.decode(u: u, opcode: opcode) else { return nil }
         guard let arrangement = vectorArrangement(size: size, q: q) else { return nil }
         let isLong = kind == .saddlv || kind == .uaddlv
         let destinationWidth = isLong ? arrangement.elementWidth * 2 : arrangement.elementWidth
@@ -1730,7 +1603,8 @@ internal enum A64InstructionDecoder {
         // Crypto AES (`Vd.16b, Vn.16b`): fixed bits 01001110 00 10100 0 001xx 10.
         // Decoded ahead of the two-register-misc group, whose mask does not check
         // bit[19] and would otherwise mis-decode these as `cls`/`clz` forms.
-        guard word & 0xffff_cc00 == 0x4e28_4800 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffff_cc00 == (F.aesBase | (0b00100 << 12)) else { return nil }
         let opcode = (word >> 12) & 0x1f
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
@@ -1744,18 +1618,20 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSHA3(_ word: UInt32) -> Instruction? {
         // Crypto three-register SHA: 01011110 000 Rm 0 opcode 00 Rn Rd.
-        guard word & 0xffe0_8c00 == 0x5e00_0000 else { return nil }
-        let mNum = (word >> 16) & 0x1f
+        typealias F = A64.Crypto
+        guard word & 0xffe0_8c00 == F.sha3Base else { return nil }
+        let mNum = F.rm.extract(word)
         let opcode = (word >> 12) & 0x7
-        let nNum = (word >> 5) & 0x1f
-        let dNum = word & 0x1f
+        let nNum = F.rn.extract(word)
+        let dNum = F.rd.extract(word)
         guard let kind = A64.CryptoSHA3Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSHA3(kind, d: dNum, n: nNum, m: mNum)
     }
 
     private static func decodeCryptoSHA2(_ word: UInt32) -> Instruction? {
         // Crypto two-register SHA: 01011110 00 10100 0 000xx 10 Rn Rd.
-        guard word & 0xffff_cc00 == 0x5e28_0800 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffff_cc00 == F.sha2Base else { return nil }
         let opcode = (word >> 12) & 0x1f
         let nNum = (word >> 5) & 0x1f
         let dNum = word & 0x1f
@@ -1765,7 +1641,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSHA512(_ word: UInt32) -> Instruction? {
         // Three-register SHA512: 11001110 011 Rm 1 0 00 opcode Rn Rd.
-        guard word & 0xffe0_f000 == 0xce60_8000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_f000 == F.sha512Base else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoSHA512Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSHA512(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
@@ -1773,7 +1650,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoTwoReg(_ word: UInt32) -> Instruction? {
         // Two-register SHA512/SM4: 11001110 110 00000 10 00 opcode Rn Rd.
-        guard word & 0xffff_f000 == 0xcec0_8000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffff_f000 == F.twoRegBase else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoTwoRegKind.decode(opcode: opcode) else { return nil }
         return .cryptoTwoReg(kind, d: word & 0x1f, n: (word >> 5) & 0x1f)
@@ -1781,7 +1659,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSM3(_ word: UInt32) -> Instruction? {
         // Three-register SM3/SM4: 11001110 011 Rm 1 1 00 opcode Rn Rd.
-        guard word & 0xffe0_f000 == 0xce60_c000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_f000 == F.sm3Base else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoSM3Kind.decode(opcode: opcode) else { return nil }
         return .cryptoSM3(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
@@ -1789,7 +1668,8 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSM3Indexed(_ word: UInt32) -> Instruction? {
         // Three-register SM3 "imm2": 11001110 010 Rm 1 0 imm2 opcode Rn Rd.
-        guard word & 0xffe0_c000 == 0xce40_8000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_c000 == F.sm3IndexedBase else { return nil }
         let opcode = (word >> 10) & 0x3
         guard let kind = A64.CryptoSM3IndexedKind.decode(opcode: opcode) else { return nil }
         let index = (word >> 12) & 0x3
@@ -1798,13 +1678,15 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoSM3SS1(_ word: UInt32) -> Instruction? {
         // Four-register SM3: 11001110 010 Rm 0 Ra Rn Rd.
-        guard word & 0xffe0_8000 == 0xce40_0000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_8000 == F.sm3ss1Base else { return nil }
         return .cryptoSM3SS1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
     }
 
     private static func decodeCryptoSHA3Four(_ word: UInt32) -> Instruction? {
         // Four-register SHA3: 11001110 0 Op0 Rm 0 Ra Rn Rd.
-        guard word & 0xff80_8000 == 0xce00_0000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xff80_8000 == F.sha3FourBase else { return nil }
         let op0 = (word >> 21) & 0x3
         guard let kind = A64.CryptoSHA3FourKind.decode(op0: op0) else { return nil }
         return .cryptoSHA3Four(kind, d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, a: (word >> 10) & 0x1f)
@@ -1812,13 +1694,15 @@ internal enum A64InstructionDecoder {
 
     private static func decodeCryptoRAX1(_ word: UInt32) -> Instruction? {
         // Three-register SHA3 RAX1: 11001110 011 Rm 1 0 0011 Rn Rd.
-        guard word & 0xffe0_fc00 == 0xce60_8c00 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_fc00 == F.rax1Base else { return nil }
         return .cryptoRAX1(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f)
     }
 
     private static func decodeCryptoXAR(_ word: UInt32) -> Instruction? {
         // XAR: 11001110 100 Rm imm6 Rn Rd.
-        guard word & 0xffe0_0000 == 0xce80_0000 else { return nil }
+        typealias F = A64.Crypto
+        guard word & 0xffe0_0000 == F.xarBase else { return nil }
         let imm6 = (word >> 10) & 0x3f
         return .cryptoXAR(d: word & 0x1f, n: (word >> 5) & 0x1f, m: (word >> 16) & 0x1f, imm6: imm6)
     }
@@ -1827,7 +1711,7 @@ internal enum A64InstructionDecoder {
         // Advanced SIMD two-register miscellaneous (FP16): bits[28:24]=01110,
         // [22]=1, [21:17]=11100, [11:10]=10. `a`=bit23 carries the regular form's
         // high `size` bit and selects the operation sub-page.
-        guard word & 0x9f7e_0c00 == 0x0e78_0800 else { return nil }
+        guard word & 0x9f7e_0c00 == A64.AdvSIMD.twoRegisterMiscFP16 else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let a = (word >> 23) & 1
@@ -1877,7 +1761,7 @@ internal enum A64InstructionDecoder {
         // FP `sz` at bit22 with size-hi (bit23) = 0 — which is what distinguishes
         // frint64x from fsqrt (opcode 11111, but fsqrt has bit23=1). Opcodes
         // 11110/11111 select frint32/frint64; U selects the z/x rounding mode.
-        guard word & 0x9fa0_0c00 == 0x0e20_0800 else { return nil }
+        guard word & 0x9fa0_0c00 == A64.VectorTwoRegisterMisc.baseWord else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let sz = (word >> 22) & 1
@@ -1885,14 +1769,7 @@ internal enum A64InstructionDecoder {
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
 
-        let kind: A64.VectorTwoRegisterMiscKind
-        switch (u, opcode) {
-        case (0, 0b11110): kind = .frint32z
-        case (1, 0b11110): kind = .frint32x
-        case (0, 0b11111): kind = .frint64z
-        case (1, 0b11111): kind = .frint64x
-        default: return nil
-        }
+        guard let kind = A64.VectorTwoRegisterMiscKind.decodeFRINT(u: u, opcode: opcode) else { return nil }
 
         let arrangement: A64.VectorArrangement
         switch (sz, q) {
@@ -1909,34 +1786,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorTwoRegisterMisc(_ word: UInt32) -> Instruction? {
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
-        let kind: A64.VectorTwoRegisterMiscKind
-        switch (u, opcode) {
-        case (0, 0b00000): kind = .rev64
-        case (1, 0b00000): kind = .rev32
-        case (0, 0b00001): kind = .rev16
-        case (0, 0b00101): kind = .cnt
-        case (1, 0b00101): kind = size == 0b01 ? .rbit : .mvn
-        case (0, 0b00100): kind = .cls
-        case (1, 0b00100): kind = .clz
-        case (0, 0b00111): kind = .sqabs
-        case (1, 0b00111): kind = .sqneg
-        case (0, 0b00011): kind = .suqadd
-        case (1, 0b00011): kind = .usqadd
-        case (0, 0b01011): kind = .abs
-        case (1, 0b01011): kind = .neg
-        case (0, 0b01111): kind = .fabs
-        case (1, 0b01111): kind = .fneg
-        case (1, 0b11111): kind = .fsqrt
-        default: return nil
-        }
+        guard let kind = A64.VectorTwoRegisterMiscKind.decode(u: u, opcode: opcode, size: size) else { return nil }
 
         guard let arrangement = vectorTwoRegisterMiscArrangement(kind, size: size, q: q) else { return nil }
         return .vectorTwoRegisterMisc(
@@ -1947,15 +1806,15 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorCompareZero(_ word: UInt32) -> Instruction? {
-        // Shares the two-register-misc encoding (mask 0x9f200c00 == 0x0e200800);
-        // selected by the compare-against-zero opcodes.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        // Shares the two-register-misc encoding; selected by the compare-against-zero opcodes.
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         // Integer opcodes 01000/01001/01010; floating-point 01100/01101/01110.
         let isFloat: Bool
@@ -1980,14 +1839,15 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorConvert(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 11010/11011/11100/11101.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
         let sizeHi = (word >> 23) & 1
         let sz = (word >> 22) & 1
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         switch opcode {
         case 0b11010, 0b11011, 0b11100, 0b11101: break
@@ -2011,13 +1871,14 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorExtractNarrow(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 10010/10100.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         guard opcode == 0b10010 || opcode == 0b10100 else { return nil }
         guard let kind = A64.VectorExtractNarrowKind.decode(u: u, opcode: opcode),
@@ -2040,7 +1901,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorFPConvertPrecision(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 10110 (fcvtn/fcvtxn) / 10111 (fcvtl).
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        guard word & A64.VectorTwoRegisterMisc.classMask == A64.VectorTwoRegisterMisc.baseWord else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let sz = (word >> 22) & 1
@@ -2091,7 +1952,7 @@ internal enum A64InstructionDecoder {
         // Shares the two-register-misc encoding; opcodes 11000/11001 (frint),
         // 11100/11101 (estimates). The high `size` bit at [23] separates these
         // from the convert group that reuses the same opcodes.
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
+        guard word & A64.VectorTwoRegisterMisc.classMask == A64.VectorTwoRegisterMisc.baseWord else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let sizeHi = (word >> 23) & 1
@@ -2121,13 +1982,14 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorPairwiseLongAdd(_ word: UInt32) -> Instruction? {
         // Shares the two-register-misc encoding; selected by opcodes 00010 (add) / 00110 (accumulate).
-        guard word & 0x9f20_0c00 == 0x0e20_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 12) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorTwoRegisterMisc
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         guard opcode == 0b00010 || opcode == 0b00110 else { return nil }
         guard let kind = A64.VectorPairwiseLongAddKind.decode(u: u, opcode: opcode),
@@ -2164,7 +2026,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorComplex(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01110, U=1, bit21=0, bits[15:14]=11, bit10=1.
-        guard word & 0xbf20_c400 == 0x2e00_c400 else { return nil }
+        guard word & 0xbf20_c400 == A64.AdvSIMD.complexMultiplyAdd else { return nil }
         let q = (word >> 30) & 1
         let size = (word >> 22) & 3
         guard let arrangement = complexArrangement(size: size, q: q) else { return nil }
@@ -2188,7 +2050,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorComplexByElement(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01111, U=1, bit12=1, bit10=0, bit15=0.
-        guard word & 0xbf00_9400 == 0x2f00_1000 else { return nil }
+        guard word & 0xbf00_9400 == A64.AdvSIMD.complexMultiplyAddByElement else { return nil }
         let q = (word >> 30) & 1
         let size = (word >> 22) & 3
         let l = (word >> 21) & 1
@@ -2223,7 +2085,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorThreeSameExtra(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01110, U=1, bit21=0, bit15=1, bit10=1.
-        guard word & 0xbf20_8400 == 0x2e00_8400 else { return nil }
+        guard word & 0xbf20_8400 == (A64.AdvSIMD.threeSameExtra | (1 << 29)) else { return nil }
         let q = (word >> 30) & 1
         let size = (word >> 22) & 3
         let opcode = (word >> 11) & 0xf
@@ -2247,7 +2109,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarThreeSameExtra(_ word: UInt32) -> Instruction? {
         // bit30=1, bits[28:24]=11110, U=1, bit21=0, bit15=1, bit10=1.
-        guard word & 0xff20_8400 == 0x7e00_8400 else { return nil }
+        guard word & 0xff20_8400 == (A64.AdvSIMD.scalarThreeSameExtra | (1 << 29)) else { return nil }
         let size = (word >> 22) & 3
         let opcode = (word >> 11) & 0xf
         guard let kind = A64.VectorThreeSameExtraKind.decode(opcode: opcode) else { return nil }
@@ -2267,15 +2129,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorThreeSame(_ word: UInt32) -> Instruction? {
-        // bits[28:24]=01110, bit21=1, bit10=1 — unique to the three-same group.
-        guard word & 0x9f20_0400 == 0x0e20_0400 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 3
-        let opcode = (word >> 11) & 0x1f
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        // Three-same group.
+        typealias F = A64.VectorThreeSame
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         let family: A64.VectorThreeSameKind.Family
         let variant: UInt32
@@ -2322,7 +2185,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorThreeSameFP16(_ word: UInt32) -> Instruction? {
         // Three-same (FP16): bits[28:24]=01110, [22:21]=10, [15:14]=00, bit10=1.
-        guard word & 0x9f60_c400 == 0x0e40_0400 else { return nil }
+        guard word & 0x9f60_c400 == A64.AdvSIMD.threeSameFP16 else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let a = (word >> 23) & 1
@@ -2348,7 +2211,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorModifiedImmediate(_ word: UInt32) -> Instruction? {
         // bits[28:24]=01111, bits[23:19]=00000, bit10=1.
-        guard word & 0x9ff8_0400 == 0x0f00_0400 else { return nil }
+        guard word & 0x9ff8_0400 == (A64.AdvSIMD.vectorImmediate | (1 << 10)) else { return nil }
         let q = (word >> 30) & 1
         let op = (word >> 29) & 1
         let cmode = (word >> 12) & 0xf
@@ -2402,11 +2265,12 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorShiftLeftLong(_ word: UInt32) -> Instruction? {
         // Advanced SIMD two-register-misc, U=1, opcode=0b10011 (SHLL/SHLL2).
+        typealias F = A64.VectorTwoRegisterMisc
         guard word & 0xbf3f_fc00 == 0x2e21_3800 else { return nil }
-        let q = (word >> 30) & 1
-        let size = (word >> 22) & 3
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let q = F.q.extract(word)
+        let size = F.size.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         let dst: A64.VectorArrangement
         let src: A64.VectorArrangement
         switch size {
@@ -2424,17 +2288,17 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorShiftImmediate(_ word: UInt32) -> Instruction? {
-        // bits[28:23]=011110, bit10=1; `immh` (22:19) must be non-zero (immh=0
-        // is the modified-immediate group).
-        guard word & 0x9f80_0400 == 0x0f00_0400 else { return nil }
-        let immh = (word >> 19) & 0xf
+        // `immh` (22:19) must be non-zero (immh=0 is the modified-immediate group).
+        typealias F = A64.VectorShiftImmediate
+        guard word & F.classMask == F.baseWord else { return nil }
+        let immh = F.immh.extract(word)
         guard immh != 0 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let immb = (word >> 16) & 0x7
-        let opcode = (word >> 11) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let immb = F.immb.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         let immhimmb = Int((immh << 3) | immb)
 
         guard let kind = A64.VectorShiftImmediateKind.allCases.first(where: {
@@ -2494,14 +2358,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorCopy(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[28:21]=01110000, bit15=0, bit10=1.
-        guard word & 0x9fe0_8400 == 0x0e00_0400 else { return nil }
-        let q = (word >> 30) & 1
-        let op = (word >> 29) & 1
-        let imm5 = (word >> 16) & 0x1f
-        let imm4 = (word >> 11) & 0xf
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorCopy
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let op = F.op.extract(word)
+        let imm5 = F.imm5.extract(word)
+        let imm4 = F.imm4.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         // The lowest set bit of `imm5` selects the element size.
         let width: A64.VectorElementWidth
@@ -2554,14 +2418,14 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorPermute(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[29:24]=001110, bit21=0, bit15=0, bits[11:10]=10.
-        guard word & 0xbf20_8c00 == 0x0e00_0800 else { return nil }
-        let q = (word >> 30) & 1
-        let size = (word >> 22) & 0x3
-        let opcode = (word >> 12) & 0x7
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorPermute
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         guard let kind = A64.VectorPermuteKind.allCases.first(where: { $0.opcode == opcode }),
               let arrangement = threeSameIntegerArrangement(size: size, q: q) else { return nil }
         return .vectorPermute(kind,
@@ -2571,13 +2435,13 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorExtract(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[29:24]=101110, bits[23:22]=00, bit21=0, bit15=0, bit10=0.
-        guard word & 0xbfe0_8400 == 0x2e00_0000 else { return nil }
-        let q = (word >> 30) & 1
-        let imm4 = (word >> 11) & 0xf
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        typealias F = A64.VectorExtract
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let imm4 = F.index.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
         // The 8-byte form only addresses lanes 0..7.
         guard q == 1 || imm4 <= 7 else { return nil }
         let arrangement: A64.VectorArrangement = q == 1 ? .b16 : .b8
@@ -2589,15 +2453,16 @@ internal enum A64InstructionDecoder {
     }
 
     private static func decodeVectorThreeDifferent(_ word: UInt32) -> Instruction? {
-        // bit31=0, bits[28:24]=01110, bit21=1, bits[11:10]=00.
-        guard word & 0x9f20_0c00 == 0x0e20_0000 else { return nil }
-        let q = (word >> 30) & 1
-        let u = (word >> 29) & 1
-        let size = (word >> 22) & 0x3
-        let opcode = (word >> 12) & 0xf
-        let rmNum = (word >> 16) & 0x1f
-        let rnNum = (word >> 5) & 0x1f
-        let rdNum = word & 0x1f
+        // Three-different group.
+        typealias F = A64.VectorThreeDifferent
+        guard word & F.classMask == F.baseWord else { return nil }
+        let q = F.q.extract(word)
+        let u = F.u.extract(word)
+        let size = F.size.extract(word)
+        let opcode = F.opcode.extract(word)
+        let rmNum = F.rm.extract(word)
+        let rnNum = F.rn.extract(word)
+        let rdNum = F.rd.extract(word)
 
         guard let kind = A64.VectorThreeDifferentKind.allCases.first(where: {
             let spec = $0.spec
@@ -2648,7 +2513,7 @@ internal enum A64InstructionDecoder {
         let rdNum = word & 0x1f
 
         // Vector form: bits[28:24]=01110, size=10, bit21=0, bits[15:10]=100101.
-        if word & 0x9fe0_fc00 == 0x0e80_9400 {
+        if word & 0x9fe0_fc00 == A64.AdvSIMD.dotProduct {
             let rmNum = (word >> 16) & 0x1f
             return .vectorDotProduct(kind,
                 destination: VectorRegister(number: rdNum, arrangement: destination),
@@ -2657,7 +2522,7 @@ internal enum A64InstructionDecoder {
         }
 
         // By-element form: bits[28:24]=01111, size=10, bits[15:12]=1110, bit10=0.
-        if word & 0x9fc0_f400 == 0x0f80_e000 {
+        if word & 0x9fc0_f400 == A64.AdvSIMD.dotProductByElement {
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
             let rmLow = (word >> 16) & 0xf
@@ -2681,7 +2546,7 @@ internal enum A64InstructionDecoder {
         let rdNum = word & 0x1f
 
         // USDOT (vector): U=0, size=10, bit21=0, bits[15:10]=100111.
-        if word & 0xbfe0_fc00 == 0x0e80_9c00 {
+        if word & 0xbfe0_fc00 == A64.AdvSIMD.usDotProduct {
             let rmNum = (word >> 16) & 0x1f
             return .vectorUSDotProduct(
                 destination: VectorRegister(number: rdNum, arrangement: destination),
@@ -2691,8 +2556,8 @@ internal enum A64InstructionDecoder {
 
         // USDOT/SUDOT (by element): U=0, bits[28:24]=01111, bit22=0,
         // bits[15:12]=1111, bit10=0; bit23 selects usdot(1)/sudot(0).
-        if word & 0xbf40_f400 == 0x0f00_f000 {
-            let kind: A64.VectorMixedDotProductKind = ((word >> 23) & 1) == 1 ? .usdot : .sudot
+        if word & 0xbf40_f400 == A64.AdvSIMD.mixedDotByElement {
+            let kind = A64.VectorMixedDotProductKind.decode(us: (word >> 23) & 1)
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
             let rmLow = (word >> 16) & 0xf
@@ -2711,16 +2576,10 @@ internal enum A64InstructionDecoder {
     private static func decodeVectorMatrixMultiply(_ word: UInt32) -> Instruction? {
         // FEAT_I8MM: Q=1, size=10, bit21=0, bits[15:12]=1010, bit10=0;
         // U(bit29) and B(bit11) select smmla/ummla/usmmla.
-        guard word & 0xcee0_f400 == 0x4e80_a400 else { return nil }
+        guard word & 0xcee0_f400 == A64.AdvSIMD.matrixMultiply else { return nil }
         let u = (word >> 29) & 1
         let b = (word >> 11) & 1
-        let kind: A64.VectorMatrixMultiplyKind
-        switch (u, b) {
-        case (1, 0): kind = .ummla
-        case (0, 1): kind = .usmmla
-        case (0, 0): kind = .smmla
-        default: return nil
-        }
+        guard let kind = A64.VectorMatrixMultiplyKind.decode(u: u, b: b) else { return nil }
         let rmNum = (word >> 16) & 0x1f
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
@@ -2735,7 +2594,7 @@ internal enum A64InstructionDecoder {
         let rdNum = word & 0x1f
 
         // BFDOT (vector): U=1, size=01, opcode[15:11]=11111, bit10=1.
-        if word & 0xbfe0_fc00 == 0x2e40_fc00 {
+        if word & 0xbfe0_fc00 == A64.AdvSIMD.bfDot {
             let q = (word >> 30) & 1
             let dest: A64.VectorArrangement = q == 0 ? .s2 : .s4
             let src: A64.VectorArrangement = q == 0 ? .h4 : .h8
@@ -2747,7 +2606,7 @@ internal enum A64InstructionDecoder {
         }
 
         // BFMMLA: Q=1, U=1, size=01, opcode[15:11]=11101, bit10=1.
-        if word & 0xffe0_fc00 == 0x6e40_ec00 {
+        if word & 0xffe0_fc00 == A64.AdvSIMD.bfMatrixMultiply {
             let rmNum = (word >> 16) & 0x1f
             return .vectorBFMatrixMultiply(
                 destination: VectorRegister(number: rdNum, arrangement: .s4),
@@ -2757,7 +2616,7 @@ internal enum A64InstructionDecoder {
 
         // BFMLALB/BFMLALT (vector): U=1, size=11, opcode[15:11]=11111, bit10=1;
         // the Q bit selects bottom (0) / top (1).
-        if word & 0xbfe0_fc00 == 0x2ec0_fc00 {
+        if word & 0xbfe0_fc00 == A64.AdvSIMD.bfMultiplyLong {
             let top = ((word >> 30) & 1) == 1
             let rmNum = (word >> 16) & 0x1f
             return .vectorBFMLAL(top: top,
@@ -2767,7 +2626,7 @@ internal enum A64InstructionDecoder {
         }
 
         // BFDOT (by element): U=0, size=01, opcode[15:12]=1111, bit10=0.
-        if word & 0xbfc0_f400 == 0x0f40_f000 {
+        if word & 0xbfc0_f400 == A64.AdvSIMD.bfDotByElement {
             let q = (word >> 30) & 1
             let dest: A64.VectorArrangement = q == 0 ? .s2 : .s4
             let src: A64.VectorArrangement = q == 0 ? .h4 : .h8
@@ -2784,7 +2643,7 @@ internal enum A64InstructionDecoder {
 
         // BFMLALB/BFMLALT (by element): U=0, size=11, opcode[15:12]=1111,
         // bit10=0; Q selects bottom/top, Vm is V0–V15, index = H:L:M.
-        if word & 0xbfc0_f400 == 0x0fc0_f000 {
+        if word & 0xbfc0_f400 == A64.AdvSIMD.bfMultiplyLongByElement {
             let top = ((word >> 30) & 1) == 1
             let l = (word >> 21) & 1
             let m = (word >> 20) & 1
@@ -2830,7 +2689,7 @@ internal enum A64InstructionDecoder {
 
         // By-element form: bits[28:24]=01111, size[23:22]=10, bit10=0. The
         // opcode[15:12] = (upper<<3)|(sub<<2) with bits[13:12]=00; index = H:L:M.
-        if word & 0x9fc0_0400 == 0x0f80_0000 {
+        if word & 0x9fc0_0400 == A64.AdvSIMD.fpMultiplyLongByElement {
             let opcode = (word >> 12) & 0b1111
             guard opcode & 0b0011 == 0 else { return nil }
             let upper = (opcode >> 3) & 1
@@ -2853,7 +2712,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeVectorIndexed(_ word: UInt32) -> Instruction? {
         // bit31=0, bits[28:24]=01111, bit10=0.
-        guard word & 0x9f00_0400 == 0x0f00_0000 else { return nil }
+        guard word & 0x9f00_0400 == A64.AdvSIMD.vectorImmediate else { return nil }
         let q = (word >> 30) & 1
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
@@ -2925,7 +2784,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarThreeSame(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bit21=1, bit10=1.
-        guard word & 0xdf20_0400 == 0x5e20_0400 else { return nil }
+        guard word & 0xdf20_0400 == A64.ScalarAdvSIMD.threeSameBase else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let opcode = (word >> 11) & 0x1f
@@ -2962,7 +2821,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarTwoRegisterMiscNarrow(_ word: UInt32) -> Instruction? {
         // Shares the scalar two-register misc base; distinguished by the narrowing
         // opcodes (0x12 / 0x14). The destination element size comes from `size`.
-        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.twoRegisterMiscBase else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let opcode = (word >> 12) & 0x1f
@@ -2990,7 +2849,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarShiftNarrow(_ word: UInt32) -> Instruction? {
         // Shares the scalar shift-by-immediate base; narrowing forms have immh = 0xxx
         // (the highest set bit selects the destination element size).
-        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        guard word & 0xdf80_0400 == A64.AdvSIMD.scalarShift else { return nil }
         let u = (word >> 29) & 1
         let immh = (word >> 19) & 0xf
         let immb = (word >> 16) & 0x7
@@ -3022,7 +2881,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarShiftImmediate(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:23]=111110, bit10=1.
-        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        guard word & 0xdf80_0400 == A64.AdvSIMD.scalarShift else { return nil }
         let u = (word >> 29) & 1
         let immh = (word >> 19) & 0xf
         let immb = (word >> 16) & 0x7
@@ -3049,7 +2908,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarShiftFixedPoint(_ word: UInt32) -> Instruction? {
         // Shares the scalar shift-by-immediate base (bit30=1, bits[28:23]=111110, bit10=1),
         // distinguished by opcode (scvtf/ucvtf = 0b11100, fcvtzs/fcvtzu = 0b11111).
-        guard word & 0xdf80_0400 == 0x5f00_0400 else { return nil }
+        guard word & 0xdf80_0400 == A64.AdvSIMD.scalarShift else { return nil }
         let u = (word >> 29) & 1
         let immh = (word >> 19) & 0xf
         let immb = (word >> 16) & 0x7
@@ -3086,7 +2945,7 @@ internal enum A64InstructionDecoder {
         // bit22=1, bit21=0, bits[15:14]=00, bit10=1. Distinguished by (U, bit23,
         // opcode) where the encoded opcode field is only 3 bits ([13:11]) and the
         // full opcode is 0b11_000 | field.
-        guard word & 0xdf60_c400 == 0x5e40_0400 else { return nil }
+        guard word & 0xdf60_c400 == A64.AdvSIMD.scalarThreeSameFP16 else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let opcode = 0b11000 | ((word >> 11) & 0b111)
@@ -3108,7 +2967,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarThreeSameFP(_ word: UInt32) -> Instruction? {
         // Shares the scalar three-same base (bit21=1, bit10=1), distinguished by
         // (U, bit23, opcode[15:11]); bit22 is the `sz` (single/double) bit.
-        guard word & 0xdf20_0400 == 0x5e20_0400 else { return nil }
+        guard word & 0xdf20_0400 == A64.ScalarAdvSIMD.threeSameBase else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let sz = (word >> 22) & 1
@@ -3133,7 +2992,7 @@ internal enum A64InstructionDecoder {
         // Half-precision scalar two-register misc: bit30=1, bits[28:24]=11110,
         // bit22=1, bits[21:17]=11100, bits[11:10]=10. Distinguished by
         // (U, bit23, opcode[16:12]); the narrow `fcvtxn` has no FP16 form.
-        guard word & 0xdf7e_0c00 == 0x5e78_0800 else { return nil }
+        guard word & 0xdf7e_0c00 == A64.AdvSIMD.scalarFPTwoRegisterMiscFP16 else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let opcode = (word >> 12) & 0x1f
@@ -3153,7 +3012,7 @@ internal enum A64InstructionDecoder {
     private static func decodeScalarFPTwoRegisterMisc(_ word: UInt32) -> Instruction? {
         // Shares the scalar two-register misc base (bits[21:17]=10000, bits[11:10]=10),
         // distinguished by (U, bit23, opcode). bit22 is the `sz` (single/double) bit.
-        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.twoRegisterMiscBase else { return nil }
         let u = (word >> 29) & 1
         let hi = (word >> 23) & 1
         let sz = (word >> 22) & 1
@@ -3183,7 +3042,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarCopy(_ word: UInt32) -> Instruction? {
         // bit30=1, bits[28:21]=11110000, bit15=0, imm4[14:11]=0000, bit10=1 (DUP element scalar).
-        guard word & 0xffe0_fc00 == 0x5e00_0400 else { return nil }
+        guard word & 0xffe0_fc00 == A64.AdvSIMD.scalarCopy else { return nil }
         let imm5 = (word >> 16) & 0x1f
         let rnNum = (word >> 5) & 0x1f
         let rdNum = word & 0x1f
@@ -3207,7 +3066,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarIndexed(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11111, bit10=0.
-        guard word & 0xdf00_0400 == 0x5f00_0000 else { return nil }
+        guard word & 0xdf00_0400 == A64.AdvSIMD.scalarIndexed else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let l = (word >> 21) & 1
@@ -3276,7 +3135,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarThreeDifferent(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bit21=1, bits[11:10]=00.
-        guard word & 0xdf20_0c00 == 0x5e20_0000 else { return nil }
+        guard word & 0xdf20_0c00 == A64.ScalarAdvSIMD.threeDifferentBase else { return nil }
         let size = (word >> 22) & 0x3
         let opcode = (word >> 12) & 0xf
         let rmNum = (word >> 16) & 0x1f
@@ -3301,7 +3160,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarTwoRegisterMisc(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bits[21:17]=10000, bits[11:10]=10.
-        guard word & 0xdf3e_0c00 == 0x5e20_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.twoRegisterMiscBase else { return nil }
         let u = (word >> 29) & 1
         let size = (word >> 22) & 0x3
         let opcode = (word >> 12) & 0x1f
@@ -3331,7 +3190,7 @@ internal enum A64InstructionDecoder {
         // Half-precision scalar pairwise: like the FP32/64 form but with U=0 and
         // sz=0, reducing a `.2h` source into a scalar `h`. Distinguished by
         // (o1=bit23, opcode[16:12]).
-        guard word & 0xff7e_0c00 == 0x5e30_0800 else { return nil }
+        guard word & 0xff7e_0c00 == A64.ScalarAdvSIMD.pairwiseBase else { return nil }
         let o1 = (word >> 23) & 1
         let opcode = (word >> 12) & 0x1f
         let rnNum = (word >> 5) & 0x1f
@@ -3349,7 +3208,7 @@ internal enum A64InstructionDecoder {
 
     private static func decodeScalarPairwise(_ word: UInt32) -> Instruction? {
         // bit31=0, bit30=1, bits[28:24]=11110, bits[21:17]=11000, bits[11:10]=10.
-        guard word & 0xdf3e_0c00 == 0x5e30_0800 else { return nil }
+        guard word & 0xdf3e_0c00 == A64.ScalarAdvSIMD.pairwiseBase else { return nil }
         let u = (word >> 29) & 1
         let o1 = (word >> 23) & 1
         let sz = (word >> 22) & 1

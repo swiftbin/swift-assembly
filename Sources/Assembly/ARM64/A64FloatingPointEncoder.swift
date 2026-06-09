@@ -62,20 +62,8 @@ internal enum A64FloatEncoder {
     static func dataProcessing2(_ kind: A64.FPDataProcessing2Kind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister) throws -> UInt32 {
         try requireSameType(rd, rn, rm, instruction: kind.rawValue)
         let type = try ptype(rd, instruction: kind.rawValue)
-        let opcode: UInt32
-        switch kind {
-        case .fmul: opcode = 0b0000
-        case .fdiv: opcode = 0b0001
-        case .fadd: opcode = 0b0010
-        case .fsub: opcode = 0b0011
-        case .fmax: opcode = 0b0100
-        case .fmin: opcode = 0b0101
-        case .fmaxnm: opcode = 0b0110
-        case .fminnm: opcode = 0b0111
-        case .fnmul: opcode = 0b1000
-        }
-        let head: UInt32 = 0x1e20_0800 | (type << 22)
-        return head | (rm.encodedNumber << 16) | (opcode << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing2
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.opcode.insert(kind.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func dataProcessing1(_ kind: A64.FPDataProcessing1Kind, destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -83,17 +71,16 @@ internal enum A64FloatEncoder {
         let type = try ptype(rd, instruction: kind.rawValue)
         // frint32*/frint64* have no half-precision form.
         if !kind.allowsHalf, rd.width == 16 { throw AssemblerError.invalidRegister(kind.rawValue) }
-        let head: UInt32 = 0x1e20_4000 | (type << 22)
-        return head | (kind.opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing1
+        return F.baseWord | F.type.insert(type) | F.opcode.insert(kind.opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func dataProcessing3(_ kind: A64.FPDataProcessing3Kind, destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, third ra: FloatRegister) throws -> UInt32 {
         try requireSameType(rd, rn, rm, ra, instruction: kind.rawValue)
         let type = try ptype(rd, instruction: kind.rawValue)
-        let o1: UInt32 = (kind == .fnmadd || kind == .fnmsub) ? 1 : 0
-        let o0: UInt32 = (kind == .fmsub || kind == .fnmsub) ? 1 : 0
-        let head: UInt32 = 0x1f00_0000 | (type << 22) | (o1 << 21)
-        return head | (rm.encodedNumber << 16) | (o0 << 15) | (ra.encodedNumber << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing3
+        return F.baseWord | F.type.insert(type) | F.o1.insert(kind.o1) | F.rm.insert(rm.encodedNumber)
+            | F.o0.insert(kind.o0) | F.ra.insert(ra.encodedNumber) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func compare(_ kind: A64.FPCompareKind, first rn: FloatRegister, second: A64.FPCompareOperand) throws -> UInt32 {
@@ -107,8 +94,8 @@ internal enum A64FloatEncoder {
         case .zero:
             opcode2 |= 0b01000
         }
-        let head: UInt32 = 0x1e20_2000 | (type << 22)
-        return head | (rm << 16) | (rn.encodedNumber << 5) | opcode2
+        typealias F = A64.FPCompare
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm) | F.rn.insert(rn.encodedNumber) | F.opcode2.insert(opcode2)
     }
 
     static func convertPrecision(destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -122,14 +109,14 @@ internal enum A64FloatEncoder {
         default: throw AssemblerError.invalidRegister("fcvt")
         }
         let opcode: UInt32 = 0b0001_00 | targetOpc
-        let head: UInt32 = 0x1e20_4000 | (sourceType << 22)
-        return head | (opcode << 15) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPDataProcessing1
+        return F.baseWord | F.type.insert(sourceType) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func bfloat16Convert(destination rd: FloatRegister, source rn: FloatRegister) throws -> UInt32 {
         // BFCVT converts a single-precision source to a BFloat16 (half-width) result.
         guard rd.width == 16, rn.width == 32 else { throw AssemblerError.invalidRegister("bfcvt") }
-        return 0x1e63_4000 | (rn.encodedNumber << 5) | rd.encodedNumber
+        return A64.FPMisc.bfcvt | A64.FPMisc.rn.insert(rn.encodedNumber) | A64.FPMisc.rd.insert(rd.encodedNumber)
     }
 
     static func moveImmediate(destination rd: FloatRegister, value: Double) throws -> UInt32 {
@@ -137,36 +124,36 @@ internal enum A64FloatEncoder {
         guard let imm8 = A64FloatImmediate.encode(value) else {
             throw AssemblerError.invalidImmediate("#\(value)")
         }
-        let head: UInt32 = 0x1e20_1000 | (type << 22)
-        return head | (imm8 << 13) | rd.encodedNumber
+        typealias F = A64.FPMoveImmediate
+        return F.baseWord | F.type.insert(type) | F.imm8.insert(imm8) | F.rd.insert(rd.encodedNumber)
     }
 
     static func moveToGeneral(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
         let (sf, type) = try generalMoveFields(general: rd, float: rn, instruction: "fmov")
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22)
-        return head | (0b110 << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(0b110) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func moveFromGeneral(destination rd: FloatRegister, source rn: IntegerRegister) throws -> UInt32 {
         let (sf, type) = try generalMoveFields(general: rn, float: rd, instruction: "fmov")
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22)
-        return head | (0b111 << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(0b111) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func convertToInt(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
         let sf: UInt32 = rd.is64Bit ? 1 : 0
         let type = try ptype(rn, instruction: kind.rawValue)
         let (rmode, opcode) = kind.spec
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22) | (rmode << 19)
-        return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.rmode.insert(rmode) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func convertFromInt(_ kind: A64.FPConvertFromIntKind, destination rd: FloatRegister, source rn: IntegerRegister) throws -> UInt32 {
         let sf: UInt32 = rn.is64Bit ? 1 : 0
         let type = try ptype(rd, instruction: kind.rawValue)
-        let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
-        let head: UInt32 = (sf << 31) | 0x1e20_0000 | (type << 22)
-        return head | (opcode << 16) | (rn.encodedNumber << 5) | rd.encodedNumber
+        let opcode = kind.opcode
+        typealias F = A64.FPIntegerConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.opcode.insert(opcode) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func moveVectorHighToGeneral(destination rd: IntegerRegister, source element: A64.VectorElement) throws -> UInt32 {
@@ -174,14 +161,14 @@ internal enum A64FloatEncoder {
         guard rd.is64Bit, element.width == .d, element.index == 1 else {
             throw AssemblerError.invalidRegister("fmov")
         }
-        return 0x9eae_0000 | (element.encodedNumber << 5) | rd.encodedNumber
+        return A64.FPMisc.fmovVectorHighToGeneral | A64.FPMisc.rn.insert(element.encodedNumber) | A64.FPMisc.rd.insert(rd.encodedNumber)
     }
 
     static func moveGeneralToVectorHigh(destination element: A64.VectorElement, source rn: IntegerRegister) throws -> UInt32 {
         guard rn.is64Bit, element.width == .d, element.index == 1 else {
             throw AssemblerError.invalidRegister("fmov")
         }
-        return 0x9eaf_0000 | (rn.encodedNumber << 5) | element.encodedNumber
+        return A64.FPMisc.fmovGeneralToVectorHigh | A64.FPMisc.rn.insert(rn.encodedNumber) | A64.FPMisc.rd.insert(element.encodedNumber)
     }
 
     static func convertToFixed(_ kind: A64.FPConvertToIntKind, destination rd: IntegerRegister, source rn: FloatRegister, fbits: UInt32) throws -> UInt32 {
@@ -193,8 +180,9 @@ internal enum A64FloatEncoder {
         guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
         let scale = 64 - fbits
         let opcode: UInt32 = kind == .fcvtzs ? 0b000 : 0b001
-        let head: UInt32 = (sf << 31) | 0x1e00_0000 | (type << 22) | (0b11 << 19)
-        return head | (opcode << 16) | (scale << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPFixedConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type) | F.rmode.insert(0b11)
+            | F.opcode.insert(opcode) | F.scale.insert(scale) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func convertFromFixed(_ kind: A64.FPConvertFromIntKind, destination rd: FloatRegister, source rn: IntegerRegister, fbits: UInt32) throws -> UInt32 {
@@ -203,24 +191,26 @@ internal enum A64FloatEncoder {
         let maxFbits: UInt32 = rn.is64Bit ? 64 : 32
         guard fbits >= 1, fbits <= maxFbits else { throw AssemblerError.invalidImmediate("#\(fbits)") }
         let scale = 64 - fbits
-        let opcode: UInt32 = kind == .scvtf ? 0b010 : 0b011
-        let head: UInt32 = (sf << 31) | 0x1e00_0000 | (type << 22)
-        return head | (opcode << 16) | (scale << 10) | (rn.encodedNumber << 5) | rd.encodedNumber
+        let opcode = kind.opcode
+        typealias F = A64.FPFixedConversion
+        return F.baseWord | F.sf.insert(sf) | F.type.insert(type)
+            | F.opcode.insert(opcode) | F.scale.insert(scale) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalSelect(destination rd: FloatRegister, first rn: FloatRegister, second rm: FloatRegister, condition: A64.Condition) throws -> UInt32 {
         try requireSameType(rd, rn, rm, instruction: "fcsel")
         let type = try ptype(rd, instruction: "fcsel")
-        let head: UInt32 = 0x1e20_0c00 | (type << 22)
-        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (rn.encodedNumber << 5) | rd.encodedNumber
+        typealias F = A64.FPConditionalSelect
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.cond.insert(condition.rawValue) | F.rn.insert(rn.encodedNumber) | F.rd.insert(rd.encodedNumber)
     }
 
     static func conditionalCompare(_ kind: A64.FPConditionalCompareKind, first rn: FloatRegister, second rm: FloatRegister, nzcv: UInt32, condition: A64.Condition) throws -> UInt32 {
         try requireSameType(rn, rm, instruction: kind.rawValue)
         let type = try ptype(rn, instruction: kind.rawValue)
         guard nzcv <= 0xf else { throw AssemblerError.invalidImmediate("#\(nzcv)") }
-        let head: UInt32 = 0x1e20_0400 | (type << 22)
-        return head | (rm.encodedNumber << 16) | (condition.rawValue << 12) | (rn.encodedNumber << 5) | (kind.op << 4) | nzcv
+        typealias F = A64.FPConditionalCompare
+        return F.baseWord | F.type.insert(type) | F.rm.insert(rm.encodedNumber) | F.cond.insert(condition.rawValue)
+            | F.rn.insert(rn.encodedNumber) | F.op.insert(kind.op) | F.nzcv.insert(nzcv)
     }
 
     static func fjcvtzs(destination rd: IntegerRegister, source rn: FloatRegister) throws -> UInt32 {
@@ -228,7 +218,7 @@ internal enum A64FloatEncoder {
         guard !rd.is64Bit, rn.width == 64 else {
             throw AssemblerError.invalidRegister("fjcvtzs")
         }
-        return 0x1e7e_0000 | (rn.encodedNumber << 5) | rd.encodedNumber
+        return A64.FPMisc.fjcvtzs | A64.FPMisc.rn.insert(rn.encodedNumber) | A64.FPMisc.rd.insert(rd.encodedNumber)
     }
 
     /// Resolves the `sf`/`type` fields for `FMOV` between a general register and a single/double FP register.

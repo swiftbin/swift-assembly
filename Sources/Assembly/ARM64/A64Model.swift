@@ -147,13 +147,26 @@ internal enum A64 {
         case registerOffset(base: Register, offset: Register, extend: ExtendKind?, shift: Int)
     }
 
-    enum BranchRegisterKind: Equatable {
+    enum BranchRegisterKind: Equatable, CaseIterable {
         case ret
         case br
         case blr
+
+        /// The full base word (Rn at [9:5] is added by the encoder).
+        var baseWord: UInt32 {
+            switch self {
+            case .ret: return 0xd65f0000
+            case .br: return 0xd61f0000
+            case .blr: return 0xd63f0000
+            }
+        }
+
+        static func decode(masked: UInt32) -> BranchRegisterKind? {
+            allCases.first { $0.baseWord == masked }
+        }
     }
 
-    enum ExceptionKind: Equatable {
+    enum ExceptionKind: Equatable, CaseIterable {
         case supervisorCall
         case breakpoint
         case halt
@@ -162,13 +175,46 @@ internal enum A64 {
         case debugChangeState1
         case debugChangeState2
         case debugChangeState3
+
+        /// The full base word (imm16 at [20:5] is added by the encoder).
+        var baseWord: UInt32 {
+            switch self {
+            case .supervisorCall: return 0xd4000001
+            case .breakpoint: return 0xd4200000
+            case .halt: return 0xd4400000
+            case .hypervisorCall: return 0xd4000002
+            case .secureMonitorCall: return 0xd4000003
+            case .debugChangeState1: return 0xd4a00001
+            case .debugChangeState2: return 0xd4a00002
+            case .debugChangeState3: return 0xd4a00003
+            }
+        }
+
+        static func decode(masked: UInt32) -> ExceptionKind? {
+            allCases.first { $0.baseWord == masked }
+        }
     }
 
-    enum BarrierKind: Equatable {
+    enum BarrierKind: Equatable, CaseIterable {
         case instructionSynchronization
         case dataSynchronization
         case dataMemory
         case speculation
+
+        /// The full base word (the CRm option at [11:8] is added by the encoder
+        /// for the ISB/DSB/DMB forms; SB has a fixed option of 0).
+        var baseWord: UInt32 {
+            switch self {
+            case .instructionSynchronization: return 0xd50330df
+            case .dataSynchronization: return 0xd503309f
+            case .dataMemory: return 0xd50330bf
+            case .speculation: return 0xd50330ff
+            }
+        }
+
+        static func decode(masked: UInt32) -> BarrierKind? {
+            allCases.first { $0.baseWord == masked }
+        }
     }
 
     /// Named `HINT #imm` instructions. Unrecognised immediates round-trip
@@ -200,8 +246,21 @@ internal enum A64 {
         var amount: Int
     }
 
-    enum MoveWideKind: String, Equatable {
+    enum MoveWideKind: String, Equatable, CaseIterable {
         case movz, movn, movk
+
+        /// The `opc` field at [30:29].
+        var opc: UInt32 {
+            switch self {
+            case .movn: return 0b00
+            case .movz: return 0b10
+            case .movk: return 0b11
+            }
+        }
+
+        static func decode(opc: UInt32) -> MoveWideKind? {
+            allCases.first { $0.opc == opc }
+        }
     }
 
     enum AddSubKind: String, Equatable {
@@ -212,8 +271,36 @@ internal enum A64 {
         case cmp, cmn
     }
 
-    enum LogicalKind: String, Equatable {
+    enum LogicalKind: String, Equatable, CaseIterable {
         case and, ands, orr, eor, bic, bics, orn, eon
+
+        /// The `opc` field at [30:29].
+        var opc: UInt32 {
+            switch self {
+            case .and, .bic: return 0b00
+            case .orr, .orn: return 0b01
+            case .eor, .eon: return 0b10
+            case .ands, .bics: return 0b11
+            }
+        }
+
+        /// The `N` bit at [21] (set for the bit-clear/NOT variants).
+        var n: UInt32 {
+            switch self {
+            case .bic, .orn, .eon, .bics: return 1
+            default: return 0
+            }
+        }
+
+        /// Decode the shifted-register form (`opc`+`N` select all eight ops).
+        static func decodeShifted(opc: UInt32, n: UInt32) -> LogicalKind? {
+            allCases.first { $0.opc == opc && $0.n == n }
+        }
+
+        /// Decode the immediate form (only the four `N`=0 ops are valid).
+        static func decodeImmediate(opc: UInt32) -> LogicalKind? {
+            allCases.first { $0.n == 0 && $0.opc == opc }
+        }
     }
 
     enum ShiftAliasKind: String, Equatable {
@@ -226,10 +313,32 @@ internal enum A64 {
 
     enum MultiplyKind: String, Equatable {
         case mul, mneg, madd, msub
+
+        /// The `o0` bit at [15] (set for the subtracting variants).
+        var o0: UInt32 { (self == .mneg || self == .msub) ? 1 : 0 }
+        /// Whether the mnemonic takes an explicit accumulator (`madd`/`msub`);
+        /// the `mul`/`mneg` forms use the zero register.
+        var hasAccumulator: Bool { self == .madd || self == .msub }
+
+        static func decode(o0: UInt32, hasAccumulator: Bool) -> MultiplyKind {
+            switch (o0, hasAccumulator) {
+            case (0, false): return .mul
+            case (_, false): return .mneg
+            case (0, true): return .madd
+            default: return .msub
+            }
+        }
     }
 
-    enum DivideKind: String, Equatable {
+    enum DivideKind: String, Equatable, CaseIterable {
         case udiv, sdiv
+
+        /// The data-processing-2-source `opcode` at [15:10].
+        var opcode: UInt32 { self == .udiv ? 0b000010 : 0b000011 }
+
+        static func decode(opcode: UInt32) -> DivideKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     /// Variable (register) shift (`LSLV`/`LSRV`/`ASRV`/`RORV`), disassembled
@@ -1227,9 +1336,41 @@ internal enum A64 {
         }
     }
 
-    enum PointerAuthenticationKind: String, Equatable {
+    enum PointerAuthenticationKind: String, Equatable, CaseIterable {
         case paciasp, autiasp, pacibsp, autibsp, xpaci, xpacd
         case pacia1716, pacib1716, autia1716, autib1716, xpaclri
+
+        /// Whether the form takes an `Rd` operand (`XPACI`/`XPACD`); the others
+        /// are complete fixed words.
+        var hasRegister: Bool { self == .xpaci || self == .xpacd }
+
+        /// The full base word. For the register forms (`XPACI`/`XPACD`) the
+        /// encoder ORs `Rd` into [4:0]; the rest are complete instructions.
+        var baseWord: UInt32 {
+            switch self {
+            case .paciasp: return 0xd503233f
+            case .autiasp: return 0xd50323bf
+            case .pacibsp: return 0xd503237f
+            case .autibsp: return 0xd50323ff
+            case .pacia1716: return 0xd503211f
+            case .pacib1716: return 0xd503215f
+            case .autia1716: return 0xd503219f
+            case .autib1716: return 0xd50321df
+            case .xpaclri: return 0xd50320ff
+            case .xpaci: return 0xdac143e0
+            case .xpacd: return 0xdac147e0
+            }
+        }
+
+        /// Decode the no-operand forms (exact word match).
+        static func decodeFixed(_ word: UInt32) -> PointerAuthenticationKind? {
+            allCases.first { !$0.hasRegister && $0.baseWord == word }
+        }
+
+        /// Decode the `XPACI`/`XPACD` forms (base word with `Rd` at [4:0]).
+        static func decodeWithRegister(_ word: UInt32) -> PointerAuthenticationKind? {
+            allCases.first { $0.hasRegister && $0.baseWord == (word & 0xffff_ffe0) }
+        }
     }
 
     /// Data-processing pointer authentication (`PACIA`/`AUTIA`/… `Xd, Xn`, the
@@ -1357,6 +1498,10 @@ internal enum A64 {
             case .stz2g: return 3
             }
         }
+
+        static func decode(opc: UInt32) -> MTEStoreTagKind? {
+            allCases.first { $0.opc == opc }
+        }
     }
 
     /// Tag-multiple operations addressing only `[Xn|SP]` (the `op2 == 00` forms
@@ -1399,14 +1544,37 @@ internal enum A64 {
         var isBKey: Bool { self == .ldrab }
     }
 
-    enum FPDataProcessing2Kind: String, Equatable {
+    enum FPDataProcessing2Kind: String, Equatable, CaseIterable {
         case fmul, fdiv, fadd, fsub, fmax, fmin, fmaxnm, fminnm, fnmul
+
+        /// The `opcode` field at [15:12].
+        var opcode: UInt32 {
+            switch self {
+            case .fmul: return 0b0000
+            case .fdiv: return 0b0001
+            case .fadd: return 0b0010
+            case .fsub: return 0b0011
+            case .fmax: return 0b0100
+            case .fmin: return 0b0101
+            case .fmaxnm: return 0b0110
+            case .fminnm: return 0b0111
+            case .fnmul: return 0b1000
+            }
+        }
+
+        static func decode(opcode: UInt32) -> FPDataProcessing2Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
-    enum FPDataProcessing1Kind: String, Equatable {
+    enum FPDataProcessing1Kind: String, Equatable, CaseIterable {
         case fmov, fabs, fneg, fsqrt
         case frintn, frintp, frintm, frintz, frinta, frintx, frinti
         case frint32z, frint32x, frint64z, frint64x
+
+        static func decode(opcode: UInt32) -> FPDataProcessing1Kind? {
+            allCases.first { $0.opcode == opcode }
+        }
 
         /// The 6-bit opcode field at [20:15].
         var opcode: UInt32 {
@@ -1447,8 +1615,17 @@ internal enum A64 {
         }
     }
 
-    enum FPDataProcessing3Kind: String, Equatable {
+    enum FPDataProcessing3Kind: String, Equatable, CaseIterable {
         case fmadd, fmsub, fnmadd, fnmsub
+
+        /// The `o1` bit at [21] (set for the negating variants).
+        var o1: UInt32 { (self == .fnmadd || self == .fnmsub) ? 1 : 0 }
+        /// The `o0` bit at [15] (set for the subtracting variants).
+        var o0: UInt32 { (self == .fmsub || self == .fnmsub) ? 1 : 0 }
+
+        static func decode(o1: UInt32, o0: UInt32) -> FPDataProcessing3Kind? {
+            allCases.first { $0.o1 == o1 && $0.o0 == o0 }
+        }
     }
 
     enum FPCompareKind: String, Equatable {
@@ -1495,8 +1672,15 @@ internal enum A64 {
         }
     }
 
-    enum FPConvertFromIntKind: String, Equatable {
+    enum FPConvertFromIntKind: String, Equatable, CaseIterable {
         case scvtf, ucvtf
+
+        /// The `opcode` field at [18:16] (signed vs unsigned conversion).
+        var opcode: UInt32 { self == .scvtf ? 0b010 : 0b011 }
+
+        static func decode(opcode: UInt32) -> FPConvertFromIntKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     enum FPCompareOperand: Equatable {
@@ -1504,8 +1688,25 @@ internal enum A64 {
         case zero
     }
 
-    enum AcrossLanesIntegerKind: String, Equatable {
+    enum AcrossLanesIntegerKind: String, Equatable, CaseIterable {
         case saddlv, uaddlv, smaxv, umaxv, sminv, uminv, addv
+
+        /// The `(U, opcode[16:12])` discriminator.
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .saddlv: return (0, 0b00011)
+            case .uaddlv: return (1, 0b00011)
+            case .smaxv: return (0, 0b01010)
+            case .umaxv: return (1, 0b01010)
+            case .sminv: return (0, 0b11010)
+            case .uminv: return (1, 0b11010)
+            case .addv: return (0, 0b11011)
+            }
+        }
+
+        static func decode(u: UInt32, opcode: UInt32) -> AcrossLanesIntegerKind? {
+            allCases.first { $0.spec == (u, opcode) }
+        }
     }
 
     /// Advanced SIMD table lookup (`TBL` / `TBX`).
@@ -1516,8 +1717,22 @@ internal enum A64 {
         var op: UInt32 { self == .tbx ? 1 : 0 }
     }
 
-    enum AcrossLanesFPKind: String, Equatable {
+    enum AcrossLanesFPKind: String, Equatable, CaseIterable {
         case fmaxv, fminv, fmaxnmv, fminnmv
+
+        /// The `(o1[23], opcode[16:12])` discriminator (`U` is fixed by the page).
+        var spec: (o1: UInt32, opcode: UInt32) {
+            switch self {
+            case .fmaxv: return (0, 0b01111)
+            case .fminv: return (1, 0b01111)
+            case .fmaxnmv: return (0, 0b01100)
+            case .fminnmv: return (1, 0b01100)
+            }
+        }
+
+        static func decode(o1: UInt32, opcode: UInt32) -> AcrossLanesFPKind? {
+            allCases.first { $0.spec == (o1, opcode) }
+        }
     }
 
     /// Advanced SIMD two-register-misc compare against zero (`Vd.T, Vn.T, #0` or `#0.0`).
@@ -1903,6 +2118,13 @@ internal enum A64 {
     /// by-element forms) and `sudot` (by-element form only).
     enum VectorMixedDotProductKind: String, Equatable, CaseIterable {
         case usdot, sudot
+
+        /// The `US` bit at [23] (1 for `usdot`).
+        var us: UInt32 { self == .usdot ? 1 : 0 }
+
+        static func decode(us: UInt32) -> VectorMixedDotProductKind {
+            us == 1 ? .usdot : .sudot
+        }
     }
 
     /// Advanced SIMD Int8 matrix multiply-accumulate (FEAT_I8MM): `smmla`,
@@ -1914,6 +2136,10 @@ internal enum A64 {
         var u: UInt32 { self == .ummla ? 1 : 0 }
         /// The `B` bit at [11] (distinguishes usmmla from smmla).
         var b: UInt32 { self == .usmmla ? 1 : 0 }
+
+        static func decode(u: UInt32, b: UInt32) -> VectorMatrixMultiplyKind? {
+            allCases.first { $0.u == u && $0.b == b }
+        }
     }
 
     /// Advanced SIMD three-same-extra saturating rounding multiply-accumulate
@@ -1969,13 +2195,58 @@ internal enum A64 {
         }
     }
 
-    enum VectorTwoRegisterMiscKind: String, Equatable {
+    enum VectorTwoRegisterMiscKind: String, Equatable, CaseIterable {
         case rev64, rev32, rev16
         case abs, neg, mvn, rbit, cnt, cls, clz
         case sqabs, sqneg
         case suqadd, usqadd
         case fabs, fneg, fsqrt
         case frint32z, frint32x, frint64z, frint64x
+
+        /// The `(U, opcode[16:12])` discriminator. Note `rbit` and `mvn` share
+        /// `(1, 0b00101)` and are distinguished by the element `size` on decode.
+        var spec: (u: UInt32, opcode: UInt32) {
+            switch self {
+            case .rev64: return (0, 0b00000)
+            case .rev32: return (1, 0b00000)
+            case .rev16: return (0, 0b00001)
+            case .cnt: return (0, 0b00101)
+            case .mvn: return (1, 0b00101)
+            case .rbit: return (1, 0b00101)
+            case .cls: return (0, 0b00100)
+            case .clz: return (1, 0b00100)
+            case .sqabs: return (0, 0b00111)
+            case .sqneg: return (1, 0b00111)
+            case .suqadd: return (0, 0b00011)
+            case .usqadd: return (1, 0b00011)
+            case .abs: return (0, 0b01011)
+            case .neg: return (1, 0b01011)
+            case .fabs: return (0, 0b01111)
+            case .fneg: return (1, 0b01111)
+            case .fsqrt: return (1, 0b11111)
+            case .frint32z: return (0, 0b11110)
+            case .frint32x: return (1, 0b11110)
+            case .frint64z: return (0, 0b11111)
+            case .frint64x: return (1, 0b11111)
+            }
+        }
+
+        /// Decode the base two-register-misc forms (rev/cnt/cls/abs/neg/sq*/
+        /// suqadd/fabs/fneg/fsqrt). The `frint*` forms share opcodes with this
+        /// group (e.g. frint64x vs fsqrt) but are claimed earlier by their own
+        /// decoder, so they are excluded here; compare-zero/convert/round-
+        /// reciprocal opcodes are likewise handled separately.
+        static func decode(u: UInt32, opcode: UInt32, size: UInt32) -> VectorTwoRegisterMiscKind? {
+            if u == 1 && opcode == 0b00101 { return size == 0b01 ? .rbit : .mvn }
+            let excluded: Set<VectorTwoRegisterMiscKind> = [.rbit, .mvn, .frint32z, .frint32x, .frint64z, .frint64x]
+            return allCases.first { !excluded.contains($0) && $0.spec == (u, opcode) }
+        }
+
+        /// Decode just the `frint32*`/`frint64*` forms (their own decoder).
+        static func decodeFRINT(u: UInt32, opcode: UInt32) -> VectorTwoRegisterMiscKind? {
+            let frints: [VectorTwoRegisterMiscKind] = [.frint32z, .frint32x, .frint64z, .frint64x]
+            return frints.first { $0.spec == (u, opcode) }
+        }
     }
 
     /// Advanced SIMD "three same" instructions (`Vd.T, Vn.T, Vm.T`).
