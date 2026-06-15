@@ -930,4 +930,88 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 6c indirect JMP/CALL and ENTER
+
+    private static let indirectAndEnterCases: [(String, [UInt8])] = [
+        // JMP register-indirect
+        ("jmp rax",  [0xFF, 0xE0]),
+        ("jmp rcx",  [0xFF, 0xE1]),
+        ("jmp r8",   [0x41, 0xFF, 0xE0]),
+        ("jmp r15",  [0x41, 0xFF, 0xE7]),
+
+        // CALL register-indirect
+        ("call rax", [0xFF, 0xD0]),
+        ("call rcx", [0xFF, 0xD1]),
+        ("call r8",  [0x41, 0xFF, 0xD0]),
+
+        // JMP memory-indirect
+        ("jmp [rbx]",            [0xFF, 0x23]),
+        ("jmp [rbx + 8]",        [0xFF, 0x63, 0x08]),
+        ("jmp [rip + 16]",       [0xFF, 0x25, 0x10, 0x00, 0x00, 0x00]),
+
+        // CALL memory-indirect
+        ("call [rbx]",           [0xFF, 0x13]),
+        ("call [rbx + rcx*8]",   [0xFF, 0x14, 0xCB]),
+
+        // ENTER
+        ("enter 0, 0",      [0xC8, 0x00, 0x00, 0x00]),
+        ("enter 16, 0",     [0xC8, 0x10, 0x00, 0x00]),
+        ("enter 4660, 3",   [0xC8, 0x34, 0x12, 0x03]),
+        ("enter 65535, 255",[0xC8, 0xFF, 0xFF, 0xFF]),
+    ]
+
+    func testIndirectAndEnterAssembles() throws {
+        for (source, expected) in Self.indirectAndEnterCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testIndirectAndEnterDisassembles() throws {
+        for (source, bytes) in Self.indirectAndEnterCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `qword ptr [mem]` on an indirect target is accepted (qword is the
+    /// only legal width in long mode) and disassembles back without the
+    /// hint since it would be redundant.
+    func testIndirectAcceptsQwordPtrHint() throws {
+        XCTAssertEqual(try X86Assembler.assemble("jmp qword ptr [rbx]"), [0xFF, 0x23])
+        XCTAssertEqual(try X86Assembler.disassemble([0xFF, 0x23]), "jmp [rbx]")
+    }
+
+    func testIndirectRejectsNonQword() {
+        XCTAssertThrowsError(try X86Assembler.assemble("jmp eax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("jmp dword ptr [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testEnterImmediateOutOfRange() {
+        XCTAssertThrowsError(try X86Assembler.assemble("enter 65536, 0")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("enter 0, 256")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+    }
+
+    func testIndirectAndEnterStreamRoundTrip() throws {
+        let source = Self.indirectAndEnterCases.map(\.0).joined(separator: "\n")
+        let expected = Self.indirectAndEnterCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

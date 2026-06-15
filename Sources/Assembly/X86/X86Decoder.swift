@@ -148,6 +148,8 @@ internal enum X86InstructionDecoder {
             return try decodeMovMI8(prefixes: prefixes, cursor: &cursor)
         case 0xC7:
             return try decodeMovMIWord(prefixes: prefixes, cursor: &cursor)
+        case 0xC8:
+            return try decodeEnter(cursor: &cursor)
         case 0xE0, 0xE1, 0xE2, 0xE3:
             return try decodeLoop(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xE8:
@@ -204,6 +206,15 @@ internal enum X86InstructionDecoder {
         }
         let delta = Int64(Int8(bitPattern: try cursor.takeByte()))
         return Decoded(instruction: .loop(kind, .offset(delta)), length: cursor.consumed)
+    }
+
+    private static func decodeEnter(cursor: inout Cursor) throws -> Decoded {
+        let allocation = try cursor.takeLE16()
+        let nesting = try cursor.takeByte()
+        return Decoded(
+            instruction: .enter(allocation: allocation, nestingLevel: nesting),
+            length: cursor.consumed
+        )
     }
 
     // MARK: - 0F-escape two-byte opcodes
@@ -320,15 +331,26 @@ internal enum X86InstructionDecoder {
         }
     }
 
-    // MARK: - FE / FF (INC, DEC)
+    // MARK: - FE / FF (INC, DEC, indirect CALL / JMP)
 
     private static func decodeFEFF(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let isByte = (opcode == 0xFE)
-        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
         let modrm = try cursor.takeByte()
         let nField = X86.ModRM.reg.extract(modrm)
+
+        // FF /2 = CALL r/m64; FF /4 = JMP r/m64. Long mode forces qword
+        // regardless of REX.W, so the operand width is fixed here.
+        if !isByte && (nField == 2 || nField == 4) {
+            let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: .qword, cursor: &cursor)
+            let instruction: X86.Instruction = (nField == 2)
+                ? .callIndirect(target: target)
+                : .jumpIndirect(target: target)
+            return Decoded(instruction: instruction, length: cursor.consumed)
+        }
+
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
         guard let kind = X86.UnaryAluKind.decodeIncDec(slashDigit: nField) else {
-            // FE only accepts /0 and /1; FF /2..7 are CALL/JMP/PUSH (later phases).
+            // /3 CALLF, /5 JMPF, /6 PUSH, /7 reserved — covered in later phases.
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
         let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)

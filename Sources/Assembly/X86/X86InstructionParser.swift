@@ -34,10 +34,13 @@ internal enum X86Parser {
             return try parseDoubleShift(kind, instruction)
         }
         if instruction.mnemonic == "jmp" {
-            return .jump(try parseSingleBranchTarget(instruction))
+            return try parseJumpOrCall(instruction, isCall: false)
         }
         if instruction.mnemonic == "call" {
-            return .call(try parseSingleBranchTarget(instruction))
+            return try parseJumpOrCall(instruction, isCall: true)
+        }
+        if instruction.mnemonic == "enter" {
+            return try parseEnter(instruction)
         }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
@@ -57,33 +60,99 @@ internal enum X86Parser {
                 actual: instruction.operands.count
             )
         }
-        return try parseBranchTarget(instruction.operands[0], mnemonic: instruction.mnemonic)
+        let trimmed = instruction.operands[0].trimmingCharacters(in: .whitespacesAndNewlines)
+        return try parseRelativeTarget(trimmed, mnemonic: instruction.mnemonic)
     }
 
-    /// Parse a branch operand. A numeric immediate is interpreted as a
-    /// rel field — the byte delta from the end of the instruction, the
-    /// exact value written into the encoding. Anything else (that isn't
-    /// a register or bracketed memory expression — those are indirect
-    /// forms reserved for Phase 6c) is taken as a label name.
-    private static func parseBranchTarget(_ text: String, mnemonic: String) throws -> X86.BranchTarget {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if trimmed.hasPrefix("[") {
-            throw AssemblerError.unsupportedOperand(
-                "\(mnemonic): indirect branch target not yet supported"
+    /// `jmp` and `call` accept either a relative branch target (numeric
+    /// delta or label name) or an indirect register/memory operand. We
+    /// classify the operand here so the parser can dispatch into the
+    /// right `Instruction` case.
+    private static func parseJumpOrCall(_ instruction: ParsedInstruction, isCall: Bool) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: instruction.mnemonic,
+                expected: "1 operand",
+                actual: instruction.operands.count
             )
         }
-        if let _ = try? register(trimmed) {
+        let operand = instruction.operands[0].trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // Indirect: bracketed memory expression, optionally prefixed by a
+        // size hint. Long-mode JMP/CALL is always r/m64, so any hint that
+        // disagrees with qword is rejected.
+        if let (width, body) = stripSizeHintForIndirect(operand) {
+            let memory = try memoryOperand(body)
+            try requireIndirectQwordWidth(width, mnemonic: instruction.mnemonic)
+            let target: X86.RegisterOrMemory = .memory(memory, width: .qword)
+            return isCall ? .callIndirect(target: target) : .jumpIndirect(target: target)
+        }
+        if operand.hasPrefix("[") {
+            let memory = try memoryOperand(operand)
+            let target: X86.RegisterOrMemory = .memory(memory, width: .qword)
+            return isCall ? .callIndirect(target: target) : .jumpIndirect(target: target)
+        }
+        if let reg = try? register(operand) {
+            guard reg.width == .qword else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(instruction.mnemonic): indirect target must be 64-bit"
+                )
+            }
+            return isCall ? .callIndirect(target: .register(reg)) : .jumpIndirect(target: .register(reg))
+        }
+
+        // Otherwise relative: numeric offset or label.
+        let target = try parseRelativeTarget(operand, mnemonic: instruction.mnemonic)
+        return isCall ? .call(target) : .jump(target)
+    }
+
+    private static func stripSizeHintForIndirect(_ text: String) -> (width: X86.RegisterWidth, body: String)? {
+        guard let (width, rest) = stripSizeHint(text) else { return nil }
+        return (width, rest)
+    }
+
+    private static func requireIndirectQwordWidth(_ width: X86.RegisterWidth, mnemonic: String) throws {
+        guard width == .qword else {
             throw AssemblerError.unsupportedOperand(
-                "\(mnemonic): indirect register target not yet supported"
+                "\(mnemonic): indirect target must be 64-bit (got \(width.rawValue)-bit)"
             )
         }
-        if let value = try? immediateAny(trimmed) {
+    }
+
+    /// Parse a relative branch operand. A numeric immediate is interpreted
+    /// as a rel field — the byte delta from the end of the instruction,
+    /// the exact value written into the encoding. Anything else is taken
+    /// as a label name.
+    private static func parseRelativeTarget(_ text: String, mnemonic: String) throws -> X86.BranchTarget {
+        if let value = try? immediateAny(text) {
             return .offset(value)
         }
-        guard isLabelName(trimmed) else {
+        guard isLabelName(text) else {
             throw AssemblerError.unsupportedOperand("\(mnemonic): invalid branch target `\(text)`")
         }
-        return .label(trimmed)
+        return .label(text)
+    }
+
+    private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "enter",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let allocation = try immediateAny(instruction.operands[0])
+        let nesting = try immediateAny(instruction.operands[1])
+        guard allocation >= 0 && allocation <= 0xFFFF else {
+            throw AssemblerError.immediateOutOfRange(instruction: "enter", value: allocation, range: 0...0xFFFF)
+        }
+        guard nesting >= 0 && nesting <= 0xFF else {
+            throw AssemblerError.immediateOutOfRange(instruction: "enter", value: nesting, range: 0...0xFF)
+        }
+        return .enter(
+            allocation: UInt16(truncatingIfNeeded: allocation),
+            nestingLevel: UInt8(truncatingIfNeeded: nesting)
+        )
     }
 
     private static func isLabelName(_ text: String) -> Bool {

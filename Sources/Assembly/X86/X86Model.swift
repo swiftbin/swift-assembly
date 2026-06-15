@@ -465,5 +465,8 @@ internal enum X86 {
         case conditionalJump(Condition, BranchTarget)
         case call(BranchTarget)
         case loop(LoopKind, BranchTarget)
+        case jumpIndirect(target: RegisterOrMemory)
+        case callIndirect(target: RegisterOrMemory)
+        case enter(allocation: UInt16, nestingLevel: UInt8)
     }
 }

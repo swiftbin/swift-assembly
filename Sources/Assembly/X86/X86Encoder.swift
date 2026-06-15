@@ -69,6 +69,15 @@ internal enum X86InstructionEncoder {
             return try encodeCall(target: target, pc: pc, labels: labels)
         case .loop(let kind, let target):
             return try encodeLoop(kind, target: target, pc: pc, labels: labels)
+        case .jumpIndirect(let target):
+            return Encoded(bytes: try encodeIndirect(target: target, slashDigit: 4, mnemonic: "jmp"), patches: [])
+        case .callIndirect(let target):
+            return Encoded(bytes: try encodeIndirect(target: target, slashDigit: 2, mnemonic: "call"), patches: [])
+        case .enter(let allocation, let nesting):
+            var bytes: [UInt8] = [0xC8]
+            appendLE16(allocation, into: &bytes)
+            bytes.append(nesting)
+            return Encoded(bytes: bytes, patches: [])
         }
     }
 
@@ -620,6 +629,40 @@ internal enum X86InstructionEncoder {
             bytes.append(imm)
         }
         return bytes
+    }
+
+    // MARK: - Indirect JMP / CALL (FF /4 and FF /2)
+
+    /// In 64-bit mode JMP / CALL with an `r/m` operand are always r/m64;
+    /// no REX.W is needed because qword is the default operand size for
+    /// these forms. The `r/m` slot rides the shared operand-pair emitter
+    /// at width = qword but suppresses the REX.W bit explicitly.
+    private static func encodeIndirect(target: X86.RegisterOrMemory, slashDigit: UInt8, mnemonic: String) throws -> [UInt8] {
+        switch target {
+        case .register(let reg):
+            guard reg.width == .qword else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): indirect target must be 64-bit")
+            }
+            var bytes: [UInt8] = []
+            if let rex = X86.REX.build(b: reg.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0xFF)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: slashDigit, rm: reg.lowBits))
+            return bytes
+        case .memory(let mem, let width):
+            guard width == .qword else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): indirect target must be 64-bit")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: slashDigit)
+            var bytes: [UInt8] = []
+            if let rex = X86.REX.build(x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0xFF)
+            bytes.append(contentsOf: addressing)
+            return bytes
+        }
     }
 
     // MARK: - Shared low-level emitters

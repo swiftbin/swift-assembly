@@ -30,6 +30,22 @@ internal enum X86InstructionFormatter {
             return "call \(formatBranchTarget(target))"
         case .loop(let kind, let target):
             return "\(kind.rawValue) \(formatBranchTarget(target))"
+        case .jumpIndirect(let target):
+            return "jmp \(formatIndirectTarget(target))"
+        case .callIndirect(let target):
+            return "call \(formatIndirectTarget(target))"
+        case .enter(let alloc, let nesting):
+            return "enter \(alloc), \(nesting)"
+        }
+    }
+
+    /// Render the operand of an indirect `jmp` / `call`. A register is
+    /// unambiguous; a memory reference is shown bare (qword is the only
+    /// legal width in long mode, so no size hint is needed).
+    private static func formatIndirectTarget(_ target: X86.RegisterOrMemory) -> String {
+        switch target {
+        case .register(let r): return X86.RegisterTable.canonicalName(for: r)
+        case .memory(let m, _): return formatMemory(m)
         }
     }
 
