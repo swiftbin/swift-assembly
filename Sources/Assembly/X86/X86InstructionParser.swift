@@ -3,23 +3,22 @@ import Foundation
 internal enum X86Parser {
     /// Lower the parsed source line into an `X86.Instruction`.
     ///
-    /// Phase 0 only recognises `nop`; any other mnemonic raises
-    /// `unknownInstruction`. Subsequent phases will dispatch on the mnemonic
-    /// to per-family parsers (analogous to the mnemonic switch inside
-    /// `A64InstructionEncoder.encodeInstruction`).
+    /// The mnemonic table is consulted first; surface-level aliases
+    /// (`fwait`/`xlat`) are folded onto their canonical `ZeroOperandKind`
+    /// inside `ZeroOperandKind.resolve` so the rest of the pipeline sees a
+    /// single representative. Mnemonics outside the implemented families
+    /// raise `unknownInstruction`.
     static func parse(_ instruction: ParsedInstruction) throws -> X86.Instruction {
-        switch instruction.mnemonic {
-        case "nop":
+        if let kind = X86.ZeroOperandKind.resolve(mnemonic: instruction.mnemonic) {
             guard instruction.operands.isEmpty else {
                 throw AssemblerError.invalidOperandCount(
-                    instruction: "nop",
+                    instruction: instruction.mnemonic,
                     expected: "no operands",
                     actual: instruction.operands.count
                 )
             }
-            return .nop
-        default:
-            throw AssemblerError.unknownInstruction(instruction.mnemonic)
+            return .zeroOperand(kind)
         }
+        throw AssemblerError.unknownInstruction(instruction.mnemonic)
     }
 }

@@ -9,23 +9,42 @@ internal enum X86InstructionDecoder {
         var length: Int
     }
 
+    /// Zero-operand kinds in *descending* length order. Longest-prefix-wins
+    /// matching is required because several encodings share a leading byte
+    /// with shorter ones (`F3 90 pause` vs `90 nop`, `66 CF iret` /
+    /// `48 CF iretq` vs `CF iretd`, `48 0F 07 sysretq` vs `0F 07 sysret`).
+    private static let zeroOperandTable: [X86.ZeroOperandKind] =
+        X86.ZeroOperandKind.allCases.sorted { $0.bytes.count > $1.bytes.count }
+
     /// Decode a single instruction starting at `bytes[offset]`.
     ///
-    /// Phase 0 only recognises `0x90` (`nop`). Any other leading byte raises
-    /// `unknownEncoding` so that the pipeline reports the failure with the
-    /// offending byte. Subsequent phases will branch on prefixes (REX, 66,
-    /// 67, F2/F3, ...) and then on the primary opcode byte(s).
+    /// Any byte sequence that does not match a known instruction raises
+    /// `unknownEncoding` with the leading byte so the failure is locatable.
     static func decode(_ bytes: [UInt8], offset: Int) throws -> Decoded {
         guard offset < bytes.count else {
             throw AssemblerError.invalidByteCount(bytes.count)
         }
 
-        let byte = bytes[offset]
-        switch byte {
-        case 0x90:
-            return Decoded(instruction: .nop, length: 1)
-        default:
-            throw AssemblerError.unknownEncoding(UInt32(byte))
+        if let match = matchZeroOperand(bytes, offset: offset) {
+            return Decoded(instruction: .zeroOperand(match.kind), length: match.length)
         }
+
+        throw AssemblerError.unknownEncoding(UInt32(bytes[offset]))
+    }
+
+    /// Try to match a zero-operand encoding at `bytes[offset...]`. Returns
+    /// the matched kind and consumed length, or `nil` if nothing matches.
+    private static func matchZeroOperand(_ bytes: [UInt8], offset: Int) -> (kind: X86.ZeroOperandKind, length: Int)? {
+        for kind in zeroOperandTable {
+            let pattern = kind.bytes
+            guard offset + pattern.count <= bytes.count else { continue }
+            var matches = true
+            for (i, expected) in pattern.enumerated() where bytes[offset + i] != expected {
+                matches = false
+                break
+            }
+            if matches { return (kind, pattern.count) }
+        }
+        return nil
     }
 }

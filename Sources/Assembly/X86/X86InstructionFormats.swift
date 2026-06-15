@@ -59,10 +59,4 @@ extension X86 {
         static let base = ByteField(offset: 0, width: 3)
     }
 
-    /// Single-byte fixed opcodes that take no ModR/M and no operand.
-    /// Phase 0 only registers `nop`; Phase 1 will populate the rest of the
-    /// zero-operand family (`ret`, `pause`, `syscall`, ...).
-    enum FixedOpcode {
-        static let nop: [UInt8] = [0x90]
-    }
 }
