@@ -31,26 +31,197 @@ internal enum X86InstructionEncoder {
         labels: [String: Int64]
     ) throws -> Encoded {
         let resolved = try X86Parser.parse(instruction)
-        let bytes = try encode(resolved)
-        return Encoded(bytes: bytes, patches: [])
+        return try encode(resolved, pc: pc, labels: labels)
     }
 
+    /// Legacy single-instruction entry point used by non-branch tests.
+    /// Branches require the full `pc`/`labels` context; this overload
+    /// errors if any branch case sneaks through.
     static func encode(_ instruction: X86.Instruction) throws -> [UInt8] {
+        let encoded = try encode(instruction, pc: 0, labels: [:])
+        guard encoded.patches.isEmpty else {
+            throw AssemblerError.unsupportedOperand("internal: branch encoded without pc/labels")
+        }
+        return encoded.bytes
+    }
+
+    static func encode(_ instruction: X86.Instruction, pc: Int64, labels: [String: Int64]) throws -> Encoded {
         switch instruction {
         case .zeroOperand(let kind):
-            return kind.bytes
+            return Encoded(bytes: kind.bytes, patches: [])
         case .mov(let destination, let source):
-            return try encodeMov(destination: destination, source: source)
+            return Encoded(bytes: try encodeMov(destination: destination, source: source), patches: [])
         case .binaryAlu(let kind, let destination, let source):
-            return try encodeBinaryAlu(kind, destination: destination, source: source)
+            return Encoded(bytes: try encodeBinaryAlu(kind, destination: destination, source: source), patches: [])
         case .unaryAlu(let kind, let target):
-            return try encodeUnaryAlu(kind, target: target)
+            return Encoded(bytes: try encodeUnaryAlu(kind, target: target), patches: [])
         case .test(let left, let right):
-            return try encodeTest(left: left, right: right)
+            return Encoded(bytes: try encodeTest(left: left, right: right), patches: [])
         case .shift(let kind, let target, let count):
-            return try encodeShift(kind, target: target, count: count)
+            return Encoded(bytes: try encodeShift(kind, target: target, count: count), patches: [])
         case .doubleShift(let kind, let target, let source, let count):
-            return try encodeDoubleShift(kind, target: target, source: source, count: count)
+            return Encoded(bytes: try encodeDoubleShift(kind, target: target, source: source, count: count), patches: [])
+        case .jump(let target):
+            return try encodeJump(target: target, pc: pc, labels: labels)
+        case .conditionalJump(let cond, let target):
+            return try encodeConditionalJump(condition: cond, target: target, pc: pc, labels: labels)
+        case .call(let target):
+            return try encodeCall(target: target, pc: pc, labels: labels)
+        case .loop(let kind, let target):
+            return try encodeLoop(kind, target: target, pc: pc, labels: labels)
+        }
+    }
+
+    // MARK: - Branches
+
+    /// JMP supports both rel8 (`EB ib`, 2 bytes) and rel32
+    /// (`E9 id`, 5 bytes); the encoder picks the shorter form
+    /// whenever the delta is known and fits Int8. Forward label
+    /// references emit a rel32 placeholder so the late patch pass
+    /// can fill the field in once every label position is known.
+    private static func encodeJump(target: X86.BranchTarget, pc: Int64, labels: [String: Int64]) throws -> Encoded {
+        let mnemonic = "jmp"
+        switch target {
+        case .offset(let delta):
+            if delta >= -0x80 && delta <= 0x7F {
+                return Encoded(bytes: [0xEB, UInt8(bitPattern: Int8(truncatingIfNeeded: delta))], patches: [])
+            }
+            guard delta >= Int64(Int32.min) && delta <= Int64(Int32.max) else {
+                throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: "#\(delta)", byteOffset: delta)
+            }
+            var bytes: [UInt8] = [0xE9]
+            appendLE32(UInt32(truncatingIfNeeded: delta), into: &bytes)
+            return Encoded(bytes: bytes, patches: [])
+        case .label(let name):
+            if let labelOffset = labels[name] {
+                let deltaShort = labelOffset - (pc + 2)
+                if deltaShort >= -0x80 && deltaShort <= 0x7F {
+                    return Encoded(
+                        bytes: [0xEB, UInt8(bitPattern: Int8(truncatingIfNeeded: deltaShort))],
+                        patches: []
+                    )
+                }
+                let deltaLong = labelOffset - (pc + 5)
+                guard deltaLong >= Int64(Int32.min) && deltaLong <= Int64(Int32.max) else {
+                    throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: name, byteOffset: deltaLong)
+                }
+                var bytes: [UInt8] = [0xE9]
+                appendLE32(UInt32(truncatingIfNeeded: deltaLong), into: &bytes)
+                return Encoded(bytes: bytes, patches: [])
+            }
+            // Forward reference — emit the rel32 form so we have enough
+            // budget for any in-range delta.
+            return Encoded(
+                bytes: [0xE9, 0x00, 0x00, 0x00, 0x00],
+                patches: [Patch(byteOffset: 1, width: 4, label: name, instructionEndOffset: 5)]
+            )
+        }
+    }
+
+    /// Jcc has the same rel8 vs. rel32 split as JMP but pays an extra
+    /// 0x0F prefix byte on the long form (`70+cc ib`, 2 bytes; or
+    /// `0F 80+cc id`, 6 bytes).
+    private static func encodeConditionalJump(condition: X86.Condition, target: X86.BranchTarget, pc: Int64, labels: [String: Int64]) throws -> Encoded {
+        let mnemonic = "j\(condition.rawValue)"
+        let shortOp: UInt8 = 0x70 | condition.encoding
+        let longOp2: UInt8 = 0x80 | condition.encoding
+        switch target {
+        case .offset(let delta):
+            if delta >= -0x80 && delta <= 0x7F {
+                return Encoded(bytes: [shortOp, UInt8(bitPattern: Int8(truncatingIfNeeded: delta))], patches: [])
+            }
+            guard delta >= Int64(Int32.min) && delta <= Int64(Int32.max) else {
+                throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: "#\(delta)", byteOffset: delta)
+            }
+            var bytes: [UInt8] = [0x0F, longOp2]
+            appendLE32(UInt32(truncatingIfNeeded: delta), into: &bytes)
+            return Encoded(bytes: bytes, patches: [])
+        case .label(let name):
+            if let labelOffset = labels[name] {
+                let deltaShort = labelOffset - (pc + 2)
+                if deltaShort >= -0x80 && deltaShort <= 0x7F {
+                    return Encoded(
+                        bytes: [shortOp, UInt8(bitPattern: Int8(truncatingIfNeeded: deltaShort))],
+                        patches: []
+                    )
+                }
+                let deltaLong = labelOffset - (pc + 6)
+                guard deltaLong >= Int64(Int32.min) && deltaLong <= Int64(Int32.max) else {
+                    throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: name, byteOffset: deltaLong)
+                }
+                var bytes: [UInt8] = [0x0F, longOp2]
+                appendLE32(UInt32(truncatingIfNeeded: deltaLong), into: &bytes)
+                return Encoded(bytes: bytes, patches: [])
+            }
+            return Encoded(
+                bytes: [0x0F, longOp2, 0x00, 0x00, 0x00, 0x00],
+                patches: [Patch(byteOffset: 2, width: 4, label: name, instructionEndOffset: 6)]
+            )
+        }
+    }
+
+    /// CALL has only the rel32 form in long mode (`E8 id`, 5 bytes).
+    private static func encodeCall(target: X86.BranchTarget, pc: Int64, labels: [String: Int64]) throws -> Encoded {
+        let mnemonic = "call"
+        switch target {
+        case .offset(let delta):
+            guard delta >= Int64(Int32.min) && delta <= Int64(Int32.max) else {
+                throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: "#\(delta)", byteOffset: delta)
+            }
+            var bytes: [UInt8] = [0xE8]
+            appendLE32(UInt32(truncatingIfNeeded: delta), into: &bytes)
+            return Encoded(bytes: bytes, patches: [])
+        case .label(let name):
+            if let labelOffset = labels[name] {
+                let delta = labelOffset - (pc + 5)
+                guard delta >= Int64(Int32.min) && delta <= Int64(Int32.max) else {
+                    throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: name, byteOffset: delta)
+                }
+                var bytes: [UInt8] = [0xE8]
+                appendLE32(UInt32(truncatingIfNeeded: delta), into: &bytes)
+                return Encoded(bytes: bytes, patches: [])
+            }
+            return Encoded(
+                bytes: [0xE8, 0x00, 0x00, 0x00, 0x00],
+                patches: [Patch(byteOffset: 1, width: 4, label: name, instructionEndOffset: 5)]
+            )
+        }
+    }
+
+    /// LOOP / LOOPE / LOOPNE / JECXZ / JRCXZ are rel8-only. An
+    /// out-of-range delta — either a numeric literal or a label too
+    /// far away — is an error, since the family has no long form.
+    private static func encodeLoop(_ kind: X86.LoopKind, target: X86.BranchTarget, pc: Int64, labels: [String: Int64]) throws -> Encoded {
+        var bytes: [UInt8] = []
+        var prefixBytes = 0
+        if kind.needsAddressSize {
+            bytes.append(0x67)
+            prefixBytes = 1
+        }
+        bytes.append(kind.opcode)
+        let instructionSize = prefixBytes + 2  // prefix(?) + opcode + ib
+
+        switch target {
+        case .offset(let delta):
+            guard delta >= -0x80 && delta <= 0x7F else {
+                throw AssemblerError.branchOutOfRange(instruction: kind.rawValue, label: "#\(delta)", byteOffset: delta)
+            }
+            bytes.append(UInt8(bitPattern: Int8(truncatingIfNeeded: delta)))
+            return Encoded(bytes: bytes, patches: [])
+        case .label(let name):
+            if let labelOffset = labels[name] {
+                let delta = labelOffset - (pc + Int64(instructionSize))
+                guard delta >= -0x80 && delta <= 0x7F else {
+                    throw AssemblerError.branchOutOfRange(instruction: kind.rawValue, label: name, byteOffset: delta)
+                }
+                bytes.append(UInt8(bitPattern: Int8(truncatingIfNeeded: delta)))
+                return Encoded(bytes: bytes, patches: [])
+            }
+            bytes.append(0x00)
+            return Encoded(
+                bytes: bytes,
+                patches: [Patch(byteOffset: prefixBytes + 1, width: 1, label: name, instructionEndOffset: instructionSize)]
+            )
         }
     }
 

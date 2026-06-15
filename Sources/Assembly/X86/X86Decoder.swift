@@ -41,6 +41,7 @@ internal enum X86InstructionDecoder {
 
     private struct Prefixes {
         var operandSize: Bool = false
+        var addressSize: Bool = false
         var rex: UInt8? = nil
 
         var hasREX: Bool { rex != nil }
@@ -98,6 +99,9 @@ internal enum X86InstructionDecoder {
                 if byte == X86.operandSizeOverride && !prefixes.operandSize {
                     prefixes.operandSize = true
                     offset += 1
+                } else if byte == 0x67 && !prefixes.addressSize {
+                    prefixes.addressSize = true
+                    offset += 1
                 } else if X86.REX.matches(byte) && prefixes.rex == nil {
                     prefixes.rex = byte
                     offset += 1
@@ -124,6 +128,8 @@ internal enum X86InstructionDecoder {
         case 0x0F:
             let opcode2 = try cursor.takeByte()
             return try decodeTwoByteOpcode(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x70...0x7F:
+            return try decodeJccRel8(opcode: opcode, cursor: &cursor)
         case 0x80, 0x81, 0x83:
             return try decodeBinaryAluMI(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x84, 0x85:
@@ -142,6 +148,14 @@ internal enum X86InstructionDecoder {
             return try decodeMovMI8(prefixes: prefixes, cursor: &cursor)
         case 0xC7:
             return try decodeMovMIWord(prefixes: prefixes, cursor: &cursor)
+        case 0xE0, 0xE1, 0xE2, 0xE3:
+            return try decodeLoop(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0xE8:
+            return try decodeCallRel32(cursor: &cursor)
+        case 0xE9:
+            return try decodeJmpRel32(cursor: &cursor)
+        case 0xEB:
+            return try decodeJmpRel8(cursor: &cursor)
         case 0xF6, 0xF7:
             return try decodeF6F7(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xFE, 0xFF:
@@ -151,10 +165,53 @@ internal enum X86InstructionDecoder {
         }
     }
 
+    // MARK: - Branches
+
+    private static func decodeJmpRel8(cursor: inout Cursor) throws -> Decoded {
+        let delta = Int64(Int8(bitPattern: try cursor.takeByte()))
+        return Decoded(instruction: .jump(.offset(delta)), length: cursor.consumed)
+    }
+
+    private static func decodeJmpRel32(cursor: inout Cursor) throws -> Decoded {
+        let delta = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        return Decoded(instruction: .jump(.offset(delta)), length: cursor.consumed)
+    }
+
+    private static func decodeJccRel8(opcode: UInt8, cursor: inout Cursor) throws -> Decoded {
+        guard let cond = X86.Condition.decode(opcode & 0x0F) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let delta = Int64(Int8(bitPattern: try cursor.takeByte()))
+        return Decoded(instruction: .conditionalJump(cond, .offset(delta)), length: cursor.consumed)
+    }
+
+    private static func decodeJccRel32(opcode2: UInt8, cursor: inout Cursor) throws -> Decoded {
+        guard let cond = X86.Condition.decode(opcode2 & 0x0F) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let delta = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        return Decoded(instruction: .conditionalJump(cond, .offset(delta)), length: cursor.consumed)
+    }
+
+    private static func decodeCallRel32(cursor: inout Cursor) throws -> Decoded {
+        let delta = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        return Decoded(instruction: .call(.offset(delta)), length: cursor.consumed)
+    }
+
+    private static func decodeLoop(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard let kind = X86.LoopKind.decode(opcode: opcode, addressOverride: prefixes.addressSize) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let delta = Int64(Int8(bitPattern: try cursor.takeByte()))
+        return Decoded(instruction: .loop(kind, .offset(delta)), length: cursor.consumed)
+    }
+
     // MARK: - 0F-escape two-byte opcodes
 
     private static func decodeTwoByteOpcode(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         switch opcode2 {
+        case 0x80...0x8F:
+            return try decodeJccRel32(opcode2: opcode2, cursor: &cursor)
         case 0xA4: return try decodeDoubleShift(kind: .shld, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
         case 0xA5: return try decodeDoubleShift(kind: .shld, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAC: return try decodeDoubleShift(kind: .shrd, withImmediate: true,  prefixes: prefixes, cursor: &cursor)

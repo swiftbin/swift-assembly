@@ -22,6 +22,21 @@ internal enum X86InstructionFormatter {
             let dst = formatPairedTarget(target)
             let src = X86.RegisterTable.canonicalName(for: source)
             return "\(kind.rawValue) \(dst), \(src), \(formatShiftCount(count))"
+        case .jump(let target):
+            return "jmp \(formatBranchTarget(target))"
+        case .conditionalJump(let cond, let target):
+            return "j\(cond.rawValue) \(formatBranchTarget(target))"
+        case .call(let target):
+            return "call \(formatBranchTarget(target))"
+        case .loop(let kind, let target):
+            return "\(kind.rawValue) \(formatBranchTarget(target))"
+        }
+    }
+
+    private static func formatBranchTarget(_ target: X86.BranchTarget) -> String {
+        switch target {
+        case .offset(let delta): return String(delta)
+        case .label(let name):   return name
         }
     }
 

@@ -345,6 +345,113 @@ internal enum X86 {
         var clOpcode: UInt8 { self == .shld ? 0xA5 : 0xAD }
     }
 
+    /// Where a conditional or unconditional jump (or CALL) sends control.
+    /// `offset` is the byte delta from the end of the instruction — the
+    /// value that lives directly in the rel field. `label` carries a
+    /// name that the assembler resolves against the program's label map.
+    enum BranchTarget: Equatable {
+        case offset(Int64)
+        case label(String)
+    }
+
+    /// The 16 single-byte condition codes that drive Jcc, CMOVcc, and
+    /// SETcc. The raw value is the canonical mnemonic suffix; surface
+    /// aliases (`jc`/`jnae`/...) are folded onto the canonical via
+    /// `Condition.resolve(suffix:)`.
+    enum Condition: String, Equatable, CaseIterable {
+        case o, no, b, ae, e, ne, be, a, s, ns, p, np, l, ge, le, g
+
+        /// The 4-bit code (0..15) used by Jcc / CMOVcc / SETcc opcodes.
+        var encoding: UInt8 {
+            switch self {
+            case .o:  return 0x0
+            case .no: return 0x1
+            case .b:  return 0x2
+            case .ae: return 0x3
+            case .e:  return 0x4
+            case .ne: return 0x5
+            case .be: return 0x6
+            case .a:  return 0x7
+            case .s:  return 0x8
+            case .ns: return 0x9
+            case .p:  return 0xA
+            case .np: return 0xB
+            case .l:  return 0xC
+            case .ge: return 0xD
+            case .le: return 0xE
+            case .g:  return 0xF
+            }
+        }
+
+        static func decode(_ code: UInt8) -> Condition? {
+            allCases.first { $0.encoding == code }
+        }
+
+        /// Resolve a mnemonic suffix (the text after the leading `j` /
+        /// `cmov` / `set`) into a canonical condition. Surface aliases
+        /// `c`/`nc`/`z`/`nz`/`na`/`nbe`/`pe`/`po`/`nl`/`nge`/`ng`/`nle`
+        /// and the redundant `nae`/`nb` forms all fold here.
+        static func resolve(suffix: String) -> Condition? {
+            switch suffix {
+            case "o":            return .o
+            case "no":           return .no
+            case "b", "nae", "c": return .b
+            case "ae", "nb", "nc": return .ae
+            case "e", "z":       return .e
+            case "ne", "nz":     return .ne
+            case "be", "na":     return .be
+            case "a", "nbe":     return .a
+            case "s":            return .s
+            case "ns":           return .ns
+            case "p", "pe":      return .p
+            case "np", "po":     return .np
+            case "l", "nge":     return .l
+            case "ge", "nl":     return .ge
+            case "le", "ng":     return .le
+            case "g", "nle":     return .g
+            default:             return nil
+            }
+        }
+    }
+
+    /// The `LOOP` family plus `JECXZ`/`JRCXZ`. All five share the
+    /// `E0..E3 ib` opcode space; `JECXZ` is `JRCXZ` with the 0x67
+    /// address-size override in long mode.
+    enum LoopKind: String, Equatable, CaseIterable {
+        case loop, loope, loopne, jecxz, jrcxz
+
+        var opcode: UInt8 {
+            switch self {
+            case .loopne:        return 0xE0
+            case .loope:         return 0xE1
+            case .loop:          return 0xE2
+            case .jecxz, .jrcxz: return 0xE3
+            }
+        }
+
+        /// `JECXZ` needs the 0x67 address-size override in 64-bit mode
+        /// to select ECX rather than the default RCX.
+        var needsAddressSize: Bool { self == .jecxz }
+
+        static func resolve(mnemonic: String) -> LoopKind? {
+            switch mnemonic {
+            case "loopz":  return .loope
+            case "loopnz": return .loopne
+            default:       return LoopKind(rawValue: mnemonic)
+            }
+        }
+
+        static func decode(opcode: UInt8, addressOverride: Bool) -> LoopKind? {
+            switch opcode {
+            case 0xE0: return .loopne
+            case 0xE1: return .loope
+            case 0xE2: return .loop
+            case 0xE3: return addressOverride ? .jecxz : .jrcxz
+            default:   return nil
+            }
+        }
+    }
+
     /// The set of instructions recognised by the current implementation.
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
@@ -354,5 +461,9 @@ internal enum X86 {
         case test(left: RegisterOrMemory, right: Operand)
         case shift(ShiftKind, target: RegisterOrMemory, count: ShiftCount)
         case doubleShift(DoubleShiftKind, target: RegisterOrMemory, source: Register, count: ShiftCount)
+        case jump(BranchTarget)
+        case conditionalJump(Condition, BranchTarget)
+        case call(BranchTarget)
+        case loop(LoopKind, BranchTarget)
     }
 }

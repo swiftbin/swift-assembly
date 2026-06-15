@@ -33,7 +33,63 @@ internal enum X86Parser {
         if let kind = X86.DoubleShiftKind(rawValue: instruction.mnemonic) {
             return try parseDoubleShift(kind, instruction)
         }
+        if instruction.mnemonic == "jmp" {
+            return .jump(try parseSingleBranchTarget(instruction))
+        }
+        if instruction.mnemonic == "call" {
+            return .call(try parseSingleBranchTarget(instruction))
+        }
+        if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
+            return .loop(kind, try parseSingleBranchTarget(instruction))
+        }
+        if instruction.mnemonic.hasPrefix("j"),
+           let cond = X86.Condition.resolve(suffix: String(instruction.mnemonic.dropFirst())) {
+            return .conditionalJump(cond, try parseSingleBranchTarget(instruction))
+        }
         throw AssemblerError.unknownInstruction(instruction.mnemonic)
+    }
+
+    private static func parseSingleBranchTarget(_ instruction: ParsedInstruction) throws -> X86.BranchTarget {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: instruction.mnemonic,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        return try parseBranchTarget(instruction.operands[0], mnemonic: instruction.mnemonic)
+    }
+
+    /// Parse a branch operand. A numeric immediate is interpreted as a
+    /// rel field — the byte delta from the end of the instruction, the
+    /// exact value written into the encoding. Anything else (that isn't
+    /// a register or bracketed memory expression — those are indirect
+    /// forms reserved for Phase 6c) is taken as a label name.
+    private static func parseBranchTarget(_ text: String, mnemonic: String) throws -> X86.BranchTarget {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.hasPrefix("[") {
+            throw AssemblerError.unsupportedOperand(
+                "\(mnemonic): indirect branch target not yet supported"
+            )
+        }
+        if let _ = try? register(trimmed) {
+            throw AssemblerError.unsupportedOperand(
+                "\(mnemonic): indirect register target not yet supported"
+            )
+        }
+        if let value = try? immediateAny(trimmed) {
+            return .offset(value)
+        }
+        guard isLabelName(trimmed) else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): invalid branch target `\(text)`")
+        }
+        return .label(trimmed)
+    }
+
+    private static func isLabelName(_ text: String) -> Bool {
+        guard let first = text.first else { return false }
+        guard first.isLetter || first == "_" || first == "." else { return false }
+        return text.allSatisfy { $0.isLetter || $0.isNumber || $0 == "_" || $0 == "." || $0 == "$" }
     }
 
     private static func parseShift(_ kind: X86.ShiftKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {

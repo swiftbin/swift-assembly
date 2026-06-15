@@ -778,4 +778,156 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 6b relative branches
+
+    private static let numericBranchCases: [(String, [UInt8])] = [
+        // JMP: short and long
+        ("jmp 0",     [0xEB, 0x00]),
+        ("jmp 5",     [0xEB, 0x05]),
+        ("jmp -2",    [0xEB, 0xFE]),
+        ("jmp 127",   [0xEB, 0x7F]),
+        ("jmp -128",  [0xEB, 0x80]),
+        ("jmp 128",   [0xE9, 0x80, 0x00, 0x00, 0x00]),
+        ("jmp -129",  [0xE9, 0x7F, 0xFF, 0xFF, 0xFF]),
+
+        // Jcc: a sampling across condition codes; rel8 and rel32
+        ("je 0",      [0x74, 0x00]),
+        ("jne 5",     [0x75, 0x05]),
+        ("jb -1",     [0x72, 0xFF]),
+        ("jae 1",     [0x73, 0x01]),
+        ("jbe 4",     [0x76, 0x04]),
+        ("ja 4",      [0x77, 0x04]),
+        ("jl 0",      [0x7C, 0x00]),
+        ("jge 0",     [0x7D, 0x00]),
+        ("jle 0",     [0x7E, 0x00]),
+        ("jg 0",      [0x7F, 0x00]),
+        ("jo 0",      [0x70, 0x00]),
+        ("jno 0",     [0x71, 0x00]),
+        ("js 0",      [0x78, 0x00]),
+        ("jns 0",     [0x79, 0x00]),
+        ("jp 0",      [0x7A, 0x00]),
+        ("jnp 0",     [0x7B, 0x00]),
+        ("je 128",    [0x0F, 0x84, 0x80, 0x00, 0x00, 0x00]),
+        ("jne -129",  [0x0F, 0x85, 0x7F, 0xFF, 0xFF, 0xFF]),
+
+        // CALL: rel32 only
+        ("call 0",    [0xE8, 0x00, 0x00, 0x00, 0x00]),
+        ("call 5",    [0xE8, 0x05, 0x00, 0x00, 0x00]),
+        ("call -5",   [0xE8, 0xFB, 0xFF, 0xFF, 0xFF]),
+
+        // LOOP family (rel8 only)
+        ("loop 0",    [0xE2, 0x00]),
+        ("loope -1",  [0xE1, 0xFF]),
+        ("loopne 5",  [0xE0, 0x05]),
+        ("jrcxz 0",   [0xE3, 0x00]),
+        ("jecxz 0",   [0x67, 0xE3, 0x00]),
+    ]
+
+    func testNumericBranchAssembles() throws {
+        for (source, expected) in Self.numericBranchCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testNumericBranchDisassembles() throws {
+        for (source, bytes) in Self.numericBranchCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// Aliases fold onto the canonical condition (e.g. `jz` → `je`).
+    func testConditionalAliasesFoldToCanonical() throws {
+        XCTAssertEqual(try X86Assembler.assemble("jz 0"),   [0x74, 0x00])
+        XCTAssertEqual(try X86Assembler.assemble("jnz 0"),  [0x75, 0x00])
+        XCTAssertEqual(try X86Assembler.assemble("jc 0"),   [0x72, 0x00])
+        XCTAssertEqual(try X86Assembler.assemble("jnae 0"), [0x72, 0x00])
+        XCTAssertEqual(try X86Assembler.assemble("jng 0"),  [0x7E, 0x00])
+    }
+
+    /// `loopz` / `loopnz` fold onto `loope` / `loopne`.
+    func testLoopAliasesFoldToCanonical() throws {
+        XCTAssertEqual(try X86Assembler.assemble("loopz 0"),  [0xE1, 0x00])
+        XCTAssertEqual(try X86Assembler.assemble("loopnz 0"), [0xE0, 0x00])
+    }
+
+    /// Backward labels resolve directly to the optimal rel form: when the
+    /// delta fits int8, the encoder picks rel8.
+    func testBackwardLabelBranchPicksShortForm() throws {
+        let bytes = try X86Assembler.assemble("""
+        target:
+        jmp target
+        """)
+        // `jmp target` at pc=0, target=0 → delta=0-(0+2)=-2 → rel8.
+        XCTAssertEqual(bytes, [0xEB, 0xFE])
+    }
+
+    /// A forward label reference goes to rel32 because the assembler can't
+    /// yet know whether the eventual delta will fit rel8.
+    func testForwardLabelBranchUsesLongForm() throws {
+        let bytes = try X86Assembler.assemble("""
+        jmp target
+        target:
+        """)
+        // 5-byte rel32 form: target = 5, delta = 5 - (0 + 5) = 0.
+        XCTAssertEqual(bytes, [0xE9, 0x00, 0x00, 0x00, 0x00])
+    }
+
+    /// A more realistic loop body. The conditional `jne` targets a
+    /// backward label and picks rel8.
+    func testLabelLoopBodyRoundTrip() throws {
+        let bytes = try X86Assembler.assemble("""
+        loop_head:
+        dec rcx
+        jne loop_head
+        ret
+        """)
+        // dec rcx                = 48 FF C9 (3 bytes)
+        // jne loop_head (back)   = 75 FB    (2 bytes, delta=-5)
+        // ret                    = C3       (1 byte)
+        XCTAssertEqual(bytes, [0x48, 0xFF, 0xC9, 0x75, 0xFB, 0xC3])
+    }
+
+    /// Forward label resolution: CALL to a function defined later.
+    func testForwardCallLabel() throws {
+        let bytes = try X86Assembler.assemble("""
+        call greeter
+        ret
+        greeter:
+        ret
+        """)
+        // call greeter      = E8 ?? ?? ?? ?? (5 bytes)
+        // ret               = C3
+        // greeter:    (pc=6)
+        // ret
+        // delta from end of call (pc=5) to greeter pc=6 is 1.
+        XCTAssertEqual(bytes, [0xE8, 0x01, 0x00, 0x00, 0x00, 0xC3, 0xC3])
+    }
+
+    /// An undefined label is reported with `labelNotFound`.
+    func testUndefinedLabelReported() {
+        XCTAssertThrowsError(try X86Assembler.assemble("jmp nowhere")) { error in
+            guard case AssemblerError.labelNotFound(let name) = error else {
+                return XCTFail("expected labelNotFound, got \(error)")
+            }
+            XCTAssertEqual(name, "nowhere")
+        }
+    }
+
+    /// LOOP has no rel32 form; a target too far away is rejected.
+    func testLoopRel8OutOfRange() {
+        XCTAssertThrowsError(try X86Assembler.assemble("loop 128")) { error in
+            guard case AssemblerError.branchOutOfRange = error else {
+                return XCTFail("expected branchOutOfRange, got \(error)")
+            }
+        }
+    }
+
+    func testNumericBranchStreamRoundTrip() throws {
+        let source = Self.numericBranchCases.map(\.0).joined(separator: "\n")
+        let expected = Self.numericBranchCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
