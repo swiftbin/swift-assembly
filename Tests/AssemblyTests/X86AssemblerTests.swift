@@ -32,7 +32,9 @@ final class X86AssemblerTests: XCTestCase {
     }
 
     func testUnknownEncodingThrows() {
-        XCTAssertThrowsError(try X86Assembler.disassemble([0xFF])) { error in
+        // 0x60 (legacy PUSHA) is invalid in long mode and not yet implemented;
+        // an unhandled primary opcode reports `unknownEncoding`.
+        XCTAssertThrowsError(try X86Assembler.disassemble([0x60])) { error in
             guard case AssemblerError.unknownEncoding = error else {
                 return XCTFail("expected unknownEncoding, got \(error)")
             }
@@ -573,5 +575,95 @@ final class X86AssemblerTests: XCTestCase {
                 return XCTFail("expected immediateOutOfRange, got \(error)")
             }
         }
+    }
+
+    // MARK: - Phase 4c unary ALU (INC/DEC/NEG/NOT) + TEST
+
+    private static let unaryAluAndTestCases: [(String, [UInt8])] = [
+        // INC / DEC across widths (FE/FF /0 and /1)
+        ("inc al",   [0xFE, 0xC0]),
+        ("inc ax",   [0x66, 0xFF, 0xC0]),
+        ("inc eax",  [0xFF, 0xC0]),
+        ("inc rax",  [0x48, 0xFF, 0xC0]),
+        ("inc r8",   [0x49, 0xFF, 0xC0]),
+        ("dec rax",  [0x48, 0xFF, 0xC8]),
+        ("dec rcx",  [0x48, 0xFF, 0xC9]),
+        ("inc qword ptr [rbx]",     [0x48, 0xFF, 0x03]),
+        ("dec dword ptr [rbx + 8]", [0xFF, 0x4B, 0x08]),
+
+        // NOT / NEG (F6/F7 /2 and /3)
+        ("not rax",  [0x48, 0xF7, 0xD0]),
+        ("neg rax",  [0x48, 0xF7, 0xD8]),
+        ("not al",   [0xF6, 0xD0]),
+        ("neg eax",  [0xF7, 0xD8]),
+        ("not qword ptr [rbx]", [0x48, 0xF7, 0x13]),
+
+        // TEST reg, reg
+        ("test al, bl",   [0x84, 0xD8]),
+        ("test ax, bx",   [0x66, 0x85, 0xD8]),
+        ("test eax, ebx", [0x85, 0xD8]),
+        ("test rax, rbx", [0x48, 0x85, 0xD8]),
+
+        // TEST mem, reg (canonical MR-form direction)
+        ("test [rbx], rax",     [0x48, 0x85, 0x03]),
+        ("test [rbx + 8], eax", [0x85, 0x43, 0x08]),
+
+        // TEST accumulator imm (A8/A9 short form)
+        ("test al, 5",       [0xA8, 0x05]),
+        ("test ax, 4660",    [0x66, 0xA9, 0x34, 0x12]),
+        ("test eax, 1024",   [0xA9, 0x00, 0x04, 0x00, 0x00]),
+        ("test rax, 1024",   [0x48, 0xA9, 0x00, 0x04, 0x00, 0x00]),
+
+        // TEST general MI (F6/F7 /0) when dst is not the accumulator
+        ("test bl, 5",                 [0xF6, 0xC3, 0x05]),
+        ("test ecx, 1024",             [0xF7, 0xC1, 0x00, 0x04, 0x00, 0x00]),
+        ("test rcx, 1",                [0x48, 0xF7, 0xC1, 0x01, 0x00, 0x00, 0x00]),
+        ("test qword ptr [rbx], 1",    [0x48, 0xF7, 0x03, 0x01, 0x00, 0x00, 0x00]),
+        ("test dword ptr [rbx], 256",  [0xF7, 0x03, 0x00, 0x01, 0x00, 0x00]),
+    ]
+
+    func testUnaryAluAndTestAssembles() throws {
+        for (source, expected) in Self.unaryAluAndTestCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testUnaryAluAndTestDisassembles() throws {
+        for (source, bytes) in Self.unaryAluAndTestCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `test reg, mem` canonicalises to `test mem, reg` on disassembly
+    /// because TEST has no RM form — the MR form is the only available
+    /// encoding, and it puts r/m (the memory) first.
+    func testTestRegMemCanonicalisesToMemReg() throws {
+        let bytes = try X86Assembler.assemble("test rax, [rbx]")
+        XCTAssertEqual(bytes, [0x48, 0x85, 0x03])
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), "test [rbx], rax")
+    }
+
+    func testUnaryAluMemRequiresSizeHint() {
+        XCTAssertThrowsError(try X86Assembler.assemble("inc [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testUnaryAluRejectsImmediate() {
+        XCTAssertThrowsError(try X86Assembler.assemble("inc 5")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testUnaryAluAndTestStreamRoundTrip() throws {
+        let source = Self.unaryAluAndTestCases.map(\.0).joined(separator: "\n")
+        let expected = Self.unaryAluAndTestCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
 }

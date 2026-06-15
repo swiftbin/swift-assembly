@@ -20,7 +20,38 @@ internal enum X86Parser {
             let (dst, src) = try parseReadWritePair(instruction)
             return .binaryAlu(kind, destination: dst, source: src)
         }
+        if let kind = X86.UnaryAluKind(rawValue: instruction.mnemonic) {
+            return try parseUnaryAlu(kind, instruction)
+        }
+        if instruction.mnemonic == "test" {
+            let (lhs, rhs) = try parseReadWritePair(instruction)
+            return .test(left: lhs, right: rhs)
+        }
         throw AssemblerError.unknownInstruction(instruction.mnemonic)
+    }
+
+    private static func parseUnaryAlu(_ kind: X86.UnaryAluKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        switch classified {
+        case .register(let r):
+            return .unaryAlu(kind, target: .register(r))
+        case .memory(let m, let explicit):
+            guard let width = explicit else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(kind.rawValue) mem requires an explicit size hint (e.g. `qword ptr [...]`)"
+                )
+            }
+            return .unaryAlu(kind, target: .memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): target cannot be an immediate")
+        }
     }
 
     // MARK: - MOV

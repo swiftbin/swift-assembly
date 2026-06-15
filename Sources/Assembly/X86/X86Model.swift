@@ -238,10 +238,65 @@ internal enum X86 {
         }
     }
 
+    /// Single-operand integer ALU operations. The /n field that lives in
+    /// the ModR/M `reg` slot selects the operation, and the opcode byte
+    /// selects the operand width:
+    ///
+    /// * INC / DEC use 0xFE (byte) / 0xFF (non-byte) with `/0` and `/1`.
+    /// * NOT / NEG use 0xF6 (byte) / 0xF7 (non-byte) with `/2` and `/3`.
+    enum UnaryAluKind: String, Equatable, CaseIterable {
+        case inc, dec, not, neg
+
+        /// The `/n` slash-digit placed in ModR/M.reg.
+        var slashDigit: UInt8 {
+            switch self {
+            case .inc: return 0
+            case .dec: return 1
+            case .not: return 2
+            case .neg: return 3
+            }
+        }
+
+        /// INC/DEC ride the FE/FF opcode group; NOT/NEG ride F6/F7.
+        var usesIncDecGroup: Bool {
+            switch self {
+            case .inc, .dec: return true
+            case .not, .neg: return false
+            }
+        }
+
+        /// Opcode byte for the chosen width.
+        func opcode(byte: Bool) -> UInt8 {
+            if usesIncDecGroup {
+                return byte ? 0xFE : 0xFF
+            } else {
+                return byte ? 0xF6 : 0xF7
+            }
+        }
+
+        static func decodeIncDec(slashDigit: UInt8) -> UnaryAluKind? {
+            switch slashDigit {
+            case 0: return .inc
+            case 1: return .dec
+            default: return nil
+            }
+        }
+
+        static func decodeNotNeg(slashDigit: UInt8) -> UnaryAluKind? {
+            switch slashDigit {
+            case 2: return .not
+            case 3: return .neg
+            default: return nil
+            }
+        }
+    }
+
     /// The set of instructions recognised by the current implementation.
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
         case mov(destination: RegisterOrMemory, source: Operand)
         case binaryAlu(BinaryAluKind, destination: RegisterOrMemory, source: Operand)
+        case unaryAlu(UnaryAluKind, target: RegisterOrMemory)
+        case test(left: RegisterOrMemory, right: Operand)
     }
 }

@@ -10,6 +10,21 @@ internal enum X86InstructionFormatter {
             return formatReadWrite(mnemonic: "mov", destination: destination, source: source)
         case .binaryAlu(let kind, let destination, let source):
             return formatReadWrite(mnemonic: kind.rawValue, destination: destination, source: source)
+        case .unaryAlu(let kind, let target):
+            return "\(kind.rawValue) \(formatStandaloneTarget(target))"
+        case .test(let left, let right):
+            return formatReadWrite(mnemonic: "test", destination: left, source: right)
+        }
+    }
+
+    /// Render a single-operand target. When the target is memory the width
+    /// would otherwise be unknown, so a size hint is always prepended.
+    private static func formatStandaloneTarget(_ target: X86.RegisterOrMemory) -> String {
+        switch target {
+        case .register(let r):
+            return X86.RegisterTable.canonicalName(for: r)
+        case .memory(let m, let w):
+            return "\(sizeHintPrefix(w)) \(formatMemory(m))"
         }
     }
 

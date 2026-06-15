@@ -19,6 +19,10 @@ internal enum X86InstructionEncoder {
             return try encodeMov(destination: destination, source: source)
         case .binaryAlu(let kind, let destination, let source):
             return try encodeBinaryAlu(kind, destination: destination, source: source)
+        case .unaryAlu(let kind, let target):
+            return try encodeUnaryAlu(kind, target: target)
+        case .test(let left, let right):
+            return try encodeTest(left: left, right: right)
         }
     }
 
@@ -224,6 +228,108 @@ internal enum X86InstructionEncoder {
             rmOperand: destination,
             regHigh: 0,
             regLow: kind.opcodeIndex
+        )
+        try appendWidthImmediate(imm, width: width, into: &bytes)
+        return bytes
+    }
+
+    // MARK: - Unary ALU (INC/DEC/NOT/NEG)
+
+    private static func encodeUnaryAlu(_ kind: X86.UnaryAluKind, target: X86.RegisterOrMemory) throws -> [UInt8] {
+        let width = target.width
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = target { forceREX = needsForcedREX([r]) } else { forceREX = false }
+        return try emitOperandPair(
+            opcode: kind.opcode(byte: width == .byte),
+            width: width,
+            rmOperand: target,
+            regHigh: 0,
+            regLow: kind.slashDigit,
+            forceREX: forceREX
+        )
+    }
+
+    // MARK: - TEST
+
+    /// TEST has only the MR form for register/memory operands (no RM
+    /// counterpart), the A8/A9 accumulator short form, and the F6/F7 /0
+    /// general MI form.
+    private static func encodeTest(left: X86.RegisterOrMemory, right: X86.Operand) throws -> [UInt8] {
+        switch (left, right) {
+        case (.register(let l), .register(let r)):
+            try checkRegisterRegisterCompat([l, r], mnemonic: "test")
+            return try emitOperandPair(
+                opcode: l.width == .byte ? 0x84 : 0x85,
+                width: l.width,
+                rmOperand: .register(l),
+                regHigh: r.highBit,
+                regLow: r.lowBits,
+                forceREX: needsForcedREX([l, r])
+            )
+
+        case (.register(let l), .memory(let m, let w)):
+            try checkRegisterRegisterCompat([l], mnemonic: "test")
+            // TEST has no RM form; route through the MR form with mem in
+            // the r/m slot. Disassembly renders mem-first as a result.
+            return try emitOperandPair(
+                opcode: w == .byte ? 0x84 : 0x85,
+                width: w,
+                rmOperand: .memory(m, width: w),
+                regHigh: l.highBit,
+                regLow: l.lowBits,
+                forceREX: needsForcedREX([l])
+            )
+
+        case (.memory(let m, let w), .register(let r)):
+            try checkRegisterRegisterCompat([r], mnemonic: "test")
+            return try emitOperandPair(
+                opcode: w == .byte ? 0x84 : 0x85,
+                width: w,
+                rmOperand: .memory(m, width: w),
+                regHigh: r.highBit,
+                regLow: r.lowBits,
+                forceREX: needsForcedREX([r])
+            )
+
+        case (.register(let l), .immediate(let imm)):
+            return try encodeTestImmediate(target: .register(l), width: l.width, immediate: imm, dstIsAccumulator: l.number == 0)
+
+        case (.memory(let m, let w), .immediate(let imm)):
+            return try encodeTestImmediate(target: .memory(m, width: w), width: w, immediate: imm, dstIsAccumulator: false)
+
+        case (.memory, .memory):
+            throw AssemblerError.unsupportedOperand("test: cannot have two memory operands")
+        }
+    }
+
+    private static func encodeTestImmediate(
+        target: X86.RegisterOrMemory,
+        width: X86.RegisterWidth,
+        immediate imm: Int64,
+        dstIsAccumulator: Bool
+    ) throws -> [UInt8] {
+        try X86Parser.validateImmediateRange(imm, width: width, mnemonic: "test")
+        if width == .qword { try requireFitsInt32(imm, mnemonic: "test") }
+
+        if dstIsAccumulator, case .register(let r) = target {
+            var bytes: [UInt8] = []
+            if width == .word { bytes.append(X86.operandSizeOverride) }
+            let rexW: UInt8 = width == .qword ? 1 : 0
+            if let rex = X86.REX.build(w: rexW, forceEmit: needsForcedREX([r])) { bytes.append(rex) }
+            bytes.append(width == .byte ? 0xA8 : 0xA9)
+            try appendWidthImmediate(imm, width: width, into: &bytes)
+            return bytes
+        }
+
+        var bytes = try emitOperandPair(
+            opcode: width == .byte ? 0xF6 : 0xF7,
+            width: width,
+            rmOperand: target,
+            regHigh: 0,
+            regLow: 0
         )
         try appendWidthImmediate(imm, width: width, into: &bytes)
         return bytes

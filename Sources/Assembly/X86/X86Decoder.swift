@@ -123,8 +123,12 @@ internal enum X86InstructionDecoder {
         switch opcode {
         case 0x80, 0x81, 0x83:
             return try decodeBinaryAluMI(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x84, 0x85:
+            return try decodeTestMR(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x88, 0x89, 0x8A, 0x8B:
             return try decodeMovRegisterMemory(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0xA8, 0xA9:
+            return try decodeTestAccumulator(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
             return try decodeMovImm8(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB8...0xBF:
@@ -133,9 +137,85 @@ internal enum X86InstructionDecoder {
             return try decodeMovMI8(prefixes: prefixes, cursor: &cursor)
         case 0xC7:
             return try decodeMovMIWord(prefixes: prefixes, cursor: &cursor)
+        case 0xF6, 0xF7:
+            return try decodeF6F7(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0xFE, 0xFF:
+            return try decodeFEFF(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
+    }
+
+    // MARK: - TEST
+
+    private static func decodeTestMR(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode == 0x84)
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let regOperand = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let rmDestination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(
+            instruction: .test(left: rmDestination, right: .register(regOperand)),
+            length: cursor.consumed
+        )
+    }
+
+    private static func decodeTestAccumulator(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode == 0xA8)
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let imm: Int64
+        switch width {
+        case .byte:  imm = Int64(try cursor.takeByte())
+        case .word:  imm = Int64(try cursor.takeLE16())
+        case .dword: imm = Int64(try cursor.takeLE32())
+        case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        }
+        let acc = X86.Register(number: 0, width: width)
+        return Decoded(instruction: .test(left: .register(acc), right: .immediate(imm)), length: cursor.consumed)
+    }
+
+    // MARK: - F6 / F7 (TEST imm, NOT, NEG)
+
+    private static func decodeF6F7(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode == 0xF6)
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+
+        switch nField {
+        case 0, 1: // TEST r/m, imm
+            let imm: Int64
+            switch width {
+            case .byte:  imm = Int64(try cursor.takeByte())
+            case .word:  imm = Int64(try cursor.takeLE16())
+            case .dword: imm = Int64(try cursor.takeLE32())
+            case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            }
+            return Decoded(instruction: .test(left: target, right: .immediate(imm)), length: cursor.consumed)
+        case 2, 3:
+            let kind: X86.UnaryAluKind = (nField == 2) ? .not : .neg
+            return Decoded(instruction: .unaryAlu(kind, target: target), length: cursor.consumed)
+        default:
+            // /4..7 are MUL/IMUL/DIV/IDIV — added in a later phase.
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+    }
+
+    // MARK: - FE / FF (INC, DEC)
+
+    private static func decodeFEFF(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode == 0xFE)
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.UnaryAluKind.decodeIncDec(slashDigit: nField) else {
+            // FE only accepts /0 and /1; FF /2..7 are CALL/JMP/PUSH (later phases).
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .unaryAlu(kind, target: target), length: cursor.consumed)
     }
 
     // MARK: - Binary ALU
