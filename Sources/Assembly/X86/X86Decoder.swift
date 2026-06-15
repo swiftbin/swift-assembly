@@ -121,6 +121,9 @@ internal enum X86InstructionDecoder {
         }
 
         switch opcode {
+        case 0x0F:
+            let opcode2 = try cursor.takeByte()
+            return try decodeTwoByteOpcode(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x80, 0x81, 0x83:
             return try decodeBinaryAluMI(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x84, 0x85:
@@ -133,6 +136,8 @@ internal enum X86InstructionDecoder {
             return try decodeMovImm8(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB8...0xBF:
             return try decodeMovImmWord(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0xC0, 0xC1, 0xD0, 0xD1, 0xD2, 0xD3:
+            return try decodeShift(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xC6:
             return try decodeMovMI8(prefixes: prefixes, cursor: &cursor)
         case 0xC7:
@@ -144,6 +149,61 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
+    }
+
+    // MARK: - 0F-escape two-byte opcodes
+
+    private static func decodeTwoByteOpcode(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        switch opcode2 {
+        case 0xA4: return try decodeDoubleShift(kind: .shld, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
+        case 0xA5: return try decodeDoubleShift(kind: .shld, withImmediate: false, prefixes: prefixes, cursor: &cursor)
+        case 0xAC: return try decodeDoubleShift(kind: .shrd, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
+        case 0xAD: return try decodeDoubleShift(kind: .shrd, withImmediate: false, prefixes: prefixes, cursor: &cursor)
+        default:
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+    }
+
+    // MARK: - Shift / Rotate
+
+    private static func decodeShift(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode & 0x01) == 0
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.ShiftKind.decode(slashDigit: nField) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let count: X86.ShiftCount
+        switch opcode {
+        case 0xD0, 0xD1:
+            count = .one
+        case 0xD2, 0xD3:
+            count = .cl
+        case 0xC0, 0xC1:
+            let imm = try cursor.takeByte()
+            count = (imm == 1) ? .one : .immediate(imm)
+        default:
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        return Decoded(instruction: .shift(kind, target: target, count: count), length: cursor.consumed)
+    }
+
+    private static func decodeDoubleShift(kind: X86.DoubleShiftKind, withImmediate: Bool, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let source = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let count: X86.ShiftCount
+        if withImmediate {
+            let imm = try cursor.takeByte()
+            count = (imm == 1) ? .one : .immediate(imm)
+        } else {
+            count = .cl
+        }
+        return Decoded(instruction: .doubleShift(kind, target: target, source: source, count: count), length: cursor.consumed)
     }
 
     // MARK: - TEST

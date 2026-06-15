@@ -666,4 +666,116 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 5 shifts and rotates
+
+    private static let shiftCases: [(String, [UInt8])] = [
+        // SHL (= /4) by 1 across widths
+        ("shl al, 1",   [0xD0, 0xE0]),
+        ("shl ax, 1",   [0x66, 0xD1, 0xE0]),
+        ("shl eax, 1",  [0xD1, 0xE0]),
+        ("shl rax, 1",  [0x48, 0xD1, 0xE0]),
+        ("shl r8, 1",   [0x49, 0xD1, 0xE0]),
+
+        // by CL
+        ("shl al, cl",  [0xD2, 0xE0]),
+        ("shl rax, cl", [0x48, 0xD3, 0xE0]),
+
+        // by imm8
+        ("shl al, 5",   [0xC0, 0xE0, 0x05]),
+        ("shl rax, 5",  [0x48, 0xC1, 0xE0, 0x05]),
+        ("shl rcx, 63", [0x48, 0xC1, 0xE1, 0x3F]),
+
+        // All 7 shift kinds at qword by 1
+        ("rol rax, 1", [0x48, 0xD1, 0xC0]),
+        ("ror rax, 1", [0x48, 0xD1, 0xC8]),
+        ("rcl rax, 1", [0x48, 0xD1, 0xD0]),
+        ("rcr rax, 1", [0x48, 0xD1, 0xD8]),
+        ("shl rax, 1", [0x48, 0xD1, 0xE0]),
+        ("shr rax, 1", [0x48, 0xD1, 0xE8]),
+        ("sar rax, 1", [0x48, 0xD1, 0xF8]),
+
+        // Memory target (size hint required)
+        ("shl qword ptr [rbx], 1",  [0x48, 0xD1, 0x23]),
+        ("shl qword ptr [rbx], cl", [0x48, 0xD3, 0x23]),
+        ("shl qword ptr [rbx], 5",  [0x48, 0xC1, 0x23, 0x05]),
+    ]
+
+    private static let doubleShiftCases: [(String, [UInt8])] = [
+        ("shld rax, rbx, 4",   [0x48, 0x0F, 0xA4, 0xD8, 0x04]),
+        ("shld rax, rbx, cl",  [0x48, 0x0F, 0xA5, 0xD8]),
+        ("shrd rax, rbx, 4",   [0x48, 0x0F, 0xAC, 0xD8, 0x04]),
+        ("shrd rax, rbx, cl",  [0x48, 0x0F, 0xAD, 0xD8]),
+        ("shld eax, ebx, 4",   [0x0F, 0xA4, 0xD8, 0x04]),
+        ("shld ax, bx, 4",     [0x66, 0x0F, 0xA4, 0xD8, 0x04]),
+        ("shld [rbx], rcx, 4",
+            [0x48, 0x0F, 0xA4, 0x0B, 0x04]),
+    ]
+
+    func testShiftAssembles() throws {
+        for (source, expected) in Self.shiftCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testShiftDisassembles() throws {
+        for (source, bytes) in Self.shiftCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testDoubleShiftAssembles() throws {
+        for (source, expected) in Self.doubleShiftCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testDoubleShiftDisassembles() throws {
+        for (source, bytes) in Self.doubleShiftCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `sal` is a synonym for `shl`; on disassembly the canonical mnemonic
+    /// wins, but assembling either yields the same bytes.
+    func testSalIsShlAlias() throws {
+        XCTAssertEqual(try X86Assembler.assemble("sal rax, 1"), [0x48, 0xD1, 0xE0])
+        XCTAssertEqual(try X86Assembler.disassemble([0x48, 0xD1, 0xE0]), "shl rax, 1")
+    }
+
+    /// C1 /4 with imm=1 is a non-canonical alternative to D1 /4. Decoding
+    /// canonicalises it to the implicit `,1` form.
+    func testShiftImmediateOneCanonicalisesToImplicit() throws {
+        XCTAssertEqual(try X86Assembler.disassemble([0x48, 0xC1, 0xE0, 0x01]), "shl rax, 1")
+        // Re-assembling the canonical text reaches the shorter D1 form.
+        XCTAssertEqual(try X86Assembler.assemble("shl rax, 1"), [0x48, 0xD1, 0xE0])
+    }
+
+    func testShiftMemoryRequiresSizeHint() {
+        XCTAssertThrowsError(try X86Assembler.assemble("shl [rbx], 1")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testDoubleShiftRejectsByOne() {
+        // `shld rax, rbx, 1` is technically a literal-1 immediate, but
+        // SHLD has no implicit-1 form. The parser routes a numeric 1 to
+        // `.one`, which is rejected for SHLD/SHRD.
+        XCTAssertThrowsError(try X86Assembler.assemble("shld rax, rbx, 1")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testShiftStreamRoundTrip() throws {
+        let combined = Self.shiftCases + Self.doubleShiftCases
+        let source = combined.map(\.0).joined(separator: "\n")
+        let expected = combined.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

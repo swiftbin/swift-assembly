@@ -291,6 +291,60 @@ internal enum X86 {
         }
     }
 
+    /// Single-operand shift and rotate instructions. The /n slash-digit
+    /// in ModR/M.reg selects the operation:
+    ///
+    /// * /0 ROL    /1 ROR    /2 RCL    /3 RCR
+    /// * /4 SHL    /5 SHR              /7 SAR
+    ///
+    /// SAL is a synonym for SHL and folds onto `.shl` on parse.
+    enum ShiftKind: String, Equatable, CaseIterable {
+        case rol, ror, rcl, rcr, shl, shr, sar
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .rol: return 0
+            case .ror: return 1
+            case .rcl: return 2
+            case .rcr: return 3
+            case .shl: return 4
+            case .shr: return 5
+            case .sar: return 7
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> ShiftKind? {
+            allCases.first { $0.slashDigit == slashDigit }
+        }
+
+        static func resolve(mnemonic: String) -> ShiftKind? {
+            if mnemonic == "sal" { return .shl }
+            return ShiftKind(rawValue: mnemonic)
+        }
+    }
+
+    /// Shift count: by literal 1 (the D0/D1 implicit form), by CL
+    /// (D2/D3), or by an 8-bit immediate (C0/C1 ib). The parser folds
+    /// a numeric `1` literal onto `.one` so the encoder always picks
+    /// the shorter implicit form.
+    enum ShiftCount: Equatable {
+        case one
+        case cl
+        case immediate(UInt8)
+    }
+
+    /// Three-operand double-precision shifts `SHLD` / `SHRD`. The count
+    /// is either CL (`0F A5 / AD`) or an 8-bit immediate
+    /// (`0F A4 / AC ib`); there is no by-1 implicit form.
+    enum DoubleShiftKind: String, Equatable, CaseIterable {
+        case shld, shrd
+
+        /// Second-byte opcode for the imm8 form (A4 / AC).
+        var immediateOpcode: UInt8 { self == .shld ? 0xA4 : 0xAC }
+        /// Second-byte opcode for the CL form (A5 / AD).
+        var clOpcode: UInt8 { self == .shld ? 0xA5 : 0xAD }
+    }
+
     /// The set of instructions recognised by the current implementation.
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
@@ -298,5 +352,7 @@ internal enum X86 {
         case binaryAlu(BinaryAluKind, destination: RegisterOrMemory, source: Operand)
         case unaryAlu(UnaryAluKind, target: RegisterOrMemory)
         case test(left: RegisterOrMemory, right: Operand)
+        case shift(ShiftKind, target: RegisterOrMemory, count: ShiftCount)
+        case doubleShift(DoubleShiftKind, target: RegisterOrMemory, source: Register, count: ShiftCount)
     }
 }

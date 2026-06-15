@@ -27,7 +27,85 @@ internal enum X86Parser {
             let (lhs, rhs) = try parseReadWritePair(instruction)
             return .test(left: lhs, right: rhs)
         }
+        if let kind = X86.ShiftKind.resolve(mnemonic: instruction.mnemonic) {
+            return try parseShift(kind, instruction)
+        }
+        if let kind = X86.DoubleShiftKind(rawValue: instruction.mnemonic) {
+            return try parseDoubleShift(kind, instruction)
+        }
         throw AssemblerError.unknownInstruction(instruction.mnemonic)
+    }
+
+    private static func parseShift(_ kind: X86.ShiftKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let target = try parseShiftTarget(instruction.operands[0], mnemonic: kind.rawValue)
+        let count = try parseShiftCount(instruction.operands[1], mnemonic: kind.rawValue)
+        return .shift(kind, target: target, count: count)
+    }
+
+    private static func parseDoubleShift(_ kind: X86.DoubleShiftKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dstClassified = try classifyOperand(instruction.operands[0])
+        let source = try register(instruction.operands[1])
+        guard source.width != .byte else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): only word/dword/qword supported")
+        }
+        let target: X86.RegisterOrMemory
+        switch dstClassified {
+        case .register(let r):
+            try checkWidthsMatch(r.width, source.width, mnemonic: kind.rawValue)
+            target = .register(r)
+        case .memory(let m, let explicit):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: source.width, mnemonic: kind.rawValue)
+            target = .memory(m, width: width)
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination cannot be an immediate")
+        }
+        let count = try parseShiftCount(instruction.operands[2], mnemonic: kind.rawValue)
+        if case .one = count {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): count must be CL or an explicit imm8")
+        }
+        return .doubleShift(kind, target: target, source: source, count: count)
+    }
+
+    private static func parseShiftTarget(_ text: String, mnemonic: String) throws -> X86.RegisterOrMemory {
+        let classified = try classifyOperand(text)
+        switch classified {
+        case .register(let r):
+            return .register(r)
+        case .memory(let m, let explicit):
+            guard let width = explicit else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(mnemonic) mem requires an explicit size hint (e.g. `qword ptr [...]`)"
+                )
+            }
+            return .memory(m, width: width)
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): target cannot be an immediate")
+        }
+    }
+
+    private static func parseShiftCount(_ text: String, mnemonic: String) throws -> X86.ShiftCount {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed == "cl" { return .cl }
+        let value = try immediateAny(text)
+        guard value >= 0 && value <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: mnemonic, value: value, range: 0...255)
+        }
+        if value == 1 { return .one }
+        return .immediate(UInt8(truncatingIfNeeded: value))
     }
 
     private static func parseUnaryAlu(_ kind: X86.UnaryAluKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {

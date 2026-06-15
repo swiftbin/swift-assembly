@@ -23,6 +23,10 @@ internal enum X86InstructionEncoder {
             return try encodeUnaryAlu(kind, target: target)
         case .test(let left, let right):
             return try encodeTest(left: left, right: right)
+        case .shift(let kind, let target, let count):
+            return try encodeShift(kind, target: target, count: count)
+        case .doubleShift(let kind, let target, let source, let count):
+            return try encodeDoubleShift(kind, target: target, source: source, count: count)
         }
     }
 
@@ -332,6 +336,94 @@ internal enum X86InstructionEncoder {
             regLow: 0
         )
         try appendWidthImmediate(imm, width: width, into: &bytes)
+        return bytes
+    }
+
+    // MARK: - Shift / Rotate
+
+    /// Encode the single-operand shift / rotate family. The opcode group
+    /// is selected by `count`:
+    ///
+    /// * `.one` → D0 (byte) / D1 (non-byte), no immediate.
+    /// * `.cl`  → D2 / D3, no immediate.
+    /// * `.immediate(n)` → C0 / C1 with `n` appended.
+    private static func encodeShift(_ kind: X86.ShiftKind, target: X86.RegisterOrMemory, count: X86.ShiftCount) throws -> [UInt8] {
+        let width = target.width
+        let isByte = width == .byte
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = target { forceREX = needsForcedREX([r]) } else { forceREX = false }
+
+        let opcode: UInt8
+        switch count {
+        case .one:  opcode = isByte ? 0xD0 : 0xD1
+        case .cl:   opcode = isByte ? 0xD2 : 0xD3
+        case .immediate: opcode = isByte ? 0xC0 : 0xC1
+        }
+
+        var bytes = try emitOperandPair(
+            opcode: opcode,
+            width: width,
+            rmOperand: target,
+            regHigh: 0,
+            regLow: kind.slashDigit,
+            forceREX: forceREX
+        )
+        if case .immediate(let imm) = count {
+            bytes.append(imm)
+        }
+        return bytes
+    }
+
+    /// Encode `SHLD` / `SHRD`. Both forms use the 0F-escape opcode.
+    private static func encodeDoubleShift(_ kind: X86.DoubleShiftKind, target: X86.RegisterOrMemory, source: X86.Register, count: X86.ShiftCount) throws -> [UInt8] {
+        let width = source.width
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r, source], mnemonic: kind.rawValue)
+        } else {
+            try checkRegisterRegisterCompat([source], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = target {
+            forceREX = needsForcedREX([r, source])
+        } else {
+            forceREX = needsForcedREX([source])
+        }
+
+        let opcode2: UInt8
+        switch count {
+        case .immediate, .one: opcode2 = kind.immediateOpcode
+        case .cl:              opcode2 = kind.clOpcode
+        }
+
+        // Two-byte 0F-escape opcode: emit the prefix bytes, then 0F, then
+        // the operand-pair body.
+        var bytes: [UInt8] = []
+        if width == .word { bytes.append(X86.operandSizeOverride) }
+        let rexW: UInt8 = width == .qword ? 1 : 0
+        switch target {
+        case .register(let rm):
+            if let rex = X86.REX.build(w: rexW, r: source.highBit, x: 0, b: rm.highBit, forceEmit: forceREX) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: source.lowBits, rm: rm.lowBits))
+        case .memory(let mem, _):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: source.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: source.highBit, x: rexX, b: rexB, forceEmit: forceREX) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+
+        if case .immediate(let imm) = count {
+            bytes.append(imm)
+        }
         return bytes
     }
 

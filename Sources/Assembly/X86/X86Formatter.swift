@@ -14,6 +14,29 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(formatStandaloneTarget(target))"
         case .test(let left, let right):
             return formatReadWrite(mnemonic: "test", destination: left, source: right)
+        case .shift(let kind, let target, let count):
+            return "\(kind.rawValue) \(formatStandaloneTarget(target)), \(formatShiftCount(count))"
+        case .doubleShift(let kind, let target, let source, let count):
+            // The source register supplies the width, so the memory target
+            // doesn't need an explicit size hint.
+            let dst = formatPairedTarget(target)
+            let src = X86.RegisterTable.canonicalName(for: source)
+            return "\(kind.rawValue) \(dst), \(src), \(formatShiftCount(count))"
+        }
+    }
+
+    private static func formatPairedTarget(_ target: X86.RegisterOrMemory) -> String {
+        switch target {
+        case .register(let r): return X86.RegisterTable.canonicalName(for: r)
+        case .memory(let m, _): return formatMemory(m)
+        }
+    }
+
+    private static func formatShiftCount(_ count: X86.ShiftCount) -> String {
+        switch count {
+        case .one: return "1"
+        case .cl: return "cl"
+        case .immediate(let n): return String(n)
         }
     }
 
