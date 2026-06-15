@@ -56,10 +56,59 @@ internal enum X86 {
         }
     }
 
-    /// Source operand for a `MOV` whose destination is a register.
-    /// Memory sources are introduced in Phase 3.
+    /// A memory operand in long mode.
+    ///
+    /// Long mode permits at most one base register, at most one index
+    /// register scaled by 1/2/4/8, and an optional 32-bit (sign-extended)
+    /// displacement. The `RIP+disp32` form is represented by `ripRelative
+    /// == true` with no base or index. The `[disp32]` absolute form is
+    /// represented by `base == nil && index == nil && ripRelative == false`.
+    /// Registers must be 64-bit (the 32-bit `[esi+...]` form requires the
+    /// `0x67` address-size override prefix and is deferred).
+    struct MemoryOperand: Equatable {
+        var base: Register?
+        var index: Register?
+        var scale: UInt8
+        var displacement: Int64
+        var ripRelative: Bool
+
+        init(
+            base: Register? = nil,
+            index: Register? = nil,
+            scale: UInt8 = 1,
+            displacement: Int64 = 0,
+            ripRelative: Bool = false
+        ) {
+            self.base = base
+            self.index = index
+            self.scale = scale
+            self.displacement = displacement
+            self.ripRelative = ripRelative
+        }
+
+        /// Encoded value of the SIB.scale field: 00 / 01 / 10 / 11 for scales
+        /// 1 / 2 / 4 / 8 respectively.
+        var scaleField: UInt8? {
+            switch scale {
+            case 1: return 0b00
+            case 2: return 0b01
+            case 4: return 0b10
+            case 8: return 0b11
+            default: return nil
+            }
+        }
+    }
+
+    /// Anything addressable by `MOV` as a destination operand.
+    enum MovDestination: Equatable {
+        case register(Register)
+        case memory(MemoryOperand, width: RegisterWidth)
+    }
+
+    /// Anything addressable by `MOV` as a source operand.
     enum MovSource: Equatable {
         case register(Register)
+        case memory(MemoryOperand, width: RegisterWidth)
         case immediate(Int64)
     }
 
@@ -130,6 +179,6 @@ internal enum X86 {
     /// The set of instructions recognised by the current implementation.
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
-        case mov(destination: Register, source: MovSource)
+        case mov(destination: MovDestination, source: MovSource)
     }
 }

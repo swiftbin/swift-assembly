@@ -7,10 +7,6 @@ internal enum X86InstructionDecoder {
         var length: Int
     }
 
-    /// Zero-operand kinds in *descending* length order. Longest-prefix-wins
-    /// matching is required because several encodings share a leading byte
-    /// with shorter ones (`F3 90 pause` vs `90 nop`, `66 CF iret` /
-    /// `48 CF iretq` vs `CF iretd`, `48 0F 07 sysretq` vs `0F 07 sysret`).
     private static let zeroOperandTable: [X86.ZeroOperandKind] =
         X86.ZeroOperandKind.allCases.sorted { $0.bytes.count > $1.bytes.count }
 
@@ -19,11 +15,9 @@ internal enum X86InstructionDecoder {
         guard offset < bytes.count else {
             throw AssemblerError.invalidByteCount(bytes.count)
         }
-
         if let match = matchZeroOperand(bytes, offset: offset) {
             return Decoded(instruction: .zeroOperand(match.kind), length: match.length)
         }
-
         return try decodeOperandForm(bytes, offset: offset)
     }
 
@@ -45,7 +39,6 @@ internal enum X86InstructionDecoder {
 
     // MARK: - Operand-bearing instructions
 
-    /// Prefix state extracted from the byte stream before the opcode.
     private struct Prefixes {
         var operandSize: Bool = false
         var rex: UInt8? = nil
@@ -71,9 +64,7 @@ internal enum X86InstructionDecoder {
         var consumed: Int { offset - start }
 
         mutating func takeByte() throws -> UInt8 {
-            guard offset < bytes.count else {
-                throw AssemblerError.invalidByteCount(bytes.count)
-            }
+            guard offset < bytes.count else { throw AssemblerError.invalidByteCount(bytes.count) }
             defer { offset += 1 }
             return bytes[offset]
         }
@@ -125,7 +116,7 @@ internal enum X86InstructionDecoder {
 
         switch opcode {
         case 0x88, 0x89, 0x8A, 0x8B:
-            return try decodeMovRegisterDirection(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+            return try decodeMovRegisterMemory(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
             return try decodeMovImm8(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB8...0xBF:
@@ -139,36 +130,110 @@ internal enum X86InstructionDecoder {
         }
     }
 
-    // MARK: - MOV variants
+    // MARK: - MOV r/m, r and MOV r, r/m
 
-    /// Decode MR (88/89) and RM (8A/8B) forms. Phase 2 restricts the operand
-    /// to register-direct (`mod == 11`); a memory operand raises
-    /// `unknownEncoding` until Phase 3 introduces the memory addressing
-    /// vocabulary.
-    private static func decodeMovRegisterDirection(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+    /// Decode the 88/89 (MR) and 8A/8B (RM) families. The ModR/M `mod`
+    /// field selects the register-direct path (`mod == 11`) or the memory
+    /// path (`mod != 11`); the latter chains into `decodeMemoryAddressing`.
+    private static func decodeMovRegisterMemory(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
-        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
-            throw AssemblerError.unknownEncoding(UInt32(opcode))
-        }
         let isByte = (opcode == 0x88 || opcode == 0x8A)
         let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
         let regNumber = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
-        let rmNumber  = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
         let regOperand = makeRegister(number: regNumber, width: width, hasREX: prefixes.hasREX)
-        let rmOperand  = makeRegister(number: rmNumber,  width: width, hasREX: prefixes.hasREX)
-        let (destination, source) = (opcode == 0x88 || opcode == 0x89) ? (rmOperand, regOperand) : (regOperand, rmOperand)
-        return Decoded(instruction: .mov(destination: destination, source: .register(source)), length: cursor.consumed)
+        let mod = X86.ModRM.mod.extract(modrm)
+        let isMR = (opcode == 0x88 || opcode == 0x89)
+
+        if mod == X86.ModRM.modRegister {
+            let rmNumber = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            let rmOperand = makeRegister(number: rmNumber, width: width, hasREX: prefixes.hasREX)
+            let (destination, source) = isMR ? (rmOperand, regOperand) : (regOperand, rmOperand)
+            return Decoded(
+                instruction: .mov(destination: .register(destination), source: .register(source)),
+                length: cursor.consumed
+            )
+        }
+
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        let instruction: X86.Instruction = isMR
+            ? .mov(destination: .memory(memory, width: width), source: .register(regOperand))
+            : .mov(destination: .register(regOperand), source: .memory(memory, width: width))
+        return Decoded(instruction: instruction, length: cursor.consumed)
     }
 
-    /// Decode `B0+rb ib`: MOV r8, imm8.
+    /// Decode ModR/M + optional SIB + displacement into a `MemoryOperand`.
+    /// Called only for `mod != 11`.
+    private static func decodeMemoryAddressing(modrm: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> X86.MemoryOperand {
+        let mod = X86.ModRM.mod.extract(modrm)
+        let rm = X86.ModRM.rm.extract(modrm)
+
+        // RIP-relative: mod=00, rm=5 (in 64-bit mode).
+        if mod == X86.ModRM.modIndirect && rm == 0b101 {
+            let disp = Int32(bitPattern: try cursor.takeLE32())
+            return X86.MemoryOperand(displacement: Int64(disp), ripRelative: true)
+        }
+
+        // SIB escape: rm=4.
+        if rm == 0b100 {
+            let sib = try cursor.takeByte()
+            let sibScaleField = X86.SIB.scale.extract(sib)
+            let sibIndexField = X86.SIB.index.extract(sib)
+            let sibBaseField  = X86.SIB.base.extract(sib)
+
+            // Index: sibIndex==4 with REX.X==0 means "no index"; with REX.X==1
+            // it is R12 (and a legitimate index).
+            let index: X86.Register?
+            if sibIndexField == X86.SIB.noIndex && prefixes.rexX == 0 {
+                index = nil
+            } else {
+                let number = (prefixes.rexX << 3) | sibIndexField
+                index = X86.Register(number: number, width: .qword)
+            }
+            let scale: UInt8 = 1 << sibScaleField
+
+            // Base: sibBase==5 with mod==0 means "no base"; the displacement
+            // is then a full disp32.
+            let base: X86.Register?
+            let displacement: Int64
+            if mod == X86.ModRM.modIndirect && sibBaseField == X86.SIB.noBase {
+                base = nil
+                displacement = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            } else {
+                let number = (prefixes.rexB << 3) | sibBaseField
+                base = X86.Register(number: number, width: .qword)
+                displacement = try readDisplacement(mod: mod, cursor: &cursor)
+            }
+
+            return X86.MemoryOperand(base: base, index: index, scale: scale, displacement: displacement)
+        }
+
+        // Plain `[base + disp]` form, no SIB.
+        let baseNumber = (prefixes.rexB << 3) | rm
+        let base = X86.Register(number: baseNumber, width: .qword)
+        let displacement = try readDisplacement(mod: mod, cursor: &cursor)
+        return X86.MemoryOperand(base: base, displacement: displacement)
+    }
+
+    private static func readDisplacement(mod: UInt8, cursor: inout Cursor) throws -> Int64 {
+        switch mod {
+        case X86.ModRM.modIndirect: return 0
+        case X86.ModRM.modDisp8:    return Int64(Int8(bitPattern: try cursor.takeByte()))
+        case X86.ModRM.modDisp32:   return Int64(Int32(bitPattern: try cursor.takeLE32()))
+        default:
+            // mod==11 is the register-direct path and should never reach here.
+            throw AssemblerError.unknownEncoding(UInt32(mod))
+        }
+    }
+
+    // MARK: - MOV r, imm short forms
+
     private static func decodeMovImm8(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let number = (prefixes.rexB << 3) | (opcode & 0x7)
         let destination = makeRegister(number: number, width: .byte, hasREX: prefixes.hasREX)
         let imm = Int64(try cursor.takeByte())
-        return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
+        return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
     }
 
-    /// Decode `B8+r{w,d,o}`: MOV r16/32/64, imm16/32/64.
     private static func decodeMovImmWord(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let width = selectWidth(prefixes: prefixes)
         let number = (prefixes.rexB << 3) | (opcode & 0x7)
@@ -178,27 +243,27 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(bitPattern: try cursor.takeLE64())
-        case .byte:
-            // Unreachable: B8..BF is non-byte; byte form is B0..B7.
-            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        case .byte:  throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
-        return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
+        return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
     }
 
-    /// Decode `C6 /0 ib`: MOV r/m8, imm8 (Phase 2: register-direct only).
+    // MARK: - MOV r/m, imm (C6 / C7 /0)
+
+    /// `C6 /0 ib`. Phase 3 still restricts the destination to register-
+    /// direct (`mod == 11`); memory destinations are added when the rest
+    /// of the MI family lands in Phase 4.
     private static func decodeMovMI8(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
         try requireSlash0RegisterDirect(modrm: modrm, opcode: 0xC6)
         let number = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
         let destination = makeRegister(number: number, width: .byte, hasREX: prefixes.hasREX)
         let imm = Int64(try cursor.takeByte())
-        return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
+        return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
     }
 
-    /// Decode `C7 /0 i{w,d}`: MOV r/m16/32/64, imm{16,32,32 sign-extended}
-    /// (Phase 2: register-direct only). The qword form sign-extends imm32
-    /// to Int64 so the encoder's "fits in Int32" canonical path round-trips
-    /// (`mov rax, -1` → `48 C7 C0 FF FF FF FF` ↔ `imm = -1`).
+    /// `C7 /0 i{w,d}`. The qword form sign-extends imm32 to Int64 so the
+    /// encoder's "fits in Int32" canonical path round-trips.
     private static func decodeMovMIWord(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
         try requireSlash0RegisterDirect(modrm: modrm, opcode: 0xC7)
@@ -209,13 +274,10 @@ internal enum X86InstructionDecoder {
         switch width {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
-        case .qword:
-            let raw = try cursor.takeLE32()
-            imm = Int64(Int32(bitPattern: raw))
-        case .byte:
-            throw AssemblerError.unknownEncoding(0xC7)
+        case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        case .byte:  throw AssemblerError.unknownEncoding(0xC7)
         }
-        return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
+        return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
     }
 
     // MARK: - Shared helpers

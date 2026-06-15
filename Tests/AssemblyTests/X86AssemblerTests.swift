@@ -300,4 +300,119 @@ final class X86AssemblerTests: XCTestCase {
         let text = try X86Assembler.disassemble(bytes)
         XCTAssertEqual(try X86Assembler.assemble(text), bytes)
     }
+
+    // MARK: - Phase 3 MOV r, [mem] / MOV [mem], r
+
+    private static let movMemoryCases: [(String, [UInt8])] = [
+        // Plain [base]
+        ("mov rax, [rbx]",  [0x48, 0x8B, 0x03]),
+        ("mov rax, [rsp]",  [0x48, 0x8B, 0x04, 0x24]),
+        ("mov rax, [rbp]",  [0x48, 0x8B, 0x45, 0x00]),
+        ("mov rax, [r8]",   [0x49, 0x8B, 0x00]),
+        ("mov rax, [r12]",  [0x49, 0x8B, 0x04, 0x24]),
+        ("mov rax, [r13]",  [0x49, 0x8B, 0x45, 0x00]),
+        ("mov rax, [r15]",  [0x49, 0x8B, 0x07]),
+
+        // Plain [base + disp8]
+        ("mov rax, [rbx + 1]",   [0x48, 0x8B, 0x43, 0x01]),
+        ("mov rax, [rbx - 1]",   [0x48, 0x8B, 0x43, 0xFF]),
+        ("mov rax, [rsp + 8]",   [0x48, 0x8B, 0x44, 0x24, 0x08]),
+        ("mov rax, [rbp + 8]",   [0x48, 0x8B, 0x45, 0x08]),
+        ("mov rax, [r13 + 16]",  [0x49, 0x8B, 0x45, 0x10]),
+
+        // Plain [base + disp32]
+        ("mov rax, [rbx + 256]",  [0x48, 0x8B, 0x83, 0x00, 0x01, 0x00, 0x00]),
+        ("mov rax, [rbx - 256]",  [0x48, 0x8B, 0x83, 0x00, 0xFF, 0xFF, 0xFF]),
+
+        // SIB: base + index*scale, no displacement
+        ("mov rax, [rbx + rcx]",       [0x48, 0x8B, 0x04, 0x0B]),
+        ("mov rax, [rbx + rcx*2]",     [0x48, 0x8B, 0x04, 0x4B]),
+        ("mov rax, [rbx + rcx*4]",     [0x48, 0x8B, 0x04, 0x8B]),
+        ("mov rax, [rbx + rcx*8]",     [0x48, 0x8B, 0x04, 0xCB]),
+        ("mov rax, [rbx + rcx*8 + 16]", [0x48, 0x8B, 0x44, 0xCB, 0x10]),
+        ("mov rax, [rbx + rcx*8 + 4096]",
+            [0x48, 0x8B, 0x84, 0xCB, 0x00, 0x10, 0x00, 0x00]),
+
+        // SIB with extended registers (R8..R15)
+        ("mov rax, [r8 + r9]",          [0x4B, 0x8B, 0x04, 0x08]),
+        ("mov rax, [r12 + r13*4]",      [0x4B, 0x8B, 0x04, 0xAC]),
+        ("mov r10, [r11 + r12*8 + 16]", [0x4F, 0x8B, 0x54, 0xE3, 0x10]),
+
+        // RIP-relative
+        ("mov rax, [rip]",       [0x48, 0x8B, 0x05, 0x00, 0x00, 0x00, 0x00]),
+        ("mov rax, [rip + 16]",  [0x48, 0x8B, 0x05, 0x10, 0x00, 0x00, 0x00]),
+        ("mov rax, [rip - 8]",   [0x48, 0x8B, 0x05, 0xF8, 0xFF, 0xFF, 0xFF]),
+
+        // Absolute [disp32] and index-only forms
+        ("mov rax, [4096]",          [0x48, 0x8B, 0x04, 0x25, 0x00, 0x10, 0x00, 0x00]),
+        ("mov rax, [rcx*4]",         [0x48, 0x8B, 0x04, 0x8D, 0x00, 0x00, 0x00, 0x00]),
+        ("mov rax, [rcx*4 + 16]",    [0x48, 0x8B, 0x04, 0x8D, 0x10, 0x00, 0x00, 0x00]),
+
+        // Different widths
+        ("mov al, [rbx]",   [0x8A, 0x03]),
+        ("mov ax, [rbx]",   [0x66, 0x8B, 0x03]),
+        ("mov eax, [rbx]",  [0x8B, 0x03]),
+
+        // MR direction (memory destination)
+        ("mov [rbx], rax",         [0x48, 0x89, 0x03]),
+        ("mov [rsp + 8], rax",     [0x48, 0x89, 0x44, 0x24, 0x08]),
+        ("mov [rip + 16], rax",    [0x48, 0x89, 0x05, 0x10, 0x00, 0x00, 0x00]),
+        ("mov [rsi], al",          [0x88, 0x06]),
+        ("mov [rdi + 16], bl",     [0x88, 0x5F, 0x10]),
+    ]
+
+    func testMovMemoryAssembles() throws {
+        for (source, expected) in Self.movMemoryCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testMovMemoryDisassembles() throws {
+        for (source, bytes) in Self.movMemoryCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `[rax*1]` canonicalises to `[rax]` because the scale-1 index with no
+    /// base is identical to a bare base — the parser preserves user intent
+    /// but the encoder picks the shorter form.
+    func testMovMemoryScaleOneIndexCanonicalisesToBase() throws {
+        let bytes = try X86Assembler.assemble("mov rax, [rcx*1]")
+        XCTAssertEqual(bytes, [0x48, 0x8B, 0x01]) // == mov rax, [rcx]
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), "mov rax, [rcx]")
+    }
+
+    func testMovMemoryRSPCannotBeIndex() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mov rax, [rbx + rsp*2]")) { error in
+            guard case AssemblerError.invalidMemoryOperand = error else {
+                return XCTFail("expected invalidMemoryOperand, got \(error)")
+            }
+        }
+    }
+
+    func testMovMemoryInvalidScaleRejected() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mov rax, [rbx + rcx*3]")) { error in
+            guard case AssemblerError.invalidMemoryOperand = error else {
+                return XCTFail("expected invalidMemoryOperand, got \(error)")
+            }
+        }
+    }
+
+    func testMovMemoryAddressSizeMustBe64Bit() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mov rax, [ebx]")) { error in
+            guard case AssemblerError.invalidMemoryOperand = error else {
+                return XCTFail("expected invalidMemoryOperand, got \(error)")
+            }
+        }
+    }
+
+    /// Pipeline-level round-trip across the full set, exercising the byte
+    /// cursor across encodings of varying length.
+    func testMovMemoryRoundTripStream() throws {
+        let source = Self.movMemoryCases.map(\.0).joined(separator: "\n")
+        let expected = Self.movMemoryCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

@@ -61,6 +61,20 @@ extension X86 {
         static let scale = ByteField(offset: 6, width: 2)
         static let index = ByteField(offset: 3, width: 3)
         static let base = ByteField(offset: 0, width: 3)
+
+        /// `index == 4` (`0b100`) in the SIB byte means "no index". The
+        /// `[rsp+...]` form uses this to reach RSP via the base field with
+        /// the index slot left empty.
+        static let noIndex: UInt8 = 0b100
+
+        /// `base == 5` (`0b101`) in the SIB byte, combined with `mod == 00`
+        /// in the ModR/M byte, means "no base" — the address resolves to
+        /// the displacement alone (or `index*scale + disp32`).
+        static let noBase: UInt8 = 0b101
+
+        static func make(scale: UInt8, index: UInt8, base: UInt8) -> UInt8 {
+            Self.scale.insert(scale) | Self.index.insert(index) | Self.base.insert(base)
+        }
     }
 
     /// The operand-size override prefix (`0x66`). In 64-bit mode it selects
