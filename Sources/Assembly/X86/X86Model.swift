@@ -3,11 +3,6 @@ import Foundation
 /// The X86 / X86-64 instruction-model namespace, mirroring the layering of
 /// `A64`. Domain types (registers, memory operands, instruction kinds) live
 /// here; the byte-level format descriptors live in `X86InstructionFormats`.
-///
-/// Phase 0 establishes the skeleton: only the `Instruction` enum case for
-/// `nop` is present so the encode/decode/format pipeline can round-trip a
-/// single instruction. Subsequent phases (see `X86_CHECKLIST.md`) extend
-/// this enum with one operand family at a time.
 internal enum X86 {
     /// General-purpose register width.
     enum RegisterWidth: Int, Equatable {
@@ -26,7 +21,12 @@ internal enum X86 {
     struct Register: Equatable {
         var number: UInt8
         var width: RegisterWidth
+        /// One of AH/CH/DH/BH. These occupy `number` 4–7 with no REX prefix
+        /// and become invalid the moment a REX prefix appears in the same
+        /// instruction.
         var isHighByte: Bool
+        /// One of SPL/BPL/SIL/DIL. These occupy `number` 4–7 *with* a REX
+        /// prefix and require a REX byte even when no other field needs one.
         var requiresREXForByte: Bool
 
         init(number: UInt8, width: RegisterWidth, isHighByte: Bool = false, requiresREXForByte: Bool = false) {
@@ -35,19 +35,36 @@ internal enum X86 {
             self.isHighByte = isHighByte
             self.requiresREXForByte = requiresREXForByte
         }
+
+        /// Low 3 bits of `number`, fitted into a ModR/M `reg` or `rm` field.
+        var lowBits: UInt8 { number & 0x7 }
+
+        /// High bit of `number`, fitted into REX.R / REX.B / REX.X.
+        var highBit: UInt8 { (number >> 3) & 0x1 }
+
+        /// True iff the register is one of R8..R15 in any width.
+        var isExtended: Bool { number >= 8 }
+
+        /// The width tag used in human-readable diagnostics.
+        var widthSuffix: String {
+            switch width {
+            case .byte:  return "byte"
+            case .word:  return "word"
+            case .dword: return "dword"
+            case .qword: return "qword"
+            }
+        }
+    }
+
+    /// Source operand for a `MOV` whose destination is a register.
+    /// Memory sources are introduced in Phase 3.
+    enum MovSource: Equatable {
+        case register(Register)
+        case immediate(Int64)
     }
 
     /// Zero-operand instructions whose encoding is a single fixed byte
-    /// sequence. The mnemonic *is* the encoding: there are no registers,
-    /// immediates, or memory operands.
-    ///
-    /// Cases listed here are the canonical mnemonic used on disassembly.
-    /// Surface-level aliases (`fwait` → `wait`, `xlat` → `xlatb`) are
-    /// resolved in the parser and never appear on this enum.
-    ///
-    /// `bytes` is the full long-mode (x86_64) encoding. `iretq`/`sysretq`
-    /// include the REX.W prefix; the operand-size-override (`66`) appears
-    /// in `iret` to distinguish it from `iretd`.
+    /// sequence. See `X86_CHECKLIST.md` Phase 1.
     enum ZeroOperandKind: String, Equatable, CaseIterable {
         case nop
         case ret, retf
@@ -101,9 +118,6 @@ internal enum X86 {
             }
         }
 
-        /// Resolve a parsed mnemonic (already lower-cased by `SourceParser`)
-        /// into a canonical kind. Returns `nil` for mnemonics that do not
-        /// belong to the zero-operand family.
         static func resolve(mnemonic: String) -> ZeroOperandKind? {
             switch mnemonic {
             case "fwait": return .wait
@@ -114,9 +128,8 @@ internal enum X86 {
     }
 
     /// The set of instructions recognised by the current implementation.
-    /// Later phases extend this enum one operand family at a time (see
-    /// `X86_CHECKLIST.md`).
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
+        case mov(destination: Register, source: MovSource)
     }
 }
