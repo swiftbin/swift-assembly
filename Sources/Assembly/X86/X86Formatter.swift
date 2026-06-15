@@ -7,9 +7,18 @@ internal enum X86InstructionFormatter {
         case .zeroOperand(let kind):
             return kind.rawValue
         case .mov(let destination, let source):
-            let dst = formatDestination(destination, sizeHintWhenImmediate: source)
-            return "mov \(dst), \(formatSource(source))"
+            return formatReadWrite(mnemonic: "mov", destination: destination, source: source)
+        case .binaryAlu(let kind, let destination, let source):
+            return formatReadWrite(mnemonic: kind.rawValue, destination: destination, source: source)
         }
+    }
+
+    /// Render a 2-operand "destination, source" line, prefixing the
+    /// destination with a `byte ptr` / ... size hint when the source is
+    /// an immediate and the destination is memory.
+    private static func formatReadWrite(mnemonic: String, destination: X86.RegisterOrMemory, source: X86.Operand) -> String {
+        let dst = formatDestination(destination, sizeHintWhenImmediate: source)
+        return "\(mnemonic) \(dst), \(formatSource(source))"
     }
 
     // MARK: - Operands

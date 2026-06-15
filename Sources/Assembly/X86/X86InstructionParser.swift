@@ -16,6 +16,10 @@ internal enum X86Parser {
         if instruction.mnemonic == "mov" {
             return try parseMov(instruction)
         }
+        if let kind = X86.BinaryAluKind(rawValue: instruction.mnemonic) {
+            let (dst, src) = try parseReadWritePair(instruction)
+            return .binaryAlu(kind, destination: dst, source: src)
+        }
         throw AssemblerError.unknownInstruction(instruction.mnemonic)
     }
 
@@ -32,47 +36,57 @@ internal enum X86Parser {
     }
 
     private static func parseMov(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        let (dst, src) = try parseReadWritePair(instruction)
+        return .mov(destination: dst, source: src)
+    }
+
+    /// Classify and validate the two operands of any instruction whose
+    /// destination is `r/m` and source is `r/m/imm`: MOV, the 8 binary
+    /// ALU ops, and TEST share this shape. Width inference and the
+    /// "mem,imm needs a size hint" rule live here in one place.
+    static func parseReadWritePair(_ instruction: ParsedInstruction) throws -> (X86.RegisterOrMemory, X86.Operand) {
         guard instruction.operands.count == 2 else {
             throw AssemblerError.invalidOperandCount(
-                instruction: "mov",
+                instruction: instruction.mnemonic,
                 expected: "2 operands",
                 actual: instruction.operands.count
             )
         }
         let dst = try classifyOperand(instruction.operands[0])
         let src = try classifyOperand(instruction.operands[1])
+        let mnemonic = instruction.mnemonic
 
         switch (dst, src) {
         case (.register(let d), .register(let s)):
-            try checkWidthsMatch(d.width, s.width, mnemonic: "mov")
-            return .mov(destination: .register(d), source: .register(s))
+            try checkWidthsMatch(d.width, s.width, mnemonic: mnemonic)
+            return (.register(d), .register(s))
 
         case (.register(let d), .memory(let m, let explicit)):
-            let width = try resolveMemoryWidth(explicit: explicit, paired: d.width, mnemonic: "mov")
-            return .mov(destination: .register(d), source: .memory(m, width: width))
+            let width = try resolveMemoryWidth(explicit: explicit, paired: d.width, mnemonic: mnemonic)
+            return (.register(d), .memory(m, width: width))
 
         case (.register(let d), .immediate(let v)):
-            try validateImmediateRange(v, width: d.width, mnemonic: "mov")
-            return .mov(destination: .register(d), source: .immediate(v))
+            try validateImmediateRange(v, width: d.width, mnemonic: mnemonic)
+            return (.register(d), .immediate(v))
 
         case (.memory(let m, let explicit), .register(let s)):
-            let width = try resolveMemoryWidth(explicit: explicit, paired: s.width, mnemonic: "mov")
-            return .mov(destination: .memory(m, width: width), source: .register(s))
+            let width = try resolveMemoryWidth(explicit: explicit, paired: s.width, mnemonic: mnemonic)
+            return (.memory(m, width: width), .register(s))
 
         case (.memory(let m, let explicit), .immediate(let v)):
             guard let width = explicit else {
                 throw AssemblerError.unsupportedOperand(
-                    "mov mem, imm requires an explicit size hint (e.g. `qword ptr [...]`)"
+                    "\(mnemonic) mem, imm requires an explicit size hint (e.g. `qword ptr [...]`)"
                 )
             }
-            try validateImmediateRange(v, width: width, mnemonic: "mov")
-            return .mov(destination: .memory(m, width: width), source: .immediate(v))
+            try validateImmediateRange(v, width: width, mnemonic: mnemonic)
+            return (.memory(m, width: width), .immediate(v))
 
         case (.memory, .memory):
-            throw AssemblerError.unsupportedOperand("mov cannot have two memory operands")
+            throw AssemblerError.unsupportedOperand("\(mnemonic): cannot have two memory operands")
 
         case (.immediate, _):
-            throw AssemblerError.unsupportedOperand("mov destination cannot be an immediate")
+            throw AssemblerError.unsupportedOperand("\(mnemonic): destination cannot be an immediate")
         }
     }
 

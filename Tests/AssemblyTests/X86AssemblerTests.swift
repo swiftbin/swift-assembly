@@ -485,4 +485,93 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(try X86Assembler.assemble("mov qword ptr [rbx], rax"), [0x48, 0x89, 0x03])
         XCTAssertEqual(try X86Assembler.assemble("mov rax, qword ptr [rbx]"), [0x48, 0x8B, 0x03])
     }
+
+    // MARK: - Phase 4b binary ALU (ADD/OR/ADC/SBB/AND/SUB/XOR/CMP)
+
+    private static let binaryAluCases: [(String, [UInt8])] = [
+        // ADD reg, reg across widths
+        ("add al, bl",    [0x00, 0xD8]),
+        ("add ax, bx",    [0x66, 0x01, 0xD8]),
+        ("add eax, ebx",  [0x01, 0xD8]),
+        ("add rax, rbx",  [0x48, 0x01, 0xD8]),
+        ("add r8, r9",    [0x4D, 0x01, 0xC8]),
+
+        // reg, mem / mem, reg
+        ("add rax, [rbx]",     [0x48, 0x03, 0x03]),
+        ("add [rbx], rax",     [0x48, 0x01, 0x03]),
+        ("add eax, [rbx + 8]", [0x03, 0x43, 0x08]),
+
+        // 83 form (sign-extended imm8) — chosen whenever imm fits Int8 and dst is non-byte
+        ("add eax, 1",   [0x83, 0xC0, 0x01]),
+        ("add ecx, 1",   [0x83, 0xC1, 0x01]),
+        ("add rax, 1",   [0x48, 0x83, 0xC0, 0x01]),
+        ("add rcx, -1",  [0x48, 0x83, 0xC1, 0xFF]),
+        ("add ax, 1",    [0x66, 0x83, 0xC0, 0x01]),
+
+        // Accumulator short form — chosen when dst is rAX and imm doesn't fit Int8
+        ("add al, 5",       [0x04, 0x05]),
+        ("add ax, 4660",    [0x66, 0x05, 0x34, 0x12]),
+        ("add eax, 4096",   [0x05, 0x00, 0x10, 0x00, 0x00]),
+        ("add rax, 4096",   [0x48, 0x05, 0x00, 0x10, 0x00, 0x00]),
+
+        // 80/81 MI form — non-accumulator, imm doesn't fit Int8
+        ("add bl, 5",     [0x80, 0xC3, 0x05]),
+        ("add bx, 4660",  [0x66, 0x81, 0xC3, 0x34, 0x12]),
+        ("add ecx, 4096", [0x81, 0xC1, 0x00, 0x10, 0x00, 0x00]),
+        ("add rcx, 4096", [0x48, 0x81, 0xC1, 0x00, 0x10, 0x00, 0x00]),
+
+        // mem, imm
+        ("add byte ptr [rbx], 5",         [0x80, 0x03, 0x05]),
+        ("add qword ptr [rbx], 1",        [0x48, 0x83, 0x03, 0x01]),
+        ("add dword ptr [rbx], 1024",     [0x81, 0x03, 0x00, 0x04, 0x00, 0x00]),
+
+        // Each of the other 7 families on the canonical reg, reg form
+        ("or rax, rbx",  [0x48, 0x09, 0xD8]),
+        ("adc rax, rbx", [0x48, 0x11, 0xD8]),
+        ("sbb rax, rbx", [0x48, 0x19, 0xD8]),
+        ("and rax, rbx", [0x48, 0x21, 0xD8]),
+        ("sub rax, rbx", [0x48, 0x29, 0xD8]),
+        ("xor rax, rbx", [0x48, 0x31, 0xD8]),
+        ("cmp rax, rbx", [0x48, 0x39, 0xD8]),
+
+        // Family-specific accumulator-imm sanity check
+        ("xor eax, eax",  [0x31, 0xC0]),
+        ("sub rax, -1",   [0x48, 0x83, 0xE8, 0xFF]),
+        ("cmp eax, 4096", [0x3D, 0x00, 0x10, 0x00, 0x00]),
+    ]
+
+    func testBinaryAluAssembles() throws {
+        for (source, expected) in Self.binaryAluCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBinaryAluDisassembles() throws {
+        for (source, bytes) in Self.binaryAluCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// The RM and MR forms produce identical text for register-to-register
+    /// ops; the disassembler accepts both, the assembler canonicalises to MR.
+    func testBinaryAluRMFormDecodes() throws {
+        XCTAssertEqual(try X86Assembler.disassemble([0x03, 0xD8]), "add ebx, eax")
+        XCTAssertEqual(try X86Assembler.assemble("add ebx, eax"), [0x01, 0xC3])
+    }
+
+    func testBinaryAluRoundTripStream() throws {
+        let source = Self.binaryAluCases.map(\.0).joined(separator: "\n")
+        let expected = Self.binaryAluCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
+
+    func testBinaryAluRejectsQwordImmediateOutOfInt32() {
+        XCTAssertThrowsError(try X86Assembler.assemble("add rax, 4294967296")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+    }
 }

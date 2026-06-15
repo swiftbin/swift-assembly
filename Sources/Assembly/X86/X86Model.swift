@@ -187,9 +187,61 @@ internal enum X86 {
         }
     }
 
+    /// Two-operand integer ALU operations sharing the
+    /// 00–3D opcode block. The mnemonic *is* the family index used by
+    /// every encoding form:
+    ///
+    /// * MR  byte:     `0x00 + 8 * n` `/r`
+    /// * MR  non-byte: `0x01 + 8 * n` `/r`
+    /// * RM  byte:     `0x02 + 8 * n` `/r`
+    /// * RM  non-byte: `0x03 + 8 * n` `/r`
+    /// * I   AL:       `0x04 + 8 * n` `ib`
+    /// * I   rAX:      `0x05 + 8 * n` `iw/id`
+    /// * MI  byte:     `0x80 /n ib`
+    /// * MI  non-byte: `0x81 /n iw/id`
+    /// * MI  sign-ext: `0x83 /n ib`  (non-byte only)
+    enum BinaryAluKind: String, Equatable, CaseIterable {
+        case add, or, adc, sbb, and, sub, xor, cmp
+
+        /// The family index `n` used as the `/n` ModR/M reg field and as
+        /// the `8 * n` offset into the MR/RM/I opcode tables.
+        var opcodeIndex: UInt8 {
+            switch self {
+            case .add: return 0
+            case .or:  return 1
+            case .adc: return 2
+            case .sbb: return 3
+            case .and: return 4
+            case .sub: return 5
+            case .xor: return 6
+            case .cmp: return 7
+            }
+        }
+
+        /// MR form opcode: `0x00 + 8n` for byte, `0x01 + 8n` otherwise.
+        func mrOpcode(byte: Bool) -> UInt8 {
+            (byte ? UInt8(0x00) : UInt8(0x01)) | (opcodeIndex << 3)
+        }
+
+        /// RM form opcode: `0x02 + 8n` for byte, `0x03 + 8n` otherwise.
+        func rmOpcode(byte: Bool) -> UInt8 {
+            (byte ? UInt8(0x02) : UInt8(0x03)) | (opcodeIndex << 3)
+        }
+
+        /// I (accumulator) form opcode: `0x04 + 8n` for byte, `0x05 + 8n` otherwise.
+        func accumulatorOpcode(byte: Bool) -> UInt8 {
+            (byte ? UInt8(0x04) : UInt8(0x05)) | (opcodeIndex << 3)
+        }
+
+        static func decode(opcodeIndex: UInt8) -> BinaryAluKind? {
+            allCases.first { $0.opcodeIndex == opcodeIndex }
+        }
+    }
+
     /// The set of instructions recognised by the current implementation.
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
         case mov(destination: RegisterOrMemory, source: Operand)
+        case binaryAlu(BinaryAluKind, destination: RegisterOrMemory, source: Operand)
     }
 }

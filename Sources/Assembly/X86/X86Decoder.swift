@@ -114,7 +114,15 @@ internal enum X86InstructionDecoder {
         let prefixes = cursor.consumePrefixes()
         let opcode = try cursor.takeByte()
 
+        // Binary ALU MR/RM/I family — 8 op groups of 6 opcodes in 0x00..0x3D.
+        if opcode <= 0x3D, (opcode & 0x07) <= 5,
+           let kind = X86.BinaryAluKind.decode(opcodeIndex: opcode >> 3) {
+            return try decodeBinaryAlu(kind: kind, variant: opcode & 0x07, prefixes: prefixes, cursor: &cursor)
+        }
+
         switch opcode {
+        case 0x80, 0x81, 0x83:
+            return try decodeBinaryAluMI(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x88, 0x89, 0x8A, 0x8B:
             return try decodeMovRegisterMemory(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
@@ -128,6 +136,120 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
+    }
+
+    // MARK: - Binary ALU
+
+    /// Decode the MR/RM/I variants (sub-opcode 0..5) of the binary ALU
+    /// family. The family is already resolved from the high opcode bits.
+    private static func decodeBinaryAlu(
+        kind: X86.BinaryAluKind,
+        variant: UInt8,
+        prefixes: Prefixes,
+        cursor: inout Cursor
+    ) throws -> Decoded {
+        let isByte = (variant & 0x1) == 0
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+
+        switch variant {
+        case 0, 1: // MR — destination is r/m, source is reg
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let regOperand = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+            let destination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+            return Decoded(
+                instruction: .binaryAlu(kind, destination: destination, source: .register(regOperand)),
+                length: cursor.consumed
+            )
+
+        case 2, 3: // RM — destination is reg, source is r/m
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let regOperand = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+            let rmDestination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+            let source: X86.Operand
+            switch rmDestination {
+            case .register(let r): source = .register(r)
+            case .memory(let m, let w): source = .memory(m, width: w)
+            }
+            return Decoded(
+                instruction: .binaryAlu(kind, destination: .register(regOperand), source: source),
+                length: cursor.consumed
+            )
+
+        case 4: // I — implicit AL, imm8
+            let imm = Int64(try cursor.takeByte())
+            let al = X86.Register(number: 0, width: .byte)
+            return Decoded(
+                instruction: .binaryAlu(kind, destination: .register(al), source: .immediate(imm)),
+                length: cursor.consumed
+            )
+
+        case 5: // I — implicit rAX, imm{16,32, sign-extended 32}
+            let imm: Int64
+            switch width {
+            case .word:  imm = Int64(try cursor.takeLE16())
+            case .dword: imm = Int64(try cursor.takeLE32())
+            case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            case .byte:  throw AssemblerError.unknownEncoding(UInt32(variant))
+            }
+            let rax = X86.Register(number: 0, width: width)
+            return Decoded(
+                instruction: .binaryAlu(kind, destination: .register(rax), source: .immediate(imm)),
+                length: cursor.consumed
+            )
+
+        default:
+            throw AssemblerError.unknownEncoding(UInt32(variant))
+        }
+    }
+
+    /// Decode the MI variants (80/81/83 `/n` ib/iw/id). The family is
+    /// carried by the ModR/M `reg` field, which doubles as the `/n`
+    /// slash-digit.
+    private static func decodeBinaryAluMI(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.BinaryAluKind.decode(opcodeIndex: nField) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let width: X86.RegisterWidth = (opcode == 0x80) ? .byte : selectWidth(prefixes: prefixes)
+        let destination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let imm: Int64
+        switch opcode {
+        case 0x80:
+            imm = Int64(try cursor.takeByte())
+        case 0x83:
+            imm = Int64(Int8(bitPattern: try cursor.takeByte()))
+        case 0x81:
+            switch width {
+            case .word:  imm = Int64(try cursor.takeLE16())
+            case .dword: imm = Int64(try cursor.takeLE32())
+            case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            case .byte:  throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+        default:
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        return Decoded(
+            instruction: .binaryAlu(kind, destination: destination, source: .immediate(imm)),
+            length: cursor.consumed
+        )
+    }
+
+    /// Decode a `r/m` slot into either a register or a memory operand.
+    private static func decodeRMDestination(
+        modrm: UInt8,
+        prefixes: Prefixes,
+        width: X86.RegisterWidth,
+        cursor: inout Cursor
+    ) throws -> X86.RegisterOrMemory {
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let number = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            return .register(makeRegister(number: number, width: width, hasREX: prefixes.hasREX))
+        }
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        return .memory(memory, width: width)
     }
 
     // MARK: - MOV r/m, r and MOV r, r/m
@@ -255,7 +377,7 @@ internal enum X86InstructionDecoder {
     private static func decodeMovMI8(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
         try requireSlash0(modrm: modrm, opcode: 0xC6)
-        let destination = try decodeSlash0Destination(modrm: modrm, prefixes: prefixes, width: .byte, cursor: &cursor)
+        let destination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: .byte, cursor: &cursor)
         let imm = Int64(try cursor.takeByte())
         return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
     }
@@ -266,7 +388,7 @@ internal enum X86InstructionDecoder {
         let modrm = try cursor.takeByte()
         try requireSlash0(modrm: modrm, opcode: 0xC7)
         let width = selectWidth(prefixes: prefixes)
-        let destination = try decodeSlash0Destination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let destination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
         let imm: Int64
         switch width {
         case .word:  imm = Int64(try cursor.takeLE16())
@@ -275,22 +397,6 @@ internal enum X86InstructionDecoder {
         case .byte:  throw AssemblerError.unknownEncoding(0xC7)
         }
         return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
-    }
-
-    /// Decode the destination of a `/0` instruction whose ModR/M may be
-    /// either register-direct or memory.
-    private static func decodeSlash0Destination(
-        modrm: UInt8,
-        prefixes: Prefixes,
-        width: X86.RegisterWidth,
-        cursor: inout Cursor
-    ) throws -> X86.RegisterOrMemory {
-        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
-            let number = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
-            return .register(makeRegister(number: number, width: width, hasREX: prefixes.hasREX))
-        }
-        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
-        return .memory(memory, width: width)
     }
 
     // MARK: - Shared helpers
