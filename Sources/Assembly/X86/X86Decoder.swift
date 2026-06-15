@@ -128,6 +128,8 @@ internal enum X86InstructionDecoder {
         case 0x0F:
             let opcode2 = try cursor.takeByte()
             return try decodeTwoByteOpcode(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x69, 0x6B:
+            return try decodeImulImmediate(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x70...0x7F:
             return try decodeJccRel8(opcode: opcode, cursor: &cursor)
         case 0x80, 0x81, 0x83:
@@ -227,9 +229,45 @@ internal enum X86InstructionDecoder {
         case 0xA5: return try decodeDoubleShift(kind: .shld, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAC: return try decodeDoubleShift(kind: .shrd, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
         case 0xAD: return try decodeDoubleShift(kind: .shrd, withImmediate: false, prefixes: prefixes, cursor: &cursor)
+        case 0xAF:
+            return try decodeImulRegister(prefixes: prefixes, cursor: &cursor)
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - IMUL (2-op and 3-op)
+
+    private static func decodeImulRegister(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .imulRegister(destination: destination, source: source), length: cursor.consumed)
+    }
+
+    private static func decodeImulImmediate(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let immediate: Int64
+        if opcode == 0x6B {
+            immediate = Int64(Int8(bitPattern: try cursor.takeByte()))
+        } else {
+            switch width {
+            case .word:  immediate = Int64(try cursor.takeLE16())
+            case .dword: immediate = Int64(try cursor.takeLE32())
+            case .qword: immediate = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            case .byte:  throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+        }
+        return Decoded(
+            instruction: .imulImmediate(destination: destination, source: source, immediate: immediate),
+            length: cursor.consumed
+        )
     }
 
     // MARK: - Shift / Rotate
@@ -325,8 +363,12 @@ internal enum X86InstructionDecoder {
         case 2, 3:
             let kind: X86.UnaryAluKind = (nField == 2) ? .not : .neg
             return Decoded(instruction: .unaryAlu(kind, target: target), length: cursor.consumed)
+        case 4, 5, 6, 7:
+            guard let kind = X86.MulDivKind.decode(slashDigit: nField) else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+            return Decoded(instruction: .mulDiv(kind, target: target), length: cursor.consumed)
         default:
-            // /4..7 are MUL/IMUL/DIV/IDIV — added in a later phase.
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
     }

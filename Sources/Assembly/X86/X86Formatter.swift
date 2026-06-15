@@ -36,6 +36,12 @@ internal enum X86InstructionFormatter {
             return "call \(formatIndirectTarget(target))"
         case .enter(let alloc, let nesting):
             return "enter \(alloc), \(nesting)"
+        case .mulDiv(let kind, let target):
+            return "\(kind.rawValue) \(formatStandaloneTarget(target))"
+        case .imulRegister(let dst, let source):
+            return "imul \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
+        case .imulImmediate(let dst, let source, let imm):
+            return "imul \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source)), \(imm)"
         }
     }
 

@@ -1014,4 +1014,133 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 7 mul/div and sign-extension
+
+    private static let signExtendCases: [(String, [UInt8])] = [
+        ("cbw",  [0x66, 0x98]),
+        ("cwde", [0x98]),
+        ("cdqe", [0x48, 0x98]),
+        ("cwd",  [0x66, 0x99]),
+        ("cdq",  [0x99]),
+        ("cqo",  [0x48, 0x99]),
+    ]
+
+    func testSignExtendAssembles() throws {
+        for (mnemonic, expected) in Self.signExtendCases {
+            XCTAssertEqual(try X86Assembler.assemble(mnemonic), expected, "assemble \(mnemonic)")
+        }
+    }
+
+    func testSignExtendDisassembles() throws {
+        for (mnemonic, bytes) in Self.signExtendCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), mnemonic, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    private static let mulDivCases: [(String, [UInt8])] = [
+        // MUL r/m
+        ("mul al",   [0xF6, 0xE0]),
+        ("mul bl",   [0xF6, 0xE3]),
+        ("mul ax",   [0x66, 0xF7, 0xE0]),
+        ("mul ebx",  [0xF7, 0xE3]),
+        ("mul rax",  [0x48, 0xF7, 0xE0]),
+        ("mul r8",   [0x49, 0xF7, 0xE0]),
+        ("mul qword ptr [rbx]", [0x48, 0xF7, 0x23]),
+
+        // IMUL (1-op)
+        ("imul rax", [0x48, 0xF7, 0xE8]),
+        ("imul rbx", [0x48, 0xF7, 0xEB]),
+
+        // DIV / IDIV
+        ("div rcx",  [0x48, 0xF7, 0xF1]),
+        ("idiv rcx", [0x48, 0xF7, 0xF9]),
+        ("div bl",   [0xF6, 0xF3]),
+    ]
+
+    func testMulDivAssembles() throws {
+        for (source, expected) in Self.mulDivCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testMulDivDisassembles() throws {
+        for (source, bytes) in Self.mulDivCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    private static let imulMultiOperandCases: [(String, [UInt8])] = [
+        // 2-operand IMUL (0F AF /r)
+        ("imul ax, bx",   [0x66, 0x0F, 0xAF, 0xC3]),
+        ("imul eax, ebx", [0x0F, 0xAF, 0xC3]),
+        ("imul rax, rbx", [0x48, 0x0F, 0xAF, 0xC3]),
+        ("imul rax, [rbx]", [0x48, 0x0F, 0xAF, 0x03]),
+        ("imul r8, r9",   [0x4D, 0x0F, 0xAF, 0xC1]),
+
+        // 3-operand IMUL with imm8 (6B /r ib) — short form when imm fits Int8
+        ("imul rax, rbx, 5",   [0x48, 0x6B, 0xC3, 0x05]),
+        ("imul ecx, edx, -1",  [0x6B, 0xCA, 0xFF]),
+        ("imul ax, bx, 4",     [0x66, 0x6B, 0xC3, 0x04]),
+
+        // 3-operand IMUL with imm16/32 (69 /r iw/id) — when imm doesn't fit Int8
+        ("imul rax, rbx, 1024", [0x48, 0x69, 0xC3, 0x00, 0x04, 0x00, 0x00]),
+        ("imul eax, ebx, 4096", [0x69, 0xC3, 0x00, 0x10, 0x00, 0x00]),
+        ("imul ax, bx, 4660",   [0x66, 0x69, 0xC3, 0x34, 0x12]),
+
+        // Memory source on the 3-operand form
+        ("imul rax, [rbx], 5",  [0x48, 0x6B, 0x03, 0x05]),
+    ]
+
+    func testImulMultiOperandAssembles() throws {
+        for (source, expected) in Self.imulMultiOperandCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testImulMultiOperandDisassembles() throws {
+        for (source, bytes) in Self.imulMultiOperandCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// IMUL has no byte form for the multi-operand variants.
+    func testImulMultiOperandRejectsByteWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("imul al, bl")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("imul al, bl, 5")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    /// IMUL has no imm64 form. A qword immediate outside Int32 errors out.
+    func testImulQwordImmediateOutOfRange() {
+        XCTAssertThrowsError(try X86Assembler.assemble("imul rax, rbx, 4294967296")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+    }
+
+    func testMulDivMemoryRequiresSizeHint() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mul [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testMulDivAndImulStreamRoundTrip() throws {
+        let cases = Self.signExtendCases + Self.mulDivCases + Self.imulMultiOperandCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

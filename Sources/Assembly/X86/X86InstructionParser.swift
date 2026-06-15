@@ -42,6 +42,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "enter" {
             return try parseEnter(instruction)
         }
+        if instruction.mnemonic == "imul" {
+            return try parseImul(instruction)
+        }
+        if let kind = X86.MulDivKind(rawValue: instruction.mnemonic), kind != .imul {
+            return try parseMulDivOneOperand(kind, instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -131,6 +137,83 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("\(mnemonic): invalid branch target `\(text)`")
         }
         return .label(text)
+    }
+
+    private static func parseMulDivOneOperand(_ kind: X86.MulDivKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        switch classified {
+        case .register(let r):
+            return .mulDiv(kind, target: .register(r))
+        case .memory(let m, let explicit):
+            guard let width = explicit else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(kind.rawValue) mem requires an explicit size hint (e.g. `qword ptr [...]`)"
+                )
+            }
+            return .mulDiv(kind, target: .memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): target cannot be an immediate")
+        }
+    }
+
+    /// IMUL dispatches by operand count: 1 → mulDiv; 2 → 0F AF /r;
+    /// 3 → 6B/69 /r imm.
+    private static func parseImul(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        switch instruction.operands.count {
+        case 1:
+            return try parseMulDivOneOperand(.imul, instruction)
+        case 2:
+            return try parseImulTwoOperand(instruction)
+        case 3:
+            return try parseImulThreeOperand(instruction)
+        default:
+            throw AssemblerError.invalidOperandCount(
+                instruction: "imul",
+                expected: "1, 2, or 3 operands",
+                actual: instruction.operands.count
+            )
+        }
+    }
+
+    private static func parseImulTwoOperand(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        let destination = try register(instruction.operands[0])
+        guard destination.width != .byte else {
+            throw AssemblerError.unsupportedOperand("imul: 2-operand form requires word/dword/qword")
+        }
+        let source = try parseImulSource(instruction.operands[1], paired: destination.width)
+        return .imulRegister(destination: destination, source: source)
+    }
+
+    private static func parseImulThreeOperand(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        let destination = try register(instruction.operands[0])
+        guard destination.width != .byte else {
+            throw AssemblerError.unsupportedOperand("imul: 3-operand form requires word/dword/qword")
+        }
+        let source = try parseImulSource(instruction.operands[1], paired: destination.width)
+        let immediate = try immediateAny(instruction.operands[2])
+        try validateImmediateRange(immediate, width: destination.width, mnemonic: "imul")
+        return .imulImmediate(destination: destination, source: source, immediate: immediate)
+    }
+
+    private static func parseImulSource(_ text: String, paired: X86.RegisterWidth) throws -> X86.RegisterOrMemory {
+        let classified = try classifyOperand(text)
+        switch classified {
+        case .register(let r):
+            try checkWidthsMatch(r.width, paired, mnemonic: "imul")
+            return .register(r)
+        case .memory(let m, let explicit):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: paired, mnemonic: "imul")
+            return .memory(m, width: width)
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("imul: source cannot be an immediate")
+        }
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

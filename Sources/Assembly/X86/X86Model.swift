@@ -138,6 +138,12 @@ internal enum X86 {
         case cpuid
         case rdtsc, rdtscp, rdmsr, wrmsr, rdpmc
         case monitor, mwait
+        // Sign-extension into the accumulator. 0x98 / 0x99 are the same
+        // opcode bytes; the operand-size prefix or REX.W selects which
+        // mnemonic. CBW = AL→AX, CWDE = AX→EAX, CDQE = EAX→RAX;
+        // CWD = AX→DX:AX, CDQ = EAX→EDX:EAX, CQO = RAX→RDX:RAX.
+        case cbw, cwde, cdqe
+        case cwd, cdq, cqo
 
         var bytes: [UInt8] {
             switch self {
@@ -175,6 +181,12 @@ internal enum X86 {
             case .rdpmc:    return [0x0F, 0x33]
             case .monitor:  return [0x0F, 0x01, 0xC8]
             case .mwait:    return [0x0F, 0x01, 0xC9]
+            case .cbw:      return [0x66, 0x98]
+            case .cwde:     return [0x98]
+            case .cdqe:     return [0x48, 0x98]
+            case .cwd:      return [0x66, 0x99]
+            case .cdq:      return [0x99]
+            case .cqo:      return [0x48, 0x99]
             }
         }
 
@@ -333,6 +345,34 @@ internal enum X86 {
         case immediate(UInt8)
     }
 
+    /// 1-operand multiply / divide. The `/n` slash-digit (4..7 in the
+    /// F6/F7 opcode group) selects the operation:
+    ///
+    /// * `/4` MUL — unsigned multiply
+    /// * `/5` IMUL — signed multiply
+    /// * `/6` DIV — unsigned divide
+    /// * `/7` IDIV — signed divide
+    ///
+    /// All four share the same operand shape: a single r/m of any width.
+    /// The implicit accumulator pair (AX, DX:AX, EDX:EAX, RDX:RAX) is
+    /// determined by the operand width.
+    enum MulDivKind: String, Equatable, CaseIterable {
+        case mul, imul, div, idiv
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .mul:  return 4
+            case .imul: return 5
+            case .div:  return 6
+            case .idiv: return 7
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> MulDivKind? {
+            allCases.first { $0.slashDigit == slashDigit }
+        }
+    }
+
     /// Three-operand double-precision shifts `SHLD` / `SHRD`. The count
     /// is either CL (`0F A5 / AD`) or an 8-bit immediate
     /// (`0F A4 / AC ib`); there is no by-1 implicit form.
@@ -468,5 +508,10 @@ internal enum X86 {
         case jumpIndirect(target: RegisterOrMemory)
         case callIndirect(target: RegisterOrMemory)
         case enter(allocation: UInt16, nestingLevel: UInt8)
+        case mulDiv(MulDivKind, target: RegisterOrMemory)
+        /// 2-operand IMUL (`0F AF /r`): r = r × r/m, signed.
+        case imulRegister(destination: Register, source: RegisterOrMemory)
+        /// 3-operand IMUL (`69 /r iw/id`, `6B /r ib`): r = r/m × imm, signed.
+        case imulImmediate(destination: Register, source: RegisterOrMemory, immediate: Int64)
     }
 }

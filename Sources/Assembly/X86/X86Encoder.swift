@@ -78,6 +78,12 @@ internal enum X86InstructionEncoder {
             appendLE16(allocation, into: &bytes)
             bytes.append(nesting)
             return Encoded(bytes: bytes, patches: [])
+        case .mulDiv(let kind, let target):
+            return Encoded(bytes: try encodeMulDiv(kind, target: target), patches: [])
+        case .imulRegister(let dst, let src):
+            return Encoded(bytes: try encodeImulRegister(destination: dst, source: src), patches: [])
+        case .imulImmediate(let dst, let src, let imm):
+            return Encoded(bytes: try encodeImulImmediate(destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -631,6 +637,87 @@ internal enum X86InstructionEncoder {
         return bytes
     }
 
+    // MARK: - MUL / IMUL / DIV / IDIV (1-operand) and IMUL (2/3-operand)
+
+    private static func encodeMulDiv(_ kind: X86.MulDivKind, target: X86.RegisterOrMemory) throws -> [UInt8] {
+        let width = target.width
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = target { forceREX = needsForcedREX([r]) } else { forceREX = false }
+        return try emitOperandPair(
+            opcode: width == .byte ? 0xF6 : 0xF7,
+            width: width,
+            rmOperand: target,
+            regHigh: 0,
+            regLow: kind.slashDigit,
+            forceREX: forceREX
+        )
+    }
+
+    /// 2-operand IMUL (`0F AF /r`). Dst is `reg`, source is `r/m`.
+    /// No byte form exists for this variant.
+    private static func encodeImulRegister(destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        guard dst.width != .byte else {
+            throw AssemblerError.unsupportedOperand("imul: 2-operand form requires word/dword/qword")
+        }
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: "imul")
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: "imul")
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, 0xAF],
+            width: dst.width,
+            rmOperand: source,
+            regHigh: dst.highBit,
+            regLow: dst.lowBits,
+            forceREX: forceREX
+        )
+    }
+
+    /// 3-operand IMUL. The encoder picks the shorter `6B /r ib` form
+    /// when the immediate sign-extends from int8; otherwise the
+    /// `69 /r iw/id` form. The qword form sign-extends imm32 to int64,
+    /// so a value outside Int32 range is rejected — there is no imm64
+    /// form for IMUL.
+    private static func encodeImulImmediate(destination dst: X86.Register, source: X86.RegisterOrMemory, immediate imm: Int64) throws -> [UInt8] {
+        guard dst.width != .byte else {
+            throw AssemblerError.unsupportedOperand("imul: 3-operand form requires word/dword/qword")
+        }
+        try X86Parser.validateImmediateRange(imm, width: dst.width, mnemonic: "imul")
+        if dst.width == .qword { try requireFitsInt32(imm, mnemonic: "imul") }
+
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: "imul")
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: "imul")
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+
+        let fitsInt8 = Int64(Int8(truncatingIfNeeded: imm)) == imm
+        var bytes = try emitOperandPair(
+            opcode: fitsInt8 ? 0x6B : 0x69,
+            width: dst.width,
+            rmOperand: source,
+            regHigh: dst.highBit,
+            regLow: dst.lowBits,
+            forceREX: forceREX
+        )
+        if fitsInt8 {
+            bytes.append(UInt8(bitPattern: Int8(truncatingIfNeeded: imm)))
+        } else {
+            try appendWidthImmediate(imm, width: dst.width, into: &bytes)
+        }
+        return bytes
+    }
+
     // MARK: - Indirect JMP / CALL (FF /4 and FF /2)
 
     /// In 64-bit mode JMP / CALL with an `r/m` operand are always r/m64;
@@ -680,6 +767,26 @@ internal enum X86InstructionEncoder {
         regLow: UInt8,
         forceREX: Bool = false
     ) throws -> [UInt8] {
+        try emitOperandPair(
+            opcodeBytes: [opcode],
+            width: width,
+            rmOperand: rmOperand,
+            regHigh: regHigh,
+            regLow: regLow,
+            forceREX: forceREX
+        )
+    }
+
+    /// Variant accepting a multi-byte opcode (e.g. `[0x0F, 0xAF]` for
+    /// IMUL r, r/m).
+    private static func emitOperandPair(
+        opcodeBytes: [UInt8],
+        width: X86.RegisterWidth,
+        rmOperand: X86.RegisterOrMemory,
+        regHigh: UInt8,
+        regLow: UInt8,
+        forceREX: Bool = false
+    ) throws -> [UInt8] {
         var bytes: [UInt8] = []
         if width == .word { bytes.append(X86.operandSizeOverride) }
         let rexW: UInt8 = width == .qword ? 1 : 0
@@ -688,14 +795,14 @@ internal enum X86InstructionEncoder {
             if let rex = X86.REX.build(w: rexW, r: regHigh, x: 0, b: rm.highBit, forceEmit: forceREX) {
                 bytes.append(rex)
             }
-            bytes.append(opcode)
+            bytes.append(contentsOf: opcodeBytes)
             bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: regLow, rm: rm.lowBits))
         case .memory(let mem, _):
             let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: regLow)
             if let rex = X86.REX.build(w: rexW, r: regHigh, x: rexX, b: rexB, forceEmit: forceREX) {
                 bytes.append(rex)
             }
-            bytes.append(opcode)
+            bytes.append(contentsOf: opcodeBytes)
             bytes.append(contentsOf: addressing)
         }
         return bytes
