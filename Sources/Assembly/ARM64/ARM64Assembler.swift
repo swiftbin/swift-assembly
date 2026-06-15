@@ -30,8 +30,12 @@ public enum ARM64Assembler {
 
     public static func assembleWords(_ source: String, architecture: Architecture = .arm64) throws -> [UInt32] {
         let program = try SourceParser.program(source)
+        // A64 instructions are a fixed 4 bytes; translate the parser's
+        // instruction-index labels into the byte offsets the encoder
+        // expects.
+        let labels = program.labels.mapValues { Int64($0 * 4) }
         return try program.instructions.enumerated().map { index, instruction in
-            try encode(instruction, pc: Int64(index * 4), labels: program.labels, architecture: architecture)
+            try encode(instruction, pc: Int64(index * 4), labels: labels, architecture: architecture)
         }
     }
 

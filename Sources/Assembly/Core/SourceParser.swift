@@ -2,7 +2,7 @@ import Foundation
 
 internal enum SourceParser {
     static func program(_ source: String) throws -> ParsedProgram {
-        var labels: [String: Int64] = [:]
+        var labels: [String: Int] = [:]
         var instructions: [ParsedInstruction] = []
 
         for rawLine in source.components(separatedBy: .newlines) {
@@ -11,7 +11,7 @@ internal enum SourceParser {
 
             while let colonIndex = labelColonIndex(in: line) {
                 let label = String(line[..<colonIndex]).trimmingCharacters(in: .whitespacesAndNewlines)
-                if !label.isEmpty { labels[label] = Int64(instructions.count * 4) }
+                if !label.isEmpty { labels[label] = instructions.count }
                 line = String(line[line.index(after: colonIndex)...]).trimmingCharacters(in: .whitespacesAndNewlines)
                 if line.isEmpty { break }
             }

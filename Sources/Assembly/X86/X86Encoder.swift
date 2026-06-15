@@ -1,14 +1,38 @@
 import Foundation
 
 internal enum X86InstructionEncoder {
+    /// Result of encoding a single instruction: the byte sequence plus
+    /// any patch records describing label-relative fields that must be
+    /// filled in after the second pass of label resolution.
+    struct Encoded {
+        var bytes: [UInt8]
+        var patches: [Patch]
+    }
+
+    /// A record of one rel8 / rel32 field that needs the target label's
+    /// final byte offset filled in after the encoder has visited every
+    /// instruction. `byteOffset` is the position of the first byte of
+    /// the field within `bytes`; `instructionEndOffset` is the position
+    /// just past the end of the instruction (rel is measured from there).
+    struct Patch {
+        var byteOffset: Int
+        var width: Int
+        var label: String
+        var instructionEndOffset: Int
+    }
+
     /// Encode a single source-level instruction into its byte sequence.
+    /// Phase 5 and earlier instructions emit no patches; Phase 6 adds
+    /// branches whose `BranchTarget == .label(_)` produces a placeholder
+    /// rel field with a paired `Patch` to be filled in later.
     static func encode(
         _ instruction: ParsedInstruction,
         pc: Int64,
         labels: [String: Int64]
-    ) throws -> [UInt8] {
+    ) throws -> Encoded {
         let resolved = try X86Parser.parse(instruction)
-        return try encode(resolved)
+        let bytes = try encode(resolved)
+        return Encoded(bytes: bytes, patches: [])
     }
 
     static func encode(_ instruction: X86.Instruction) throws -> [UInt8] {
