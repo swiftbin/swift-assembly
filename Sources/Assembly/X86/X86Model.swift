@@ -99,14 +99,25 @@ internal enum X86 {
         }
     }
 
-    /// Anything addressable by `MOV` as a destination operand.
-    enum MovDestination: Equatable {
+    /// An operand position that can be written: a register or a memory
+    /// reference. Used as the destination of `MOV`, the left-hand side of
+    /// binary ALU ops (ADD/SUB/...), and the target of unary ALU ops
+    /// (INC/NEG/...).
+    enum RegisterOrMemory: Equatable {
         case register(Register)
         case memory(MemoryOperand, width: RegisterWidth)
+
+        var width: RegisterWidth {
+            switch self {
+            case .register(let r): return r.width
+            case .memory(_, let w): return w
+            }
+        }
     }
 
-    /// Anything addressable by `MOV` as a source operand.
-    enum MovSource: Equatable {
+    /// An operand position that can be read: register, memory, or
+    /// immediate. Used as the right-hand side of `MOV` and binary ALU ops.
+    enum Operand: Equatable {
         case register(Register)
         case memory(MemoryOperand, width: RegisterWidth)
         case immediate(Int64)
@@ -179,6 +190,6 @@ internal enum X86 {
     /// The set of instructions recognised by the current implementation.
     enum Instruction: Equatable {
         case zeroOperand(ZeroOperandKind)
-        case mov(destination: MovDestination, source: MovSource)
+        case mov(destination: RegisterOrMemory, source: Operand)
     }
 }

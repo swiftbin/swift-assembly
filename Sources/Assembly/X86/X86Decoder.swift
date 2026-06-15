@@ -250,26 +250,23 @@ internal enum X86InstructionDecoder {
 
     // MARK: - MOV r/m, imm (C6 / C7 /0)
 
-    /// `C6 /0 ib`. Phase 3 still restricts the destination to register-
-    /// direct (`mod == 11`); memory destinations are added when the rest
-    /// of the MI family lands in Phase 4.
+    /// `C6 /0 ib`. Accepts both register-direct (`mod == 11`) and memory
+    /// (`mod != 11`) destinations; the ModR/M `reg` field must be 0.
     private static func decodeMovMI8(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
-        try requireSlash0RegisterDirect(modrm: modrm, opcode: 0xC6)
-        let number = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
-        let destination = makeRegister(number: number, width: .byte, hasREX: prefixes.hasREX)
+        try requireSlash0(modrm: modrm, opcode: 0xC6)
+        let destination = try decodeSlash0Destination(modrm: modrm, prefixes: prefixes, width: .byte, cursor: &cursor)
         let imm = Int64(try cursor.takeByte())
-        return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
+        return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
     }
 
     /// `C7 /0 i{w,d}`. The qword form sign-extends imm32 to Int64 so the
     /// encoder's "fits in Int32" canonical path round-trips.
     private static func decodeMovMIWord(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
-        try requireSlash0RegisterDirect(modrm: modrm, opcode: 0xC7)
+        try requireSlash0(modrm: modrm, opcode: 0xC7)
         let width = selectWidth(prefixes: prefixes)
-        let number = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
-        let destination = makeRegister(number: number, width: width, hasREX: prefixes.hasREX)
+        let destination = try decodeSlash0Destination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
         let imm: Int64
         switch width {
         case .word:  imm = Int64(try cursor.takeLE16())
@@ -277,7 +274,23 @@ internal enum X86InstructionDecoder {
         case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
         case .byte:  throw AssemblerError.unknownEncoding(0xC7)
         }
-        return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
+        return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
+    }
+
+    /// Decode the destination of a `/0` instruction whose ModR/M may be
+    /// either register-direct or memory.
+    private static func decodeSlash0Destination(
+        modrm: UInt8,
+        prefixes: Prefixes,
+        width: X86.RegisterWidth,
+        cursor: inout Cursor
+    ) throws -> X86.RegisterOrMemory {
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let number = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            return .register(makeRegister(number: number, width: width, hasREX: prefixes.hasREX))
+        }
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        return .memory(memory, width: width)
     }
 
     // MARK: - Shared helpers
@@ -299,10 +312,7 @@ internal enum X86InstructionDecoder {
         return X86.Register(number: number, width: width)
     }
 
-    private static func requireSlash0RegisterDirect(modrm: UInt8, opcode: UInt8) throws {
-        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
-            throw AssemblerError.unknownEncoding(UInt32(opcode))
-        }
+    private static func requireSlash0(modrm: UInt8, opcode: UInt8) throws {
         guard X86.ModRM.reg.extract(modrm) == 0 else {
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }

@@ -22,7 +22,7 @@ internal enum X86InstructionEncoder {
 
     // MARK: - MOV
 
-    private static func encodeMov(destination: X86.MovDestination, source: X86.MovSource) throws -> [UInt8] {
+    private static func encodeMov(destination: X86.RegisterOrMemory, source: X86.Operand) throws -> [UInt8] {
         switch (destination, source) {
         case (.register(let dst), .register(let src)):
             return try encodeMovRegRegister(destination: dst, source: src)
@@ -32,8 +32,10 @@ internal enum X86InstructionEncoder {
             return try encodeMovRegMemory(destination: dst, memory: mem, width: width)
         case (.memory(let mem, let width), .register(let src)):
             return try encodeMovMemRegister(memory: mem, width: width, source: src)
-        case (.memory, .immediate), (.memory, .memory):
-            throw AssemblerError.unsupportedOperand("mov: unsupported operand combination")
+        case (.memory(let mem, let width), .immediate(let imm)):
+            return try encodeMovMemImmediate(memory: mem, width: width, immediate: imm)
+        case (.memory, .memory):
+            throw AssemblerError.unsupportedOperand("mov: cannot have two memory operands")
         }
     }
 
@@ -113,6 +115,39 @@ internal enum X86InstructionEncoder {
         try validateByteRegisterCompatibility([src], mnemonic: "mov")
         let opcode: UInt8 = width == .byte ? 0x88 : 0x89
         return try encodeMovWithMemory(opcode: opcode, regField: src.lowBits, regHigh: src.highBit, width: width, memory: mem, forceREX: needsForcedREX([src]))
+    }
+
+    /// MI form (C6 /0 / C7 /0), `mod != 11`. The qword form sign-extends
+    /// imm32 to 64 bits; immediates that do not fit Int32 are rejected.
+    private static func encodeMovMemImmediate(memory mem: X86.MemoryOperand, width: X86.RegisterWidth, immediate imm: Int64) throws -> [UInt8] {
+        try X86Parser.validateImmediateRange(imm, width: width, mnemonic: "mov")
+        if width == .qword {
+            // C7 /0 id sign-extends; reject values that would change bits.
+            guard Int64(Int32(truncatingIfNeeded: imm)) == imm else {
+                throw AssemblerError.immediateOutOfRange(
+                    instruction: "mov qword ptr [..], imm",
+                    value: imm,
+                    range: Int64(Int32.min)...Int64(Int32.max)
+                )
+            }
+        }
+        let opcode: UInt8 = width == .byte ? 0xC6 : 0xC7
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: 0)
+        var bytes: [UInt8] = []
+        if width == .word { bytes.append(X86.operandSizeOverride) }
+        let rexW: UInt8 = width == .qword ? 1 : 0
+        if let rex = X86.REX.build(w: rexW, r: 0, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(opcode)
+        bytes.append(contentsOf: addressing)
+        switch width {
+        case .byte:  bytes.append(UInt8(truncatingIfNeeded: imm))
+        case .word:  appendLE16(UInt16(truncatingIfNeeded: imm), into: &bytes)
+        case .dword: appendLE32(UInt32(truncatingIfNeeded: imm), into: &bytes)
+        case .qword: appendLE32(UInt32(truncatingIfNeeded: imm), into: &bytes)
+        }
+        return bytes
     }
 
     private static func encodeMovWithMemory(

@@ -415,4 +415,74 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 4a MOV mem, imm + size hint
+
+    private static let movMemImmCases: [(String, [UInt8])] = [
+        // byte: C6 /0 ib
+        ("mov byte ptr [rbx], 5",        [0xC6, 0x03, 0x05]),
+        ("mov byte ptr [rbx + 4], 255",  [0xC6, 0x43, 0x04, 0xFF]),
+        // word: 66 C7 /0 iw
+        ("mov word ptr [rbx], 4660",     [0x66, 0xC7, 0x03, 0x34, 0x12]),
+        // dword: C7 /0 id
+        ("mov dword ptr [rbx], 256",     [0xC7, 0x03, 0x00, 0x01, 0x00, 0x00]),
+        // qword: REX.W C7 /0 id (sign-extended)
+        ("mov qword ptr [rbx], 0",       [0x48, 0xC7, 0x03, 0x00, 0x00, 0x00, 0x00]),
+        ("mov qword ptr [rbx], -1",      [0x48, 0xC7, 0x03, 0xFF, 0xFF, 0xFF, 0xFF]),
+        // RIP-relative
+        ("mov qword ptr [rip + 16], 1",
+            [0x48, 0xC7, 0x05, 0x10, 0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00]),
+    ]
+
+    func testMovMemImmAssembles() throws {
+        for (source, expected) in Self.movMemImmCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testMovMemImmDisassembles() throws {
+        for (source, bytes) in Self.movMemImmCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `mov [mem], imm` without a size hint is ambiguous and must be rejected.
+    func testMovMemImmRequiresSizeHint() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mov [rbx], 5")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    /// A size hint that disagrees with the paired register is an error.
+    func testMovSizeHintMismatchRejected() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mov eax, qword ptr [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("mov byte ptr [rbx], rax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    /// `qword ptr` with imm32-range value is fine; with an out-of-range
+    /// value it errors (C7 /0 id is sign-extended only).
+    func testMovQwordMemImmRangeCheck() {
+        XCTAssertNoThrow(try X86Assembler.assemble("mov qword ptr [rbx], 2147483647"))
+        XCTAssertThrowsError(try X86Assembler.assemble("mov qword ptr [rbx], 4294967296")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+    }
+
+    /// A size hint paired with a register is harmless when widths agree.
+    func testMovSizeHintAgreesWithRegister() throws {
+        XCTAssertEqual(try X86Assembler.assemble("mov qword ptr [rbx], rax"), [0x48, 0x89, 0x03])
+        XCTAssertEqual(try X86Assembler.assemble("mov rax, qword ptr [rbx]"), [0x48, 0x8B, 0x03])
+    }
 }

@@ -21,12 +21,13 @@ internal enum X86Parser {
 
     // MARK: - MOV
 
-    /// One of the three operand shapes that can appear on the source side
-    /// of MOV. The destination is restricted to register/memory in
-    /// `parseMov` after both operands are classified.
-    private enum AnyOperand {
+    /// One of the three operand shapes that can appear in a 2-operand
+    /// instruction. Memory operands may carry an explicit size hint from
+    /// the source (`byte ptr [...]`, `qword ptr [...]`, etc.); when none
+    /// is present, the width is inferred from the paired register.
+    enum ClassifiedOperand {
         case register(X86.Register)
-        case memory(X86.MemoryOperand)
+        case memory(X86.MemoryOperand, explicitWidth: X86.RegisterWidth?)
         case immediate(Int64)
     }
 
@@ -38,52 +39,107 @@ internal enum X86Parser {
                 actual: instruction.operands.count
             )
         }
-        let dstParsed = try parseAnyOperand(instruction.operands[0], mnemonic: "mov")
-        let srcParsed = try parseAnyOperand(instruction.operands[1], mnemonic: "mov")
+        let dst = try classifyOperand(instruction.operands[0])
+        let src = try classifyOperand(instruction.operands[1])
 
-        // Width inference: width comes from whichever operand is a register.
-        // mem-mem and imm-mem (without an explicit size hint) are unsupported
-        // in Phase 3; the latter belongs to Phase 4.
-        switch (dstParsed, srcParsed) {
+        switch (dst, src) {
         case (.register(let d), .register(let s)):
-            guard d.width == s.width else {
-                throw AssemblerError.unsupportedOperand(
-                    "mov requires matching operand widths (\(d.widthSuffix) vs \(s.widthSuffix))"
-                )
-            }
+            try checkWidthsMatch(d.width, s.width, mnemonic: "mov")
             return .mov(destination: .register(d), source: .register(s))
 
-        case (.register(let d), .memory(let m)):
-            return .mov(destination: .register(d), source: .memory(m, width: d.width))
+        case (.register(let d), .memory(let m, let explicit)):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: d.width, mnemonic: "mov")
+            return .mov(destination: .register(d), source: .memory(m, width: width))
 
         case (.register(let d), .immediate(let v)):
             try validateImmediateRange(v, width: d.width, mnemonic: "mov")
             return .mov(destination: .register(d), source: .immediate(v))
 
-        case (.memory(let m), .register(let s)):
-            return .mov(destination: .memory(m, width: s.width), source: .register(s))
+        case (.memory(let m, let explicit), .register(let s)):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: s.width, mnemonic: "mov")
+            return .mov(destination: .memory(m, width: width), source: .register(s))
+
+        case (.memory(let m, let explicit), .immediate(let v)):
+            guard let width = explicit else {
+                throw AssemblerError.unsupportedOperand(
+                    "mov mem, imm requires an explicit size hint (e.g. `qword ptr [...]`)"
+                )
+            }
+            try validateImmediateRange(v, width: width, mnemonic: "mov")
+            return .mov(destination: .memory(m, width: width), source: .immediate(v))
 
         case (.memory, .memory):
             throw AssemblerError.unsupportedOperand("mov cannot have two memory operands")
-
-        case (.memory, .immediate):
-            throw AssemblerError.unsupportedOperand("mov mem, imm requires an explicit size hint (deferred)")
 
         case (.immediate, _):
             throw AssemblerError.unsupportedOperand("mov destination cannot be an immediate")
         }
     }
 
-    private static func parseAnyOperand(_ text: String, mnemonic: String) throws -> AnyOperand {
+    /// Classify a single operand string. Recognises bracketed memory
+    /// expressions (optionally prefixed by a size hint), registers, and
+    /// numeric immediates.
+    static func classifyOperand(_ text: String) throws -> ClassifiedOperand {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, memoryText) = stripSizeHint(trimmed) {
+            return .memory(try memoryOperand(memoryText), explicitWidth: width)
+        }
         if trimmed.hasPrefix("[") {
-            return .memory(try memoryOperand(trimmed))
+            return .memory(try memoryOperand(trimmed), explicitWidth: nil)
         }
         if let register = try? register(trimmed) {
             return .register(register)
         }
         let immediate = try immediateAny(trimmed)
         return .immediate(immediate)
+    }
+
+    /// Detect and strip a leading size hint such as `byte ptr` or `qword`.
+    /// Returns `nil` if no recognised hint is present.
+    private static func stripSizeHint(_ text: String) -> (width: X86.RegisterWidth, rest: String)? {
+        let lower = text.lowercased()
+        let hints: [(prefix: String, width: X86.RegisterWidth)] = [
+            ("byte ptr",  .byte),
+            ("word ptr",  .word),
+            ("dword ptr", .dword),
+            ("qword ptr", .qword),
+            ("byte",  .byte),
+            ("word",  .word),
+            ("dword", .dword),
+            ("qword", .qword),
+        ]
+        for (prefix, width) in hints {
+            guard lower.hasPrefix(prefix) else { continue }
+            let prefixEnd = text.index(text.startIndex, offsetBy: prefix.count)
+            // The hint must be followed by whitespace and then a `[...]` body.
+            guard prefixEnd < text.endIndex, text[prefixEnd].isWhitespace else { continue }
+            let rest = text[prefixEnd...].trimmingCharacters(in: .whitespacesAndNewlines)
+            if rest.hasPrefix("[") { return (width, rest) }
+        }
+        return nil
+    }
+
+    private static func checkWidthsMatch(_ a: X86.RegisterWidth, _ b: X86.RegisterWidth, mnemonic: String) throws {
+        guard a == b else {
+            throw AssemblerError.unsupportedOperand(
+                "\(mnemonic) requires matching operand widths"
+            )
+        }
+    }
+
+    /// Reconcile an optional size hint with the width implied by a paired
+    /// register. When both are present they must agree.
+    private static func resolveMemoryWidth(
+        explicit: X86.RegisterWidth?,
+        paired: X86.RegisterWidth,
+        mnemonic: String
+    ) throws -> X86.RegisterWidth {
+        if let explicit, explicit != paired {
+            throw AssemblerError.unsupportedOperand(
+                "\(mnemonic): size hint disagrees with register width"
+            )
+        }
+        return explicit ?? paired
     }
 
     // MARK: - Operand parsing

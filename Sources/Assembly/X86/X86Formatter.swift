@@ -7,22 +7,30 @@ internal enum X86InstructionFormatter {
         case .zeroOperand(let kind):
             return kind.rawValue
         case .mov(let destination, let source):
-            return "mov \(formatDestination(destination)), \(formatSource(source))"
+            let dst = formatDestination(destination, sizeHintWhenImmediate: source)
+            return "mov \(dst), \(formatSource(source))"
         }
     }
 
     // MARK: - Operands
 
-    private static func formatDestination(_ destination: X86.MovDestination) -> String {
+    /// Render a destination operand. When `sizeHintWhenImmediate` is an
+    /// `.immediate` and the destination is memory, the rendering is
+    /// prefixed with `byte ptr` / `word ptr` / `dword ptr` / `qword ptr`
+    /// so the width is unambiguous on re-assembly.
+    static func formatDestination(_ destination: X86.RegisterOrMemory, sizeHintWhenImmediate source: X86.Operand?) -> String {
         switch destination {
         case .register(let register):
             return X86.RegisterTable.canonicalName(for: register)
-        case .memory(let memory, _):
+        case .memory(let memory, let width):
+            if case .immediate = source {
+                return "\(sizeHintPrefix(width)) \(formatMemory(memory))"
+            }
             return formatMemory(memory)
         }
     }
 
-    private static func formatSource(_ source: X86.MovSource) -> String {
+    static func formatSource(_ source: X86.Operand) -> String {
         switch source {
         case .register(let register):
             return X86.RegisterTable.canonicalName(for: register)
@@ -33,11 +41,20 @@ internal enum X86InstructionFormatter {
         }
     }
 
+    static func sizeHintPrefix(_ width: X86.RegisterWidth) -> String {
+        switch width {
+        case .byte:  return "byte ptr"
+        case .word:  return "word ptr"
+        case .dword: return "dword ptr"
+        case .qword: return "qword ptr"
+        }
+    }
+
     /// Render a memory operand in canonical Intel syntax:
     /// `[base + index*scale + disp]`, with terms omitted when absent and
     /// the displacement printed as a signed decimal so positive vs.
     /// negative is visible at a glance.
-    private static func formatMemory(_ memory: X86.MemoryOperand) -> String {
+    static func formatMemory(_ memory: X86.MemoryOperand) -> String {
         var parts: [String] = []
         if memory.ripRelative {
             parts.append("rip")
@@ -51,7 +68,6 @@ internal enum X86InstructionFormatter {
 
         let body: String
         if parts.isEmpty {
-            // `[disp32]` absolute form. Always show the displacement.
             body = String(memory.displacement)
         } else {
             body = parts.joined(separator: " + ")
@@ -63,7 +79,6 @@ internal enum X86InstructionFormatter {
         if parts.isEmpty {
             return "[\(body)]"
         }
-        // Non-zero displacement combined with at least one register term.
         if memory.displacement >= 0 {
             return "[\(body) + \(memory.displacement)]"
         } else {
