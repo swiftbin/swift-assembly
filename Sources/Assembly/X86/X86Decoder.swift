@@ -47,6 +47,9 @@ internal enum X86InstructionDecoder {
         /// instructions and POPCNT/LZCNT/TZCNT it selects an alternate
         /// opcode at the 0F escape.
         var f3Prefix: Bool = false
+        /// The 0xF2 prefix: REPNE/REPNZ on string ops, mandatory prefix
+        /// for some SSE-style instructions.
+        var f2Prefix: Bool = false
         var rex: UInt8? = nil
 
         var hasREX: Bool { rex != nil }
@@ -110,6 +113,9 @@ internal enum X86InstructionDecoder {
                 } else if byte == 0xF3 && !prefixes.f3Prefix {
                     prefixes.f3Prefix = true
                     offset += 1
+                } else if byte == 0xF2 && !prefixes.f2Prefix {
+                    prefixes.f2Prefix = true
+                    offset += 1
                 } else if X86.REX.matches(byte) && prefixes.rex == nil {
                     prefixes.rex = byte
                     offset += 1
@@ -146,6 +152,8 @@ internal enum X86InstructionDecoder {
             return try decodePushImm32(cursor: &cursor)
         case 0x69, 0x6B:
             return try decodeImulImmediate(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x6C, 0x6D, 0x6E, 0x6F:
+            return try decodeStringOp(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x6A:
             return try decodePushImm8(cursor: &cursor)
         case 0x70...0x7F:
@@ -167,6 +175,8 @@ internal enum X86InstructionDecoder {
             // table earlier; if we land here, a prefix (REX or 0x66)
             // has been consumed, making this an XCHG short form.
             return try decodeXchgShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0xA4, 0xA5, 0xA6, 0xA7, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF:
+            return try decodeStringOp(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xA8, 0xA9:
             return try decodeTestAccumulator(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
@@ -311,6 +321,23 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - String operations
+
+    private static func decodeStringOp(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard let kind = X86.StringOpKind.decode(
+            opcode: opcode,
+            operandSize: prefixes.operandSize,
+            rexW: prefixes.rexW == 1
+        ) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let prefix: X86.StringPrefix?
+        if prefixes.f3Prefix       { prefix = .f3 }
+        else if prefixes.f2Prefix  { prefix = .f2 }
+        else                       { prefix = nil }
+        return Decoded(instruction: .stringOp(kind, prefix: prefix), length: cursor.consumed)
     }
 
     // MARK: - CMOVcc / SETcc

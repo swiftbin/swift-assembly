@@ -81,6 +81,16 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         case .bitCount(let kind, let dst, let source):
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
+        case .stringOp(let kind, let prefix):
+            switch prefix {
+            case .none:
+                return kind.rawValue
+            case .some(.f3):
+                // F3 reads as REPE on CMPS/SCAS, REP on the others.
+                return "\(kind.isComparison ? "repe" : "rep") \(kind.rawValue)"
+            case .some(.f2):
+                return "repne \(kind.rawValue)"
+            }
         }
     }
 

@@ -1741,4 +1741,115 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 10a String operations + REP/REPE/REPNE
+
+    private static let stringOpCases: [(String, [UInt8])] = [
+        // MOVS family
+        ("movsb", [0xA4]),
+        ("movsw", [0x66, 0xA5]),
+        ("movsd", [0xA5]),
+        ("movsq", [0x48, 0xA5]),
+
+        // CMPS family
+        ("cmpsb", [0xA6]),
+        ("cmpsw", [0x66, 0xA7]),
+        ("cmpsd", [0xA7]),
+        ("cmpsq", [0x48, 0xA7]),
+
+        // SCAS family
+        ("scasb", [0xAE]),
+        ("scasw", [0x66, 0xAF]),
+        ("scasd", [0xAF]),
+        ("scasq", [0x48, 0xAF]),
+
+        // LODS family
+        ("lodsb", [0xAC]),
+        ("lodsw", [0x66, 0xAD]),
+        ("lodsd", [0xAD]),
+        ("lodsq", [0x48, 0xAD]),
+
+        // STOS family
+        ("stosb", [0xAA]),
+        ("stosw", [0x66, 0xAB]),
+        ("stosd", [0xAB]),
+        ("stosq", [0x48, 0xAB]),
+
+        // INS / OUTS (no qword form for port I/O)
+        ("insb",  [0x6C]),
+        ("insw",  [0x66, 0x6D]),
+        ("insd",  [0x6D]),
+        ("outsb", [0x6E]),
+        ("outsw", [0x66, 0x6F]),
+        ("outsd", [0x6F]),
+
+        // REP on a moving op
+        ("rep movsb", [0xF3, 0xA4]),
+        ("rep movsw", [0xF3, 0x66, 0xA5]),
+        ("rep movsd", [0xF3, 0xA5]),
+        ("rep movsq", [0xF3, 0x48, 0xA5]),
+        ("rep stosb", [0xF3, 0xAA]),
+        ("rep stosq", [0xF3, 0x48, 0xAB]),
+        ("rep lodsd", [0xF3, 0xAD]),
+        ("rep insb",  [0xF3, 0x6C]),
+
+        // REPE on a comparing op (F3)
+        ("repe cmpsb", [0xF3, 0xA6]),
+        ("repe cmpsq", [0xF3, 0x48, 0xA7]),
+        ("repe scasw", [0xF3, 0x66, 0xAF]),
+
+        // REPNE on a comparing op (F2)
+        ("repne cmpsb", [0xF2, 0xA6]),
+        ("repne scasq", [0xF2, 0x48, 0xAF]),
+    ]
+
+    func testStringOpAssembles() throws {
+        for (source, expected) in Self.stringOpCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testStringOpDisassembles() throws {
+        for (source, bytes) in Self.stringOpCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `rep` on a comparing op is the same byte as `repe`; disassembly
+    /// canonicalises to "repe cmpsb" / "repe scasq".
+    func testRepOnComparingFoldsToRepe() throws {
+        XCTAssertEqual(try X86Assembler.assemble("rep cmpsb"), [0xF3, 0xA6])
+        XCTAssertEqual(try X86Assembler.disassemble([0xF3, 0xA6]), "repe cmpsb")
+    }
+
+    /// `repz` / `repnz` are NASM aliases for `repe` / `repne`.
+    func testRepetitionAliases() throws {
+        XCTAssertEqual(try X86Assembler.assemble("repz cmpsb"),  [0xF3, 0xA6])
+        XCTAssertEqual(try X86Assembler.assemble("repnz cmpsb"), [0xF2, 0xA6])
+    }
+
+    /// REPNE is only valid on CMPS/SCAS; the parser rejects it on a
+    /// moving op.
+    func testRepneRejectedOnMovingOp() {
+        XCTAssertThrowsError(try X86Assembler.assemble("repne movsb")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    /// `pause` (F3 90) is still picked up by the zero-operand matcher
+    /// even though F3 is now a tracked prefix.
+    func testPauseStillRecognisedAfterF3PrefixTracking() throws {
+        XCTAssertEqual(try X86Assembler.assemble("pause"), [0xF3, 0x90])
+        XCTAssertEqual(try X86Assembler.disassemble([0xF3, 0x90]), "pause")
+    }
+
+    func testStringOpStreamRoundTrip() throws {
+        let source = Self.stringOpCases.map(\.0).joined(separator: "\n")
+        let expected = Self.stringOpCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

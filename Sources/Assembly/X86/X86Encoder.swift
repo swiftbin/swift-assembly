@@ -112,6 +112,11 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeBitScan(kind, destination: dst, source: source), patches: [])
         case .bitCount(let kind, let dst, let source):
             return Encoded(bytes: try encodeBitCount(kind, destination: dst, source: source), patches: [])
+        case .stringOp(let kind, let prefix):
+            var bytes: [UInt8] = []
+            if let prefix { bytes.append(prefix.byte) }
+            bytes.append(contentsOf: kind.baseBytes)
+            return Encoded(bytes: bytes, patches: [])
         }
     }
 

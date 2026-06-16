@@ -564,6 +564,117 @@ internal enum X86 {
         /// counts (`F3 0F B8/BD/BC /r`). The F3 prefix is mandatory and
         /// distinguishes LZCNT/TZCNT from BSR/BSF at the same opcode.
         case bitCount(BitCountKind, destination: Register, source: RegisterOrMemory)
+        /// String operation (MOVS/CMPS/SCAS/LODS/STOS/INS/OUTS) with an
+        /// optional REP/REPE/REPNE prefix. The operands (RSI/RDI/RAX/DX)
+        /// are implicit so the model only carries the kind + prefix.
+        case stringOp(StringOpKind, prefix: StringPrefix?)
+    }
+
+    /// Identifies one of the implicit-operand string operations. The
+    /// raw value is the canonical mnemonic; surface aliases (e.g. the
+    /// rare `cmpsd` collision with the SSE form) are handled by the
+    /// parser when more context is available.
+    enum StringOpKind: String, Equatable, CaseIterable {
+        case movsb, movsw, movsd, movsq
+        case cmpsb, cmpsw, cmpsd, cmpsq
+        case scasb, scasw, scasd, scasq
+        case lodsb, lodsw, lodsd, lodsq
+        case stosb, stosw, stosd, stosq
+        case insb,  insw,  insd
+        case outsb, outsw, outsd
+
+        /// The full base byte sequence (including the operand-size
+        /// prefix or REX.W for word/qword forms), excluding any REP /
+        /// REPE / REPNE prefix.
+        var baseBytes: [UInt8] {
+            switch self {
+            case .movsb: return [0xA4]
+            case .movsw: return [0x66, 0xA5]
+            case .movsd: return [0xA5]
+            case .movsq: return [0x48, 0xA5]
+
+            case .cmpsb: return [0xA6]
+            case .cmpsw: return [0x66, 0xA7]
+            case .cmpsd: return [0xA7]
+            case .cmpsq: return [0x48, 0xA7]
+
+            case .scasb: return [0xAE]
+            case .scasw: return [0x66, 0xAF]
+            case .scasd: return [0xAF]
+            case .scasq: return [0x48, 0xAF]
+
+            case .lodsb: return [0xAC]
+            case .lodsw: return [0x66, 0xAD]
+            case .lodsd: return [0xAD]
+            case .lodsq: return [0x48, 0xAD]
+
+            case .stosb: return [0xAA]
+            case .stosw: return [0x66, 0xAB]
+            case .stosd: return [0xAB]
+            case .stosq: return [0x48, 0xAB]
+
+            case .insb:  return [0x6C]
+            case .insw:  return [0x66, 0x6D]
+            case .insd:  return [0x6D]
+
+            case .outsb: return [0x6E]
+            case .outsw: return [0x66, 0x6F]
+            case .outsd: return [0x6F]
+            }
+        }
+
+        /// True for CMPS / SCAS, which use the F3 prefix as REPE rather
+        /// than REP and accept F2 (REPNE).
+        var isComparison: Bool {
+            switch self {
+            case .cmpsb, .cmpsw, .cmpsd, .cmpsq,
+                 .scasb, .scasw, .scasd, .scasq:
+                return true
+            default:
+                return false
+            }
+        }
+
+        /// Decode the kind from a base opcode byte plus width info.
+        /// Returns `nil` if the byte isn't a string-op opcode.
+        static func decode(opcode: UInt8, operandSize: Bool, rexW: Bool) -> StringOpKind? {
+            let isByteOpcode = (opcode & 0x01) == 0
+            let widthVariant: StringOpKind?
+            switch opcode {
+            case 0xA4, 0xA5:
+                widthVariant = isByteOpcode ? .movsb : (rexW ? .movsq : (operandSize ? .movsw : .movsd))
+            case 0xA6, 0xA7:
+                widthVariant = isByteOpcode ? .cmpsb : (rexW ? .cmpsq : (operandSize ? .cmpsw : .cmpsd))
+            case 0xAA, 0xAB:
+                widthVariant = isByteOpcode ? .stosb : (rexW ? .stosq : (operandSize ? .stosw : .stosd))
+            case 0xAC, 0xAD:
+                widthVariant = isByteOpcode ? .lodsb : (rexW ? .lodsq : (operandSize ? .lodsw : .lodsd))
+            case 0xAE, 0xAF:
+                widthVariant = isByteOpcode ? .scasb : (rexW ? .scasq : (operandSize ? .scasw : .scasd))
+            case 0x6C, 0x6D:
+                widthVariant = isByteOpcode ? .insb : (operandSize ? .insw : .insd)
+            case 0x6E, 0x6F:
+                widthVariant = isByteOpcode ? .outsb : (operandSize ? .outsw : .outsd)
+            default:
+                widthVariant = nil
+            }
+            return widthVariant
+        }
+    }
+
+    /// The mandatory prefix on a REP / REPE / REPNE string op. The
+    /// formatter resolves the mnemonic by looking at the paired
+    /// `StringOpKind.isComparison` (REP vs REPE for the same F3 byte).
+    enum StringPrefix: Equatable {
+        case f3   // REP (moving ops) / REPE (comparing ops)
+        case f2   // REPNE (comparing ops only)
+
+        var byte: UInt8 {
+            switch self {
+            case .f3: return 0xF3
+            case .f2: return 0xF2
+            }
+        }
     }
 
     enum BitCountKind: String, Equatable, CaseIterable {

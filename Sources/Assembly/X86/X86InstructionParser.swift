@@ -94,6 +94,19 @@ internal enum X86Parser {
             let (destination, source) = try parseRegisterMemoryPair(mnemonic: kind.rawValue, instruction: instruction)
             return .bitCount(kind, destination: destination, source: source)
         }
+        if let kind = X86.StringOpKind(rawValue: instruction.mnemonic) {
+            guard instruction.operands.isEmpty else {
+                throw AssemblerError.invalidOperandCount(
+                    instruction: instruction.mnemonic,
+                    expected: "no operands",
+                    actual: instruction.operands.count
+                )
+            }
+            return .stringOp(kind, prefix: nil)
+        }
+        if let prefix = parseStringRepetitionPrefix(instruction.mnemonic) {
+            return try parseStringWithPrefix(prefix, mnemonic: instruction.mnemonic, instruction: instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -602,6 +615,38 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("\(mnemonic): source cannot be memory")
         }
         return .bitTest(kind, target: target, source: source)
+    }
+
+    /// `rep` / `repe` / `repz` map to the F3 prefix; `repne` / `repnz`
+    /// map to F2. Anything else is not a string repetition prefix.
+    private static func parseStringRepetitionPrefix(_ mnemonic: String) -> X86.StringPrefix? {
+        switch mnemonic {
+        case "rep", "repe", "repz":   return .f3
+        case "repne", "repnz":        return .f2
+        default:                      return nil
+        }
+    }
+
+    private static func parseStringWithPrefix(_ prefix: X86.StringPrefix, mnemonic: String, instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: mnemonic,
+                expected: "1 string-operation mnemonic",
+                actual: instruction.operands.count
+            )
+        }
+        let stringMnemonic = instruction.operands[0]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        guard let kind = X86.StringOpKind(rawValue: stringMnemonic) else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): unknown string operation `\(stringMnemonic)`")
+        }
+        if prefix == .f2 {
+            guard kind.isComparison else {
+                throw AssemblerError.unsupportedOperand("repne/repnz only applies to CMPS/SCAS")
+            }
+        }
+        return .stringOp(kind, prefix: prefix)
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {
