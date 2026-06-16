@@ -153,6 +153,19 @@ internal enum X86 {
         // Cache / TLB / flag-control system ops.
         case invd, wbinvd
         case clts
+        // x87 FPU zero-operand instructions. All ride the D8..DF opcode
+        // range with a fixed mod=11 sub-encoding. Many of these come
+        // in WAIT / no-WAIT pairs (e.g. FINIT = 9B DB E3 vs FNINIT =
+        // DB E3); both forms get their own entry so longest-prefix
+        // matching picks the right canonical mnemonic.
+        case fchs, fabs, fsqrt, frndint
+        case fld1, fldl2t, fldl2e, fldpi, fldlg2, fldln2, fldz
+        case ftst, fxam
+        case fnop, fdecstp, fincstp
+        case fsin, fcos, fsincos, fptan, fpatan, f2xm1
+        case fyl2x, fyl2xp1, fprem, fprem1, fscale, fxtract
+        case fninit, finit, fnclex, fclex
+        case fcompp, fucompp
 
         var bytes: [UInt8] {
             switch self {
@@ -207,6 +220,43 @@ internal enum X86 {
             case .invd:     return [0x0F, 0x08]
             case .wbinvd:   return [0x0F, 0x09]
             case .clts:     return [0x0F, 0x06]
+            // x87 — D9 E0..FF block (unary FP ops and constants).
+            case .fchs:     return [0xD9, 0xE0]
+            case .fabs:     return [0xD9, 0xE1]
+            case .ftst:     return [0xD9, 0xE4]
+            case .fxam:     return [0xD9, 0xE5]
+            case .fld1:     return [0xD9, 0xE8]
+            case .fldl2t:   return [0xD9, 0xE9]
+            case .fldl2e:   return [0xD9, 0xEA]
+            case .fldpi:    return [0xD9, 0xEB]
+            case .fldlg2:   return [0xD9, 0xEC]
+            case .fldln2:   return [0xD9, 0xED]
+            case .fldz:     return [0xD9, 0xEE]
+            case .f2xm1:    return [0xD9, 0xF0]
+            case .fyl2x:    return [0xD9, 0xF1]
+            case .fptan:    return [0xD9, 0xF2]
+            case .fpatan:   return [0xD9, 0xF3]
+            case .fxtract:  return [0xD9, 0xF4]
+            case .fprem1:   return [0xD9, 0xF5]
+            case .fdecstp:  return [0xD9, 0xF6]
+            case .fincstp:  return [0xD9, 0xF7]
+            case .fprem:    return [0xD9, 0xF8]
+            case .fyl2xp1:  return [0xD9, 0xF9]
+            case .fsqrt:    return [0xD9, 0xFA]
+            case .fsincos:  return [0xD9, 0xFB]
+            case .frndint:  return [0xD9, 0xFC]
+            case .fscale:   return [0xD9, 0xFD]
+            case .fsin:     return [0xD9, 0xFE]
+            case .fcos:     return [0xD9, 0xFF]
+            case .fnop:     return [0xD9, 0xD0]
+            // Compare-and-pop pairs.
+            case .fcompp:   return [0xDE, 0xD9]
+            case .fucompp:  return [0xDA, 0xE9]
+            // Control-word ops: WAIT (0x9B) and no-WAIT variants.
+            case .fnclex:   return [0xDB, 0xE2]
+            case .fninit:   return [0xDB, 0xE3]
+            case .fclex:    return [0x9B, 0xDB, 0xE2]
+            case .finit:    return [0x9B, 0xDB, 0xE3]
             }
         }
 

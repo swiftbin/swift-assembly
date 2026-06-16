@@ -2165,4 +2165,79 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 12a x87 zero-operand instructions
+
+    private static let x87ZeroOperandCases: [(String, [UInt8])] = [
+        // Unary FP and rounding
+        ("fchs",     [0xD9, 0xE0]),
+        ("fabs",     [0xD9, 0xE1]),
+        ("ftst",     [0xD9, 0xE4]),
+        ("fxam",     [0xD9, 0xE5]),
+        ("fsqrt",    [0xD9, 0xFA]),
+        ("frndint",  [0xD9, 0xFC]),
+        // Constants
+        ("fld1",     [0xD9, 0xE8]),
+        ("fldl2t",   [0xD9, 0xE9]),
+        ("fldl2e",   [0xD9, 0xEA]),
+        ("fldpi",    [0xD9, 0xEB]),
+        ("fldlg2",   [0xD9, 0xEC]),
+        ("fldln2",   [0xD9, 0xED]),
+        ("fldz",     [0xD9, 0xEE]),
+        // Transcendental / arithmetic
+        ("f2xm1",    [0xD9, 0xF0]),
+        ("fyl2x",    [0xD9, 0xF1]),
+        ("fptan",    [0xD9, 0xF2]),
+        ("fpatan",   [0xD9, 0xF3]),
+        ("fxtract",  [0xD9, 0xF4]),
+        ("fprem1",   [0xD9, 0xF5]),
+        ("fprem",    [0xD9, 0xF8]),
+        ("fyl2xp1",  [0xD9, 0xF9]),
+        ("fsincos",  [0xD9, 0xFB]),
+        ("fscale",   [0xD9, 0xFD]),
+        ("fsin",     [0xD9, 0xFE]),
+        ("fcos",     [0xD9, 0xFF]),
+        // Stack pointer adjustments
+        ("fdecstp",  [0xD9, 0xF6]),
+        ("fincstp",  [0xD9, 0xF7]),
+        ("fnop",     [0xD9, 0xD0]),
+        // Compare-and-pop pairs
+        ("fucompp",  [0xDA, 0xE9]),
+        ("fcompp",   [0xDE, 0xD9]),
+        // Control word (no-WAIT and WAIT pairs)
+        ("fnclex",   [0xDB, 0xE2]),
+        ("fninit",   [0xDB, 0xE3]),
+        ("fclex",    [0x9B, 0xDB, 0xE2]),
+        ("finit",    [0x9B, 0xDB, 0xE3]),
+    ]
+
+    func testX87ZeroOperandAssembles() throws {
+        for (mnemonic, expected) in Self.x87ZeroOperandCases {
+            XCTAssertEqual(try X86Assembler.assemble(mnemonic), expected, "assemble \(mnemonic)")
+        }
+    }
+
+    func testX87ZeroOperandDisassembles() throws {
+        for (mnemonic, bytes) in Self.x87ZeroOperandCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), mnemonic, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// FWAIT (0x9B) on its own is still recognised as the `wait`
+    /// mnemonic — the longer 9B DB E2/E3 sequences only win when the
+    /// next two bytes form FCLEX/FINIT, so a bare 0x9B falls through
+    /// to the wait entry.
+    func testFwaitStillRecognisedAfterFclexFinit() throws {
+        XCTAssertEqual(try X86Assembler.assemble("wait"), [0x9B])
+        XCTAssertEqual(try X86Assembler.disassemble([0x9B]), "wait")
+        XCTAssertEqual(try X86Assembler.assemble("fwait"), [0x9B])
+    }
+
+    func testX87ZeroOperandStreamRoundTrip() throws {
+        let source = Self.x87ZeroOperandCases.map(\.0).joined(separator: "\n")
+        let expected = Self.x87ZeroOperandCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
