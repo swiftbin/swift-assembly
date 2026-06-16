@@ -741,12 +741,29 @@ internal enum X86 {
         // Rounded average and sum-of-absolute-differences
         case pavgb, pavgw
         case psadbw
+        // Interleave low / high lanes of two vectors
+        case punpcklbw, punpcklwd, punpckldq, punpcklqdq
+        case punpckhbw, punpckhwd, punpckhdq, punpckhqdq
+        // Pack with saturation: word → byte and dword → word
+        case packsswb, packssdw    // signed
+        case packuswb              // unsigned
 
         var opcode2: UInt8 {
             switch self {
+            case .punpcklbw: return 0x60
+            case .punpcklwd: return 0x61
+            case .punpckldq: return 0x62
+            case .packsswb:  return 0x63
             case .pcmpgtb:  return 0x64
             case .pcmpgtw:  return 0x65
             case .pcmpgtd:  return 0x66
+            case .packuswb: return 0x67
+            case .punpckhbw: return 0x68
+            case .punpckhwd: return 0x69
+            case .punpckhdq: return 0x6A
+            case .packssdw:  return 0x6B
+            case .punpcklqdq: return 0x6C
+            case .punpckhqdq: return 0x6D
             case .pcmpeqb:  return 0x74
             case .pcmpeqw:  return 0x75
             case .pcmpeqd:  return 0x76

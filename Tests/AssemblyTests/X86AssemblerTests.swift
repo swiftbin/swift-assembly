@@ -2819,4 +2819,46 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14j PUNPCK + PACK
+
+    private static let ssePackUnpackCases: [(String, [UInt8])] = [
+        // Interleave low halves
+        ("punpcklbw xmm0, xmm1",            [0x66, 0x0F, 0x60, 0xC1]),
+        ("punpcklwd xmm0, xmm1",            [0x66, 0x0F, 0x61, 0xC1]),
+        ("punpckldq xmm0, xmm1",            [0x66, 0x0F, 0x62, 0xC1]),
+        ("punpcklqdq xmm0, xmm1",           [0x66, 0x0F, 0x6C, 0xC1]),
+        // Interleave high halves
+        ("punpckhbw xmm0, xmm1",            [0x66, 0x0F, 0x68, 0xC1]),
+        ("punpckhwd xmm0, xmm1",            [0x66, 0x0F, 0x69, 0xC1]),
+        ("punpckhdq xmm0, xmm1",            [0x66, 0x0F, 0x6A, 0xC1]),
+        ("punpckhqdq xmm0, xmm1",           [0x66, 0x0F, 0x6D, 0xC1]),
+        // Pack with saturation
+        ("packsswb xmm0, xmm1",             [0x66, 0x0F, 0x63, 0xC1]),
+        ("packssdw xmm0, xmm1",             [0x66, 0x0F, 0x6B, 0xC1]),
+        ("packuswb xmm0, xmm1",             [0x66, 0x0F, 0x67, 0xC1]),
+        // Memory + extended XMM
+        ("punpcklbw xmm0, xmmword ptr [rbx]", [0x66, 0x0F, 0x60, 0x03]),
+        ("packsswb xmm8, xmm9",               [0x66, 0x45, 0x0F, 0x63, 0xC1]),
+    ]
+
+    func testSSEPackUnpackAssembles() throws {
+        for (source, expected) in Self.ssePackUnpackCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEPackUnpackDisassembles() throws {
+        for (source, bytes) in Self.ssePackUnpackCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEPackUnpackStreamRoundTrip() throws {
+        let source = Self.ssePackUnpackCases.map(\.0).joined(separator: "\n")
+        let expected = Self.ssePackUnpackCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
