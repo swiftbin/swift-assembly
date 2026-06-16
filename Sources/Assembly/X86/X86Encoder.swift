@@ -94,6 +94,14 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeExtendingMove(kind, destination: dst, source: src), patches: [])
         case .bswap(let reg):
             return Encoded(bytes: try encodeBswap(reg), patches: [])
+        case .xchg(let target, let register):
+            return Encoded(bytes: try encodeXchg(target: target, register: register), patches: [])
+        case .xadd(let target, let source):
+            return Encoded(bytes: try encodeXaddCmpxchg(target: target, source: source, kindByte: 0xC0, kindNonByte: 0xC1, mnemonic: "xadd"), patches: [])
+        case .cmpxchg(let target, let source):
+            return Encoded(bytes: try encodeXaddCmpxchg(target: target, source: source, kindByte: 0xB0, kindNonByte: 0xB1, mnemonic: "cmpxchg"), patches: [])
+        case .cmpxchgWide(let kind, let mem):
+            return Encoded(bytes: try encodeCmpxchgWide(kind, memory: mem), patches: [])
         }
     }
 
@@ -852,6 +860,102 @@ internal enum X86InstructionEncoder {
         }
         bytes.append(0x0F)
         bytes.append(0xC8 | reg.lowBits)
+        return bytes
+    }
+
+    // MARK: - XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B
+
+    /// XCHG picks the short form (`90+rd` with the operand-size prefix)
+    /// when exactly one operand is rAX and the width is non-byte; the
+    /// long form (86/87 `/r` MR) is used in all other cases. Both forms
+    /// are symmetric in semantics so the parser-derived `target` may be
+    /// either side.
+    private static func encodeXchg(target: X86.RegisterOrMemory, register: X86.Register) throws -> [UInt8] {
+        let width = register.width
+        if case .register(let r) = target {
+            guard r.width == width else {
+                throw AssemblerError.unsupportedOperand("xchg: width mismatch")
+            }
+            if width != .byte {
+                // Short form when exactly one operand is rAX.
+                if r.number == 0 && register.number != 0 {
+                    return encodeXchgShort(other: register, width: width)
+                }
+                if register.number == 0 && r.number != 0 {
+                    return encodeXchgShort(other: r, width: width)
+                }
+            }
+            try checkRegisterRegisterCompat([r, register], mnemonic: "xchg")
+            return try emitOperandPair(
+                opcode: width == .byte ? 0x86 : 0x87,
+                width: width,
+                rmOperand: .register(r),
+                regHigh: register.highBit,
+                regLow: register.lowBits,
+                forceREX: needsForcedREX([r, register])
+            )
+        }
+        // Memory target — MR form is the only available encoding.
+        try checkRegisterRegisterCompat([register], mnemonic: "xchg")
+        return try emitOperandPair(
+            opcode: width == .byte ? 0x86 : 0x87,
+            width: width,
+            rmOperand: target,
+            regHigh: register.highBit,
+            regLow: register.lowBits,
+            forceREX: needsForcedREX([register])
+        )
+    }
+
+    private static func encodeXchgShort(other: X86.Register, width: X86.RegisterWidth) -> [UInt8] {
+        var bytes: [UInt8] = []
+        if width == .word { bytes.append(X86.operandSizeOverride) }
+        let rexW: UInt8 = width == .qword ? 1 : 0
+        if let rex = X86.REX.build(w: rexW, b: other.highBit) {
+            bytes.append(rex)
+        }
+        bytes.append(0x90 | other.lowBits)
+        return bytes
+    }
+
+    /// XADD and CMPXCHG share the same MR shape (`0F C0/C1 /r` and
+    /// `0F B0/B1 /r`); only the second opcode byte differs.
+    private static func encodeXaddCmpxchg(target: X86.RegisterOrMemory, source: X86.Register, kindByte: UInt8, kindNonByte: UInt8, mnemonic: String) throws -> [UInt8] {
+        let width = source.width
+        if case .register(let r) = target {
+            guard r.width == width else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): width mismatch")
+            }
+            try checkRegisterRegisterCompat([r, source], mnemonic: mnemonic)
+        } else {
+            try checkRegisterRegisterCompat([source], mnemonic: mnemonic)
+        }
+        let forceREX: Bool
+        if case .register(let r) = target { forceREX = needsForcedREX([r, source]) }
+        else { forceREX = needsForcedREX([source]) }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, width == .byte ? kindByte : kindNonByte],
+            width: width,
+            rmOperand: target,
+            regHigh: source.highBit,
+            regLow: source.lowBits,
+            forceREX: forceREX
+        )
+    }
+
+    /// CMPXCHG8B / CMPXCHG16B (`0F C7 /1`). The 16-byte variant is the
+    /// REX.W form. The memory operand's width is implicit in the
+    /// mnemonic, so it doesn't ride emitOperandPair's width logic.
+    private static func encodeCmpxchgWide(_ kind: X86.CmpxchgWideKind, memory mem: X86.MemoryOperand) throws -> [UInt8] {
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: 1)
+        var bytes: [UInt8] = []
+        let rexW: UInt8 = kind == .cmpxchg16b ? 1 : 0
+        if let rex = X86.REX.build(w: rexW, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xC7)
+        bytes.append(contentsOf: addressing)
         return bytes
     }
 

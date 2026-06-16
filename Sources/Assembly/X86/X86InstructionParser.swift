@@ -63,6 +63,18 @@ internal enum X86Parser {
         if instruction.mnemonic == "bswap" {
             return try parseBswap(instruction)
         }
+        if instruction.mnemonic == "xchg" {
+            return try parseXchg(instruction)
+        }
+        if instruction.mnemonic == "xadd" {
+            return try parseXaddOrCmpxchg(instruction, isCmpxchg: false)
+        }
+        if instruction.mnemonic == "cmpxchg" {
+            return try parseXaddOrCmpxchg(instruction, isCmpxchg: true)
+        }
+        if let kind = X86.CmpxchgWideKind(rawValue: instruction.mnemonic) {
+            return try parseCmpxchgWide(kind, instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -381,6 +393,80 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("bswap: requires 32- or 64-bit register")
         }
         return .bswap(reg)
+    }
+
+    private static func parseXchg(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "xchg",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let a = try classifyOperand(instruction.operands[0])
+        let b = try classifyOperand(instruction.operands[1])
+
+        if case .immediate = a { throw AssemblerError.unsupportedOperand("xchg: immediate not allowed") }
+        if case .immediate = b { throw AssemblerError.unsupportedOperand("xchg: immediate not allowed") }
+
+        switch (a, b) {
+        case (.register(let ar), .register(let br)):
+            try checkWidthsMatch(ar.width, br.width, mnemonic: "xchg")
+            return .xchg(target: .register(ar), register: br)
+        case (.register(let ar), .memory(let m, let explicit)):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: ar.width, mnemonic: "xchg")
+            return .xchg(target: .memory(m, width: width), register: ar)
+        case (.memory(let m, let explicit), .register(let br)):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: br.width, mnemonic: "xchg")
+            return .xchg(target: .memory(m, width: width), register: br)
+        case (.memory, .memory):
+            throw AssemblerError.unsupportedOperand("xchg: cannot have two memory operands")
+        default:
+            throw AssemblerError.unsupportedOperand("xchg: invalid operands")
+        }
+    }
+
+    private static func parseXaddOrCmpxchg(_ instruction: ParsedInstruction, isCmpxchg: Bool) throws -> X86.Instruction {
+        let mnemonic = instruction.mnemonic
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: mnemonic,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dstClassified = try classifyOperand(instruction.operands[0])
+        let source = try register(instruction.operands[1])
+        let target: X86.RegisterOrMemory
+        switch dstClassified {
+        case .register(let r):
+            try checkWidthsMatch(r.width, source.width, mnemonic: mnemonic)
+            target = .register(r)
+        case .memory(let m, let explicit):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: source.width, mnemonic: mnemonic)
+            target = .memory(m, width: width)
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): destination cannot be immediate")
+        }
+        return isCmpxchg ? .cmpxchg(target: target, source: source) : .xadd(target: target, source: source)
+    }
+
+    /// CMPXCHG8B / CMPXCHG16B — operand is bare memory; width is
+    /// implicit in the mnemonic and any user-supplied size hint is
+    /// silently accepted (and ignored).
+    private static func parseCmpxchgWide(_ kind: X86.CmpxchgWideKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 memory operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        guard case .memory(let mem, _) = classified else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand must be a memory reference")
+        }
+        return .cmpxchgWide(kind, mem)
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

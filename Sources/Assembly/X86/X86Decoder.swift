@@ -146,12 +146,19 @@ internal enum X86InstructionDecoder {
             return try decodeBinaryAluMI(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x84, 0x85:
             return try decodeTestMR(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x86, 0x87:
+            return try decodeXchgMR(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x88, 0x89, 0x8A, 0x8B:
             return try decodeMovRegisterMemory(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x8D:
             return try decodeLea(prefixes: prefixes, cursor: &cursor)
         case 0x8F:
             return try decodePopMemory(prefixes: prefixes, cursor: &cursor)
+        case 0x90...0x97:
+            // 0x90 alone is NOP and gets matched by the zero-operand
+            // table earlier; if we land here, a prefix (REX or 0x66)
+            // has been consumed, making this an XCHG short form.
+            return try decodeXchgShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xA8, 0xA9:
             return try decodeTestAccumulator(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
@@ -245,6 +252,8 @@ internal enum X86InstructionDecoder {
         case 0xAD: return try decodeDoubleShift(kind: .shrd, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAF:
             return try decodeImulRegister(prefixes: prefixes, cursor: &cursor)
+        case 0xB0, 0xB1:
+            return try decodeXaddCmpxchg(opcode2: opcode2, isCmpxchg: true, prefixes: prefixes, cursor: &cursor)
         case 0xB6:
             return try decodeExtendingMove(kind: .movzx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
         case 0xB7:
@@ -253,11 +262,67 @@ internal enum X86InstructionDecoder {
             return try decodeExtendingMove(kind: .movsx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
         case 0xBF:
             return try decodeExtendingMove(kind: .movsx, sourceWidth: .word, prefixes: prefixes, cursor: &cursor)
+        case 0xC0, 0xC1:
+            return try decodeXaddCmpxchg(opcode2: opcode2, isCmpxchg: false, prefixes: prefixes, cursor: &cursor)
+        case 0xC7:
+            return try decodeCmpxchgWide(prefixes: prefixes, cursor: &cursor)
         case 0xC8...0xCF:
             return try decodeBswap(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B
+
+    private static func decodeXchgMR(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode == 0x86)
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let register = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .xchg(target: target, register: register), length: cursor.consumed)
+    }
+
+    /// Decode the `XCHG rAX, r` short form. Canonical disassembly places
+    /// rAX first; the encoder produces the same bytes regardless of the
+    /// source-level order.
+    private static func decodeXchgShort(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let otherNumber = (prefixes.rexB << 3) | (opcode & 0x07)
+        let other = X86.Register(number: otherNumber, width: width)
+        let accumulator = X86.Register(number: 0, width: width)
+        return Decoded(
+            instruction: .xchg(target: .register(accumulator), register: other),
+            length: cursor.consumed
+        )
+    }
+
+    private static func decodeXaddCmpxchg(opcode2: UInt8, isCmpxchg: Bool, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode2 == 0xB0 || opcode2 == 0xC0)
+        let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let source = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let instruction: X86.Instruction = isCmpxchg
+            ? .cmpxchg(target: target, source: source)
+            : .xadd(target: target, source: source)
+        return Decoded(instruction: instruction, length: cursor.consumed)
+    }
+
+    private static func decodeCmpxchgWide(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.reg.extract(modrm) == 1 else {
+            throw AssemblerError.unknownEncoding(0xC7)
+        }
+        guard X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(0xC7)
+        }
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        let kind: X86.CmpxchgWideKind = prefixes.rexW == 1 ? .cmpxchg16b : .cmpxchg8b
+        return Decoded(instruction: .cmpxchgWide(kind, memory), length: cursor.consumed)
     }
 
     // MARK: - MOVSX / MOVSXD / MOVZX and BSWAP

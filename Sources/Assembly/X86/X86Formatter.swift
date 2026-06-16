@@ -53,6 +53,14 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(dstName), \(formatExtendingSource(source))"
         case .bswap(let reg):
             return "bswap \(X86.RegisterTable.canonicalName(for: reg))"
+        case .xchg(let target, let register):
+            return "xchg \(formatPairedTarget(target)), \(X86.RegisterTable.canonicalName(for: register))"
+        case .xadd(let target, let source):
+            return "xadd \(formatPairedTarget(target)), \(X86.RegisterTable.canonicalName(for: source))"
+        case .cmpxchg(let target, let source):
+            return "cmpxchg \(formatPairedTarget(target)), \(X86.RegisterTable.canonicalName(for: source))"
+        case .cmpxchgWide(let kind, let mem):
+            return "\(kind.rawValue) \(formatMemory(mem))"
         }
     }
 

@@ -1404,4 +1404,106 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 8c XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B
+
+    private static let xchgCases: [(String, [UInt8])] = [
+        // Short form with rAX
+        ("xchg rax, rcx",  [0x48, 0x91]),
+        ("xchg rax, r8",   [0x49, 0x90]),
+        ("xchg eax, ecx",  [0x91]),
+        ("xchg ax, cx",    [0x66, 0x91]),
+        ("xchg rax, rdi",  [0x48, 0x97]),
+
+        // MR form (both non-rAX, or byte width)
+        ("xchg rcx, rdx",  [0x48, 0x87, 0xD1]),
+        ("xchg al, bl",    [0x86, 0xD8]),
+        ("xchg eax, eax",  [0x87, 0xC0]),  // both rAX → MR form
+        ("xchg rax, rax",  [0x48, 0x87, 0xC0]),
+
+        // Memory operand
+        ("xchg [rbx], rax",       [0x48, 0x87, 0x03]),
+        ("xchg [rbx + 8], rcx",   [0x48, 0x87, 0x4B, 0x08]),
+        ("xchg [rsi], al",        [0x86, 0x06]),
+    ]
+
+    private static let xaddCmpxchgCases: [(String, [UInt8])] = [
+        // XADD r/m, r
+        ("xadd al, bl",          [0x0F, 0xC0, 0xD8]),
+        ("xadd eax, ebx",        [0x0F, 0xC1, 0xD8]),
+        ("xadd rax, rbx",        [0x48, 0x0F, 0xC1, 0xD8]),
+        ("xadd [rbx], rax",      [0x48, 0x0F, 0xC1, 0x03]),
+
+        // CMPXCHG r/m, r — implicit comparator is rAX
+        ("cmpxchg al, bl",       [0x0F, 0xB0, 0xD8]),
+        ("cmpxchg eax, ebx",     [0x0F, 0xB1, 0xD8]),
+        ("cmpxchg rax, rbx",     [0x48, 0x0F, 0xB1, 0xD8]),
+        ("cmpxchg [rbx], rcx",   [0x48, 0x0F, 0xB1, 0x0B]),
+
+        // CMPXCHG8B / CMPXCHG16B
+        ("cmpxchg8b [rbx]",      [0x0F, 0xC7, 0x0B]),
+        ("cmpxchg8b [rbx + 16]", [0x0F, 0xC7, 0x4B, 0x10]),
+        ("cmpxchg16b [rbx]",     [0x48, 0x0F, 0xC7, 0x0B]),
+        ("cmpxchg16b [rbx + rcx*8]", [0x48, 0x0F, 0xC7, 0x0C, 0xCB]),
+    ]
+
+    func testXchgAssembles() throws {
+        for (source, expected) in Self.xchgCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testXchgDisassembles() throws {
+        for (source, bytes) in Self.xchgCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `xchg rcx, rax` encodes the same bytes as `xchg rax, rcx`; the
+    /// canonical disassembly places the accumulator first.
+    func testXchgShortFormSwapsOrderToCanonical() throws {
+        XCTAssertEqual(try X86Assembler.assemble("xchg rcx, rax"), [0x48, 0x91])
+        XCTAssertEqual(try X86Assembler.disassemble([0x48, 0x91]), "xchg rax, rcx")
+    }
+
+    /// `xchg r8, rax` and `xchg rax, r8` both reach 49 90; the
+    /// disassembly canonicalises to rAX-first.
+    func testXchgShortFormExtendedRegister() throws {
+        XCTAssertEqual(try X86Assembler.assemble("xchg r8, rax"), [0x49, 0x90])
+        XCTAssertEqual(try X86Assembler.disassemble([0x49, 0x90]), "xchg rax, r8")
+    }
+
+    func testXaddCmpxchgAssembles() throws {
+        for (source, expected) in Self.xaddCmpxchgCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testXaddCmpxchgDisassembles() throws {
+        for (source, bytes) in Self.xaddCmpxchgCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testXchgRejectsImmediate() {
+        XCTAssertThrowsError(try X86Assembler.assemble("xchg rax, 5")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testXaddCmpxchgRequireRegisterSource() {
+        XCTAssertThrowsError(try X86Assembler.assemble("xadd rax, 5")) { _ in }
+        XCTAssertThrowsError(try X86Assembler.assemble("cmpxchg rax, 5")) { _ in }
+    }
+
+    func testExchangeFamilyStreamRoundTrip() throws {
+        let cases = Self.xchgCases + Self.xaddCmpxchgCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

@@ -538,9 +538,23 @@ internal enum X86 {
         case extendingMove(ExtendingMoveKind, destination: Register, source: RegisterOrMemory)
         /// BSWAP r32 / r64 — reverse the byte order of a register.
         case bswap(Register)
+        /// XCHG r/m, r. Symmetric in semantics; the encoder picks the
+        /// short form when exactly one operand is rAX.
+        case xchg(target: RegisterOrMemory, register: Register)
+        /// XADD r/m, r — atomic exchange-add.
+        case xadd(target: RegisterOrMemory, source: Register)
+        /// CMPXCHG r/m, r — atomic compare-and-swap against rAX.
+        case cmpxchg(target: RegisterOrMemory, source: Register)
+        /// CMPXCHG8B / CMPXCHG16B — wide compare-and-swap whose width
+        /// is intrinsic to the mnemonic (8 or 16 bytes).
+        case cmpxchgWide(CmpxchgWideKind, MemoryOperand)
     }
 
     enum ExtendingMoveKind: String, Equatable, CaseIterable {
         case movsx, movzx, movsxd
+    }
+
+    enum CmpxchgWideKind: String, Equatable, CaseIterable {
+        case cmpxchg8b, cmpxchg16b
     }
 }
