@@ -128,6 +128,20 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) xmm\(dst.number), \(srcStr)"
         case .sseFloatToInt(let kind, let dst, let src):
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatXMMOrMemory(src, width: kind.sourceMemoryWidth))"
+        case .movDQ(let kind, let direction, let xmm, let gpr):
+            let xmmStr = "xmm\(xmm.number)"
+            let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
+            switch direction {
+            case .load:  return "\(kind.rawValue) \(xmmStr), \(gprStr)"
+            case .store: return "\(kind.rawValue) \(gprStr), \(xmmStr)"
+            }
+        }
+    }
+
+    private static func formatMovDQGPROperand(_ operand: X86.RegisterOrMemory, width: X86.RegisterWidth) -> String {
+        switch operand {
+        case .register(let r): return X86.RegisterTable.canonicalName(for: r)
+        case .memory(let m, _): return "\(sizeHintPrefix(width)) \(formatMemory(m))"
         }
     }
 

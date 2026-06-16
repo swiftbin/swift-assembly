@@ -281,6 +281,8 @@ internal enum X86InstructionDecoder {
             return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x10, 0x11, 0x28, 0x29, 0x6F, 0x7F:
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x6E, 0x7E:
+            return try decodeMovDQ(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x2A:
             return try decodeSSEIntToFloat(prefixes: prefixes, cursor: &cursor)
         case 0x2C, 0x2D:
@@ -352,6 +354,35 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - MOVD / MOVQ (XMM ↔ GPR/memory)
+
+    /// `66 [REX.W] 0F 6E/7E /r`. The opcode picks load (6E) vs store
+    /// (7E); REX.W picks MOVQ over MOVD.
+    private static func decodeMovDQ(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard prefixes.operandSize else {
+            // F3 0F 7E (MOVQ xmm, xmm/m64) and other unprefixed forms
+            // aren't modelled yet.
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let kind: X86.MovDQKind = prefixes.rexW == 1 ? .movq : .movd
+        let direction: X86.MovDQDirection = (opcode2 == 0x6E) ? .load : .store
+
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let xmm = X86.XMMRegister(number: regNum)
+
+        let gpr: X86.RegisterOrMemory
+        let gprWidth = kind.gprWidth
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            gpr = .register(makeRegister(number: rmNum, width: gprWidth, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            gpr = .memory(mem, width: gprWidth)
+        }
+        return Decoded(instruction: .movDQ(kind, direction: direction, xmm: xmm, gpr: gpr), length: cursor.consumed)
     }
 
     // MARK: - SSE GPR ↔ XMM conversions

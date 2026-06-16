@@ -147,6 +147,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSEIntToFloat(kind, destination: dst, source: src), patches: [])
         case .sseFloatToInt(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEFloatToInt(kind, destination: dst, source: src), patches: [])
+        case .movDQ(let kind, let direction, let xmm, let gpr):
+            return Encoded(bytes: try encodeMovDQ(kind, direction: direction, xmm: xmm, gpr: gpr), patches: [])
         }
     }
 
@@ -976,6 +978,36 @@ internal enum X86InstructionEncoder {
             }
             bytes.append(0x0F)
             bytes.append(kind.opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    // MARK: - MOVD / MOVQ (XMM ↔ GPR/memory)
+
+    /// `66 [REX.W] 0F 6E/7E /r` — load (6E) or store (7E) the low
+    /// dword/qword of an XMM register against a GPR or memory operand.
+    /// REX.W selects MOVQ over MOVD.
+    private static func encodeMovDQ(_ kind: X86.MovDQKind, direction: X86.MovDQDirection, xmm: X86.XMMRegister, gpr: X86.RegisterOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        let rexW: UInt8 = kind == .movq ? 1 : 0
+        let opcode2: UInt8 = direction == .load ? 0x6E : 0x7E
+        switch gpr {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+            if let rex = X86.REX.build(w: rexW, r: xmm.highBit, b: r.highBit, forceEmit: needsForcedREX([r])) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: xmm.lowBits, rm: r.lowBits))
+        case .memory(let mem, _):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: xmm.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: xmm.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(opcode2)
             bytes.append(contentsOf: addressing)
         }
         return bytes

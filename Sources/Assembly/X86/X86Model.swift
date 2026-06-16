@@ -702,6 +702,27 @@ internal enum X86 {
         /// from XMM (or memory) into a signed integer in a GPR
         /// (`F3/F2 0F 2D /r` and `F3/F2 0F 2C /r`).
         case sseFloatToInt(SSEFloatToIntKind, destination: Register, source: XMMOrMemory)
+        /// MOVD / MOVQ — move 32 or 64 bits between an XMM register and
+        /// a GPR or memory operand. The two mnemonics share opcodes
+        /// `66 0F 6E /r` (load) and `66 0F 7E /r` (store); REX.W
+        /// distinguishes MOVD (dword) from MOVQ (qword).
+        case movDQ(MovDQKind, direction: MovDQDirection, xmm: XMMRegister, gpr: RegisterOrMemory)
+    }
+
+    enum MovDQKind: String, Equatable, CaseIterable {
+        case movd, movq
+
+        var gprWidth: RegisterWidth {
+            switch self {
+            case .movd: return .dword
+            case .movq: return .qword
+            }
+        }
+    }
+
+    enum MovDQDirection: Equatable {
+        case load   // xmm <- r/m
+        case store  // r/m <- xmm
     }
 
     enum SSEIntToFloatKind: String, Equatable, CaseIterable {

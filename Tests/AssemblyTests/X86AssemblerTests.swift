@@ -2639,4 +2639,69 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14g MOVD / MOVQ (XMM ↔ GPR)
+
+    private static let movDQCases: [(String, [UInt8])] = [
+        // MOVD xmm, r32 — load 32-bit
+        ("movd xmm0, eax",                  [0x66, 0x0F, 0x6E, 0xC0]),
+        ("movd xmm0, ebx",                  [0x66, 0x0F, 0x6E, 0xC3]),
+        ("movd xmm0, dword ptr [rbx]",      [0x66, 0x0F, 0x6E, 0x03]),
+
+        // MOVD r32, xmm — store low 32 bits
+        ("movd eax, xmm0",                  [0x66, 0x0F, 0x7E, 0xC0]),
+        ("movd dword ptr [rbx], xmm0",      [0x66, 0x0F, 0x7E, 0x03]),
+
+        // MOVQ xmm, r64 — load 64-bit
+        ("movq xmm0, rax",                  [0x66, 0x48, 0x0F, 0x6E, 0xC0]),
+        ("movq xmm0, qword ptr [rbx]",      [0x66, 0x48, 0x0F, 0x6E, 0x03]),
+
+        // MOVQ r64, xmm — store low 64 bits
+        ("movq rax, xmm0",                  [0x66, 0x48, 0x0F, 0x7E, 0xC0]),
+        ("movq qword ptr [rbx], xmm0",      [0x66, 0x48, 0x0F, 0x7E, 0x03]),
+
+        // Extended XMM and GPR
+        ("movd xmm8, r9d",                  [0x66, 0x45, 0x0F, 0x6E, 0xC1]),
+        ("movq r15, xmm15",                 [0x66, 0x4D, 0x0F, 0x7E, 0xFF]),
+    ]
+
+    func testMovDQAssembles() throws {
+        for (source, expected) in Self.movDQCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testMovDQDisassembles() throws {
+        for (source, bytes) in Self.movDQCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testMovDQRejectsWidthMismatch() {
+        // MOVD expects r32; MOVQ expects r64.
+        XCTAssertThrowsError(try X86Assembler.assemble("movd xmm0, rax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("movq xmm0, eax")) { _ in }
+    }
+
+    func testMovDQRequiresXMMOnOneSide() {
+        // Without an XMM operand the parser routes to the GPR `mov`,
+        // not movd / movq.
+        XCTAssertThrowsError(try X86Assembler.assemble("movd eax, ebx")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testMovDQStreamRoundTrip() throws {
+        let source = Self.movDQCases.map(\.0).joined(separator: "\n")
+        let expected = Self.movDQCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
