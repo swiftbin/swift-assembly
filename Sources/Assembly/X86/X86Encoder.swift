@@ -123,6 +123,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: encodePortIO(register: source, port: port, isOut: true), patches: [])
         case .interrupt(let vector):
             return Encoded(bytes: [0xCD, vector], patches: [])
+        case .clflush(let mem):
+            return Encoded(bytes: try encodeMemoryOnlySys(escape2: 0xAE, slashDigit: 7, memory: mem), patches: [])
+        case .invlpg(let mem):
+            return Encoded(bytes: try encodeMemoryOnlySys(escape2: 0x01, slashDigit: 7, memory: mem), patches: [])
         }
     }
 
@@ -902,6 +906,25 @@ internal enum X86InstructionEncoder {
         }
         bytes.append(opcode)
         if case .immediate(let imm) = port { bytes.append(imm) }
+        return bytes
+    }
+
+    // MARK: - Memory-only system instructions
+
+    /// Encode one of the system instructions whose only operand is a
+    /// memory reference and whose width is intrinsic to the mnemonic
+    /// (CLFLUSH, INVLPG, the upcoming SGDT/SIDT/LGDT/LIDT family).
+    /// The two-byte opcode is 0F <escape2>; the `/n` slash-digit picks
+    /// the specific operation. No operand-size prefix, no REX.W.
+    private static func encodeMemoryOnlySys(escape2: UInt8, slashDigit: UInt8, memory: X86.MemoryOperand) throws -> [UInt8] {
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: slashDigit)
+        var bytes: [UInt8] = []
+        if let rex = X86.REX.build(x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(escape2)
+        bytes.append(contentsOf: addressing)
         return bytes
     }
 

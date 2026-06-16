@@ -148,6 +148,11 @@ internal enum X86 {
         // qword; the 0x66 prefix selects the 16-bit form.
         case pushfq, popfq
         case pushfw, popfw
+        // Memory fences (0F AE with mod=11 sub-opcodes).
+        case lfence, mfence, sfence
+        // Cache / TLB / flag-control system ops.
+        case invd, wbinvd
+        case clts
 
         var bytes: [UInt8] {
             switch self {
@@ -196,6 +201,12 @@ internal enum X86 {
             case .popfq:    return [0x9D]
             case .pushfw:   return [0x66, 0x9C]
             case .popfw:    return [0x66, 0x9D]
+            case .lfence:   return [0x0F, 0xAE, 0xE8]
+            case .mfence:   return [0x0F, 0xAE, 0xF0]
+            case .sfence:   return [0x0F, 0xAE, 0xF8]
+            case .invd:     return [0x0F, 0x08]
+            case .wbinvd:   return [0x0F, 0x09]
+            case .clts:     return [0x0F, 0x06]
             }
         }
 
@@ -577,6 +588,13 @@ internal enum X86 {
         /// and INT1 live in `ZeroOperandKind` because they have fixed
         /// opcodes; this case covers the general `CD ib` form.
         case interrupt(vector: UInt8)
+        /// `CLFLUSH m` — flush a cache line containing `m` (`0F AE /7`,
+        /// `mod != 11`).
+        case clflush(MemoryOperand)
+        /// `INVLPG m` — invalidate the TLB entry for `m` (`0F 01 /7`,
+        /// `mod != 11`). The mod=11 sub-encodings of `/7` (`SWAPGS`,
+        /// `RDTSCP`) live in `ZeroOperandKind`.
+        case invlpg(MemoryOperand)
     }
 
     /// The port specifier of IN/OUT: an 8-bit immediate (E4/E5/E6/E7)

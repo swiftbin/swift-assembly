@@ -116,6 +116,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "int" {
             return try parseInterrupt(instruction)
         }
+        if instruction.mnemonic == "clflush" {
+            return .clflush(try parseSingleMemoryOperand(mnemonic: "clflush", instruction: instruction))
+        }
+        if instruction.mnemonic == "invlpg" {
+            return .invlpg(try parseSingleMemoryOperand(mnemonic: "invlpg", instruction: instruction))
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -708,6 +714,25 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: mnemonic, value: value, range: 0...0xFF)
         }
         return .immediate(UInt8(truncatingIfNeeded: value))
+    }
+
+    /// Pull a single bracketed memory expression out of an instruction
+    /// whose operand width is intrinsic to the mnemonic (CLFLUSH,
+    /// INVLPG, the upcoming LGDT/SIDT family). A user-supplied size
+    /// hint is accepted and ignored.
+    private static func parseSingleMemoryOperand(mnemonic: String, instruction: ParsedInstruction) throws -> X86.MemoryOperand {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: mnemonic,
+                expected: "1 memory operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        guard case .memory(let mem, _) = classified else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): operand must be a memory reference")
+        }
+        return mem
     }
 
     private static func parseInterrupt(_ instruction: ParsedInstruction) throws -> X86.Instruction {

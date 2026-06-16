@@ -273,6 +273,8 @@ internal enum X86InstructionDecoder {
 
     private static func decodeTwoByteOpcode(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         switch opcode2 {
+        case 0x01:
+            return try decodeOpcode0F01(prefixes: prefixes, cursor: &cursor)
         case 0x40...0x4F:
             return try decodeCmovcc(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x80...0x8F:
@@ -285,6 +287,8 @@ internal enum X86InstructionDecoder {
         case 0xA5: return try decodeDoubleShift(kind: .shld, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAB:
             return try decodeBitTestRegister(kind: .bts, prefixes: prefixes, cursor: &cursor)
+        case 0xAE:
+            return try decodeOpcode0FAE(prefixes: prefixes, cursor: &cursor)
         case 0xAC: return try decodeDoubleShift(kind: .shrd, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
         case 0xAD: return try decodeDoubleShift(kind: .shrd, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAF:
@@ -332,6 +336,49 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - 0F 01 and 0F AE (system / fence groups)
+
+    /// 0F 01 covers the descriptor-table family (SGDT/SIDT/LGDT/LIDT,
+    /// SMSW/LMSW, INVLPG) plus mod=11 sub-encodings already in the
+    /// zero-operand table (SWAPGS/RDTSCP/MONITOR/MWAIT). Phase 11a
+    /// handles the `/7 mem` form (INVLPG); future commits extend the
+    /// other slash-digits.
+    private static func decodeOpcode0F01(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            // mod=11 sub-encodings of 0F 01 — currently all in the
+            // zero-operand table (SWAPGS/RDTSCP/MONITOR/MWAIT). If we
+            // got here, no zero-operand entry matched, so it's
+            // something not yet modelled.
+            throw AssemblerError.unknownEncoding(0x01)
+        }
+        guard nField == 7 else {
+            throw AssemblerError.unknownEncoding(0x01)
+        }
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        return Decoded(instruction: .invlpg(memory), length: cursor.consumed)
+    }
+
+    /// 0F AE covers FXSAVE/FXRSTOR/LDMXCSR/STMXCSR/XSAVE/XRSTOR and
+    /// the three memory fences (LFENCE/MFENCE/SFENCE) plus CLFLUSH.
+    /// The mod=11 sub-encodings of /5/6/7 are LFENCE/MFENCE/SFENCE and
+    /// already in the zero-operand table; /7 mod!=11 is CLFLUSH.
+    private static func decodeOpcode0FAE(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            // mod=11 forms — LFENCE/MFENCE/SFENCE are zero-operand;
+            // anything else here we don't model yet.
+            throw AssemblerError.unknownEncoding(0xAE)
+        }
+        guard nField == 7 else {
+            throw AssemblerError.unknownEncoding(0xAE)
+        }
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        return Decoded(instruction: .clflush(memory), length: cursor.consumed)
     }
 
     // MARK: - IN / OUT (port I/O)

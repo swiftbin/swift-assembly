@@ -97,6 +97,10 @@ internal enum X86InstructionFormatter {
             return "out \(formatPort(port)), \(X86.RegisterTable.canonicalName(for: source))"
         case .interrupt(let vector):
             return "int \(vector)"
+        case .clflush(let mem):
+            return "clflush \(formatMemory(mem))"
+        case .invlpg(let mem):
+            return "invlpg \(formatMemory(mem))"
         }
     }
 

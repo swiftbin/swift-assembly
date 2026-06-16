@@ -1949,4 +1949,55 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 11a fences and basic system ops
+
+    private static let systemBaseCases: [(String, [UInt8])] = [
+        // Memory fences (mod=11 forms of 0F AE)
+        ("lfence",  [0x0F, 0xAE, 0xE8]),
+        ("mfence",  [0x0F, 0xAE, 0xF0]),
+        ("sfence",  [0x0F, 0xAE, 0xF8]),
+        // Cache invalidation
+        ("invd",    [0x0F, 0x08]),
+        ("wbinvd",  [0x0F, 0x09]),
+        // Clear task-switched flag
+        ("clts",    [0x0F, 0x06]),
+        // CLFLUSH — 0F AE /7 with mod != 11
+        ("clflush [rbx]",         [0x0F, 0xAE, 0x3B]),
+        ("clflush [rbx + 16]",    [0x0F, 0xAE, 0x7B, 0x10]),
+        ("clflush [rdi + rsi*4]", [0x0F, 0xAE, 0x3C, 0xB7]),
+        // INVLPG — 0F 01 /7 with mod != 11
+        ("invlpg [rbx]",          [0x0F, 0x01, 0x3B]),
+        ("invlpg [rbx + 8]",      [0x0F, 0x01, 0x7B, 0x08]),
+    ]
+
+    func testSystemBaseAssembles() throws {
+        for (source, expected) in Self.systemBaseCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSystemBaseDisassembles() throws {
+        for (source, bytes) in Self.systemBaseCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// SWAPGS / RDTSCP are 0F 01 mod=11 sub-encodings already in the
+    /// zero-operand table — the matcher's longest-prefix win keeps the
+    /// new 0F 01 dispatch from interfering with them.
+    func testSwapgsAndRdtscpStillRecognised() throws {
+        XCTAssertEqual(try X86Assembler.assemble("swapgs"), [0x0F, 0x01, 0xF8])
+        XCTAssertEqual(try X86Assembler.disassemble([0x0F, 0x01, 0xF8]), "swapgs")
+        XCTAssertEqual(try X86Assembler.assemble("rdtscp"), [0x0F, 0x01, 0xF9])
+        XCTAssertEqual(try X86Assembler.disassemble([0x0F, 0x01, 0xF9]), "rdtscp")
+    }
+
+    func testSystemBaseStreamRoundTrip() throws {
+        let source = Self.systemBaseCases.map(\.0).joined(separator: "\n")
+        let expected = Self.systemBaseCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
