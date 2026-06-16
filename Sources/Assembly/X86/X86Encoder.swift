@@ -143,6 +143,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSEMov(kind, destination: dst, source: src), patches: [])
         case .sseArithmetic(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEArithmetic(kind, destination: dst, source: src), patches: [])
+        case .sseIntToFloat(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEIntToFloat(kind, destination: dst, source: src), patches: [])
+        case .sseFloatToInt(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEFloatToInt(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -968,6 +972,60 @@ internal enum X86InstructionEncoder {
         case .memory(let mem):
             let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
             if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    // MARK: - SSE GPR ↔ XMM conversions
+
+    /// `CVTSI2SS xmm, r/m32-or-64` / `CVTSI2SD xmm, r/m32-or-64` —
+    /// `F3/F2 0F 2A /r`. REX.W rides the source GPR's width.
+    private static func encodeSSEIntToFloat(_ kind: X86.SSEIntToFloatKind, destination dst: X86.XMMRegister, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [kind.mandatoryPrefix]
+        let rexW: UInt8 = source.width == .qword ? 1 : 0
+        switch source {
+        case .register(let rm):
+            try checkRegisterRegisterCompat([rm], mnemonic: kind.rawValue)
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, b: rm.highBit, forceEmit: needsForcedREX([rm])) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x2A)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem, _):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x2A)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    /// `CVTSx2SI` / `CVTTSx2SI r32-or-64, xmm/m32-or-m64` —
+    /// `F3/F2 0F 2C-or-2D /r`. REX.W rides the destination GPR's width.
+    private static func encodeSSEFloatToInt(_ kind: X86.SSEFloatToIntKind, destination dst: X86.Register, source: X86.XMMOrMemory) throws -> [UInt8] {
+        try checkRegisterRegisterCompat([dst], mnemonic: kind.rawValue)
+        var bytes: [UInt8] = [kind.mandatoryPrefix]
+        let rexW: UInt8 = dst.width == .qword ? 1 : 0
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, b: rm.highBit, forceEmit: needsForcedREX([dst])) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, x: rexX, b: rexB) {
                 bytes.append(rex)
             }
             bytes.append(0x0F)

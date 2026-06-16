@@ -30,6 +30,12 @@ internal enum X86Parser {
         if let kind = X86.SSEArithmeticKind(rawValue: instruction.mnemonic) {
             return try parseSSEArithmetic(kind, instruction)
         }
+        if let kind = X86.SSEIntToFloatKind(rawValue: instruction.mnemonic) {
+            return try parseSSEIntToFloat(kind, instruction)
+        }
+        if let kind = X86.SSEFloatToIntKind(rawValue: instruction.mnemonic) {
+            return try parseSSEFloatToInt(kind, instruction)
+        }
         if instruction.mnemonic == "lar" {
             let (destination, source) = try parseRegisterMemoryPair(mnemonic: "lar", instruction: instruction)
             return .lar(destination: destination, source: source)
@@ -878,6 +884,57 @@ internal enum X86Parser {
     /// Pull an XMM source operand for the SSE arithmetic family. The
     /// destination is always an XMM register; the source is an XMM
     /// register or memory of the kind's intrinsic width.
+    /// `CVTSI2SS xmm, r/m32-or-64` and `CVTSI2SD xmm, r/m32-or-64`.
+    /// Destination is XMM; source is a GPR or memory of dword/qword.
+    private static func parseSSEIntToFloat(_ kind: X86.SSEIntToFloatKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let classified = try classifyOperand(instruction.operands[1])
+        switch classified {
+        case .register(let r):
+            guard r.width == .dword || r.width == .qword else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): source register must be 32- or 64-bit")
+            }
+            return .sseIntToFloat(kind, destination: destination, source: .register(r))
+        case .memory(let m, let explicit):
+            guard let width = explicit, width == .dword || width == .qword else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory source needs an explicit `dword ptr` or `qword ptr` hint")
+            }
+            return .sseIntToFloat(kind, destination: destination, source: .memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): source cannot be an immediate")
+        }
+    }
+
+    /// `CVTSx2SI` / `CVTTSx2SI r32-or-64, xmm/m32-or-m64`.
+    private static func parseSSEFloatToInt(_ kind: X86.SSEFloatToIntKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try register(instruction.operands[0])
+        guard destination.width == .dword || destination.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination register must be 32- or 64-bit")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: kind.sourceMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        return .sseFloatToInt(kind, destination: destination, source: source)
+    }
+
     private static func parseSSEArithmetic(_ kind: X86.SSEArithmeticKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 2 else {
             throw AssemblerError.invalidOperandCount(

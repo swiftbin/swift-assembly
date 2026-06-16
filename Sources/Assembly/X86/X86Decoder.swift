@@ -281,6 +281,10 @@ internal enum X86InstructionDecoder {
             return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x10, 0x11, 0x28, 0x29, 0x6F, 0x7F:
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x2A:
+            return try decodeSSEIntToFloat(prefixes: prefixes, cursor: &cursor)
+        case 0x2C, 0x2D:
+            return try decodeSSEFloatToInt(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x2E, 0x2F,
              0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
              0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F:
@@ -348,6 +352,60 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - SSE GPR ↔ XMM conversions
+
+    private static func decodeSSEIntToFloat(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8
+        if prefixes.f3Prefix      { mandatoryPrefix = 0xF3 }
+        else if prefixes.f2Prefix { mandatoryPrefix = 0xF2 }
+        else                      { throw AssemblerError.unknownEncoding(0x2A) }
+
+        guard let kind = X86.SSEIntToFloatKind.decode(mandatoryPrefix: mandatoryPrefix) else {
+            throw AssemblerError.unknownEncoding(0x2A)
+        }
+
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+
+        let sourceWidth: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+        let source: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(makeRegister(number: rmNum, width: sourceWidth, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem, width: sourceWidth)
+        }
+        return Decoded(instruction: .sseIntToFloat(kind, destination: dst, source: source), length: cursor.consumed)
+    }
+
+    private static func decodeSSEFloatToInt(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8
+        if prefixes.f3Prefix      { mandatoryPrefix = 0xF3 }
+        else if prefixes.f2Prefix { mandatoryPrefix = 0xF2 }
+        else                      { throw AssemblerError.unknownEncoding(UInt32(opcode2)) }
+
+        guard let kind = X86.SSEFloatToIntKind.decode(mandatoryPrefix: mandatoryPrefix, opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+
+        let modrm = try cursor.takeByte()
+        let dstWidth: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = makeRegister(number: regNum, width: dstWidth, hasREX: prefixes.hasREX)
+
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        return Decoded(instruction: .sseFloatToInt(kind, destination: dst, source: source), length: cursor.consumed)
     }
 
     // MARK: - SSE arithmetic

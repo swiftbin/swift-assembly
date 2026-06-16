@@ -692,6 +692,65 @@ internal enum X86 {
         /// selecting the variant (none for PS, 66 for PD, F3 for SS,
         /// F2 for SD).
         case sseArithmetic(SSEArithmeticKind, destination: XMMRegister, source: XMMOrMemory)
+        /// `CVTSI2SS` / `CVTSI2SD` — convert signed integer from a
+        /// general-purpose register (or memory) into a scalar
+        /// single/double-precision float in an XMM register
+        /// (`F3 0F 2A /r` / `F2 0F 2A /r`).
+        case sseIntToFloat(SSEIntToFloatKind, destination: XMMRegister, source: RegisterOrMemory)
+        /// `CVTSS2SI` / `CVTSD2SI` (rounded) and `CVTTSS2SI` /
+        /// `CVTTSD2SI` (truncated) — convert a scalar single/double
+        /// from XMM (or memory) into a signed integer in a GPR
+        /// (`F3/F2 0F 2D /r` and `F3/F2 0F 2C /r`).
+        case sseFloatToInt(SSEFloatToIntKind, destination: Register, source: XMMOrMemory)
+    }
+
+    enum SSEIntToFloatKind: String, Equatable, CaseIterable {
+        case cvtsi2ss, cvtsi2sd
+
+        var mandatoryPrefix: UInt8 {
+            switch self {
+            case .cvtsi2ss: return 0xF3
+            case .cvtsi2sd: return 0xF2
+            }
+        }
+
+        static func decode(mandatoryPrefix: UInt8) -> SSEIntToFloatKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix }
+        }
+    }
+
+    enum SSEFloatToIntKind: String, Equatable, CaseIterable {
+        case cvtss2si, cvtsd2si     // rounded (uses MXCSR rounding mode)
+        case cvttss2si, cvttsd2si   // truncated
+
+        /// Opcode2: `0x2D` for the rounded variants, `0x2C` for
+        /// the truncating ones.
+        var opcode2: UInt8 {
+            switch self {
+            case .cvtss2si, .cvtsd2si:   return 0x2D
+            case .cvttss2si, .cvttsd2si: return 0x2C
+            }
+        }
+
+        var mandatoryPrefix: UInt8 {
+            switch self {
+            case .cvtss2si, .cvttss2si: return 0xF3
+            case .cvtsd2si, .cvttsd2si: return 0xF2
+            }
+        }
+
+        /// Memory operand width when the source is a memory reference.
+        /// Scalar single → m32; scalar double → m64.
+        var sourceMemoryWidth: RegisterWidth {
+            switch self {
+            case .cvtss2si, .cvttss2si: return .dword
+            case .cvtsd2si, .cvttsd2si: return .qword
+            }
+        }
+
+        static func decode(mandatoryPrefix: UInt8, opcode2: UInt8) -> SSEFloatToIntKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
     }
 
     /// SSE/SSE2 arithmetic variants. The opcode byte at `0F xx`

@@ -2569,4 +2569,74 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14f SSE GPR ↔ XMM conversions
+
+    private static let sseConvertGPRCases: [(String, [UInt8])] = [
+        // CVTSI2SS xmm, r/m32-or-64
+        ("cvtsi2ss xmm0, eax",                  [0xF3, 0x0F, 0x2A, 0xC0]),
+        ("cvtsi2ss xmm0, rax",                  [0xF3, 0x48, 0x0F, 0x2A, 0xC0]),
+        ("cvtsi2ss xmm0, dword ptr [rbx]",      [0xF3, 0x0F, 0x2A, 0x03]),
+        ("cvtsi2ss xmm0, qword ptr [rbx]",      [0xF3, 0x48, 0x0F, 0x2A, 0x03]),
+
+        // CVTSI2SD xmm, r/m32-or-64
+        ("cvtsi2sd xmm0, eax",                  [0xF2, 0x0F, 0x2A, 0xC0]),
+        ("cvtsi2sd xmm0, rax",                  [0xF2, 0x48, 0x0F, 0x2A, 0xC0]),
+
+        // CVTSS2SI r/r64, xmm/m32 (rounded)
+        ("cvtss2si eax, xmm0",                  [0xF3, 0x0F, 0x2D, 0xC0]),
+        ("cvtss2si rax, xmm0",                  [0xF3, 0x48, 0x0F, 0x2D, 0xC0]),
+        ("cvtss2si eax, dword ptr [rbx]",       [0xF3, 0x0F, 0x2D, 0x03]),
+
+        // CVTSD2SI
+        ("cvtsd2si rax, xmm0",                  [0xF2, 0x48, 0x0F, 0x2D, 0xC0]),
+        ("cvtsd2si eax, qword ptr [rbx]",       [0xF2, 0x0F, 0x2D, 0x03]),
+
+        // CVTTSS2SI / CVTTSD2SI (truncating)
+        ("cvttss2si eax, xmm0",                 [0xF3, 0x0F, 0x2C, 0xC0]),
+        ("cvttss2si rax, xmm0",                 [0xF3, 0x48, 0x0F, 0x2C, 0xC0]),
+        ("cvttsd2si rax, xmm0",                 [0xF2, 0x48, 0x0F, 0x2C, 0xC0]),
+        ("cvttsd2si eax, qword ptr [rbx]",      [0xF2, 0x0F, 0x2C, 0x03]),
+
+        // Extended XMM / GPR
+        ("cvtsi2ss xmm8, r9",                   [0xF3, 0x4D, 0x0F, 0x2A, 0xC1]),
+        ("cvtss2si r8, xmm15",                  [0xF3, 0x4D, 0x0F, 0x2D, 0xC7]),
+    ]
+
+    func testSSEConvertGPRAssembles() throws {
+        for (source, expected) in Self.sseConvertGPRCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEConvertGPRDisassembles() throws {
+        for (source, bytes) in Self.sseConvertGPRCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEConvertGPRRejectsByteOrWord() {
+        XCTAssertThrowsError(try X86Assembler.assemble("cvtsi2ss xmm0, al")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("cvtss2si ax, xmm0")) { _ in }
+    }
+
+    func testSSEConvertGPRMemoryNeedsSizeHint() {
+        XCTAssertThrowsError(try X86Assembler.assemble("cvtsi2ss xmm0, [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testSSEConvertGPRStreamRoundTrip() throws {
+        let source = Self.sseConvertGPRCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseConvertGPRCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

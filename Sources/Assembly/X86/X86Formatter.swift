@@ -117,6 +117,17 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(formatXMMOrMemory(dst, width: kind.memoryWidth)), \(formatXMMOrMemory(src, width: kind.memoryWidth))"
         case .sseArithmetic(let kind, let dst, let src):
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: kind.memoryWidth))"
+        case .sseIntToFloat(let kind, let dst, let src):
+            let srcStr: String
+            switch src {
+            case .register(let r):
+                srcStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w):
+                srcStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) xmm\(dst.number), \(srcStr)"
+        case .sseFloatToInt(let kind, let dst, let src):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatXMMOrMemory(src, width: kind.sourceMemoryWidth))"
         }
     }
 
