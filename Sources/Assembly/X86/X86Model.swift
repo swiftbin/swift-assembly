@@ -707,6 +707,54 @@ internal enum X86 {
         /// `66 0F 6E /r` (load) and `66 0F 7E /r` (store); REX.W
         /// distinguishes MOVD (dword) from MOVQ (qword).
         case movDQ(MovDQKind, direction: MovDQDirection, xmm: XMMRegister, gpr: RegisterOrMemory)
+        /// SSE2 packed-integer arithmetic and bit-wise logic.
+        /// Operand shape is `xmm, xmm/m128`; all ride `66 0F xx /r`
+        /// with the opcode picking the operation.
+        case ssePackedInteger(SSEPackedIntegerKind, destination: XMMRegister, source: XMMOrMemory)
+    }
+
+    /// SSE2 packed integer operations on 128-bit XMM operands.
+    /// Width suffixes (`b`/`w`/`d`/`q`) indicate the element size
+    /// (8/16/32/64 bits) within the packed vector. Saturating variants
+    /// use `s` (signed) or `us` (unsigned). All ride `66 0F xx /r`.
+    enum SSEPackedIntegerKind: String, Equatable, CaseIterable {
+        // Unsaturated add / sub by element width
+        case paddb, paddw, paddd, paddq
+        case psubb, psubw, psubd, psubq
+        // Saturating add / sub
+        case paddsb, paddsw, paddusb, paddusw
+        case psubsb, psubsw, psubusb, psubusw
+        // Bit-wise logic
+        case pand, pandn, por, pxor
+
+        var opcode2: UInt8 {
+            switch self {
+            case .paddq:    return 0xD4
+            case .psubusb:  return 0xD8
+            case .psubusw:  return 0xD9
+            case .pand:     return 0xDB
+            case .paddusb:  return 0xDC
+            case .paddusw:  return 0xDD
+            case .pandn:    return 0xDF
+            case .psubsb:   return 0xE8
+            case .psubsw:   return 0xE9
+            case .por:      return 0xEB
+            case .paddsb:   return 0xEC
+            case .paddsw:   return 0xED
+            case .pxor:     return 0xEF
+            case .psubb:    return 0xF8
+            case .psubw:    return 0xF9
+            case .psubd:    return 0xFA
+            case .psubq:    return 0xFB
+            case .paddb:    return 0xFC
+            case .paddw:    return 0xFD
+            case .paddd:    return 0xFE
+            }
+        }
+
+        static func decode(opcode2: UInt8) -> SSEPackedIntegerKind? {
+            allCases.first { $0.opcode2 == opcode2 }
+        }
     }
 
     enum MovDQKind: String, Equatable, CaseIterable {

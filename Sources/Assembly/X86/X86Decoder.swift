@@ -283,6 +283,10 @@ internal enum X86InstructionDecoder {
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
             return try decodeMovDQ(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0xD4, 0xD8, 0xD9, 0xDB, 0xDC, 0xDD, 0xDF,
+             0xE8, 0xE9, 0xEB, 0xEC, 0xED, 0xEF,
+             0xF8, 0xF9, 0xFA, 0xFB, 0xFC, 0xFD, 0xFE:
+            return try decodeSSEPackedInteger(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x2A:
             return try decodeSSEIntToFloat(prefixes: prefixes, cursor: &cursor)
         case 0x2C, 0x2D:
@@ -354,6 +358,31 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - SSE2 packed integer ops
+
+    private static func decodeSSEPackedInteger(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        // The XMM variants require the 0x66 mandatory prefix; without
+        // it the same opcodes mean MMX (deferred).
+        guard prefixes.operandSize else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        guard let kind = X86.SSEPackedIntegerKind.decode(opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        return Decoded(instruction: .ssePackedInteger(kind, destination: dst, source: source), length: cursor.consumed)
     }
 
     // MARK: - MOVD / MOVQ (XMM ↔ GPR/memory)

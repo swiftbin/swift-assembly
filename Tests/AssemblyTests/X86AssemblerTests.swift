@@ -2704,4 +2704,64 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14h SSE2 packed integer ops
+
+    private static let ssePackedIntegerCases: [(String, [UInt8])] = [
+        // Unsaturated add (B/W/D/Q)
+        ("paddb xmm0, xmm1",                [0x66, 0x0F, 0xFC, 0xC1]),
+        ("paddw xmm0, xmm1",                [0x66, 0x0F, 0xFD, 0xC1]),
+        ("paddd xmm0, xmm1",                [0x66, 0x0F, 0xFE, 0xC1]),
+        ("paddq xmm0, xmm1",                [0x66, 0x0F, 0xD4, 0xC1]),
+        ("paddb xmm0, xmmword ptr [rbx]",   [0x66, 0x0F, 0xFC, 0x03]),
+
+        // Unsaturated sub
+        ("psubb xmm0, xmm1",                [0x66, 0x0F, 0xF8, 0xC1]),
+        ("psubw xmm0, xmm1",                [0x66, 0x0F, 0xF9, 0xC1]),
+        ("psubd xmm0, xmm1",                [0x66, 0x0F, 0xFA, 0xC1]),
+        ("psubq xmm0, xmm1",                [0x66, 0x0F, 0xFB, 0xC1]),
+
+        // Saturating signed
+        ("paddsb xmm0, xmm1",               [0x66, 0x0F, 0xEC, 0xC1]),
+        ("paddsw xmm0, xmm1",               [0x66, 0x0F, 0xED, 0xC1]),
+        ("psubsb xmm0, xmm1",               [0x66, 0x0F, 0xE8, 0xC1]),
+        ("psubsw xmm0, xmm1",               [0x66, 0x0F, 0xE9, 0xC1]),
+
+        // Saturating unsigned
+        ("paddusb xmm0, xmm1",              [0x66, 0x0F, 0xDC, 0xC1]),
+        ("paddusw xmm0, xmm1",              [0x66, 0x0F, 0xDD, 0xC1]),
+        ("psubusb xmm0, xmm1",              [0x66, 0x0F, 0xD8, 0xC1]),
+        ("psubusw xmm0, xmm1",              [0x66, 0x0F, 0xD9, 0xC1]),
+
+        // Bit-wise logic
+        ("pand xmm0, xmm1",                 [0x66, 0x0F, 0xDB, 0xC1]),
+        ("pandn xmm0, xmm1",                [0x66, 0x0F, 0xDF, 0xC1]),
+        ("por xmm0, xmm1",                  [0x66, 0x0F, 0xEB, 0xC1]),
+        ("pxor xmm0, xmm1",                 [0x66, 0x0F, 0xEF, 0xC1]),
+
+        // Common idiom + memory + extended XMM
+        ("pxor xmm0, xmm0",                 [0x66, 0x0F, 0xEF, 0xC0]),
+        ("paddd xmm8, xmmword ptr [r9]",    [0x66, 0x45, 0x0F, 0xFE, 0x01]),
+        ("pand xmm15, xmm0",                [0x66, 0x44, 0x0F, 0xDB, 0xF8]),
+    ]
+
+    func testSSEPackedIntegerAssembles() throws {
+        for (source, expected) in Self.ssePackedIntegerCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEPackedIntegerDisassembles() throws {
+        for (source, bytes) in Self.ssePackedIntegerCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEPackedIntegerStreamRoundTrip() throws {
+        let source = Self.ssePackedIntegerCases.map(\.0).joined(separator: "\n")
+        let expected = Self.ssePackedIntegerCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

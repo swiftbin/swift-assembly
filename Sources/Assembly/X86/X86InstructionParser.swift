@@ -39,6 +39,9 @@ internal enum X86Parser {
         if let kind = X86.MovDQKind(rawValue: instruction.mnemonic) {
             return try parseMovDQ(kind, instruction)
         }
+        if let kind = X86.SSEPackedIntegerKind(rawValue: instruction.mnemonic) {
+            return try parseSSEPackedInteger(kind, instruction)
+        }
         if instruction.mnemonic == "lar" {
             let (destination, source) = try parseRegisterMemoryPair(mnemonic: "lar", instruction: instruction)
             return .lar(destination: destination, source: source)
@@ -887,6 +890,25 @@ internal enum X86Parser {
     /// Pull an XMM source operand for the SSE arithmetic family. The
     /// destination is always an XMM register; the source is an XMM
     /// register or memory of the kind's intrinsic width.
+    private static func parseSSEPackedInteger(_ kind: X86.SSEPackedIntegerKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: .xmmword,
+            mnemonic: kind.rawValue
+        )
+        return .ssePackedInteger(kind, destination: destination, source: source)
+    }
+
     /// `MOVD` / `MOVQ` between an XMM register and a GPR or memory
     /// operand. The first operand's type (XMM vs GPR/memory)
     /// determines whether it's the load or store direction.
