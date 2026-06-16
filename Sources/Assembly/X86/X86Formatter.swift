@@ -61,6 +61,10 @@ internal enum X86InstructionFormatter {
             return "cmpxchg \(formatPairedTarget(target)), \(X86.RegisterTable.canonicalName(for: source))"
         case .cmpxchgWide(let kind, let mem):
             return "\(kind.rawValue) \(formatMemory(mem))"
+        case .cmovcc(let cond, let dst, let source):
+            return "cmov\(cond.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
+        case .setcc(let cond, let target):
+            return "set\(cond.rawValue) \(formatStandaloneTarget(target))"
         }
     }
 

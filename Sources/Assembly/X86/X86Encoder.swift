@@ -102,6 +102,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeXaddCmpxchg(target: target, source: source, kindByte: 0xB0, kindNonByte: 0xB1, mnemonic: "cmpxchg"), patches: [])
         case .cmpxchgWide(let kind, let mem):
             return Encoded(bytes: try encodeCmpxchgWide(kind, memory: mem), patches: [])
+        case .cmovcc(let cond, let dst, let src):
+            return Encoded(bytes: try encodeCmovcc(cond, destination: dst, source: src), patches: [])
+        case .setcc(let cond, let target):
+            return Encoded(bytes: try encodeSetcc(cond, target: target), patches: [])
         }
     }
 
@@ -861,6 +865,46 @@ internal enum X86InstructionEncoder {
         bytes.append(0x0F)
         bytes.append(0xC8 | reg.lowBits)
         return bytes
+    }
+
+    // MARK: - CMOVcc / SETcc
+
+    /// CMOVcc r, r/m — `0F (40 | cc) /r`. No byte form.
+    private static func encodeCmovcc(_ cond: X86.Condition, destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: "cmov\(cond.rawValue)")
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: "cmov\(cond.rawValue)")
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, 0x40 | cond.encoding],
+            width: dst.width,
+            rmOperand: source,
+            regHigh: dst.highBit,
+            regLow: dst.lowBits,
+            forceREX: forceREX
+        )
+    }
+
+    /// SETcc r/m8 — `0F (90 | cc) /0`. The ModR/M `reg` field is don't-
+    /// care; we always emit /0 for canonical disassembly.
+    private static func encodeSetcc(_ cond: X86.Condition, target: X86.RegisterOrMemory) throws -> [UInt8] {
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r], mnemonic: "set\(cond.rawValue)")
+        }
+        let forceREX: Bool
+        if case .register(let r) = target { forceREX = needsForcedREX([r]) } else { forceREX = false }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, 0x90 | cond.encoding],
+            width: .byte,
+            rmOperand: target,
+            regHigh: 0,
+            regLow: 0,
+            forceREX: forceREX
+        )
     }
 
     // MARK: - XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B

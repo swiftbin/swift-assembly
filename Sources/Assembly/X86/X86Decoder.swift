@@ -244,8 +244,12 @@ internal enum X86InstructionDecoder {
 
     private static func decodeTwoByteOpcode(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         switch opcode2 {
+        case 0x40...0x4F:
+            return try decodeCmovcc(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x80...0x8F:
             return try decodeJccRel32(opcode2: opcode2, cursor: &cursor)
+        case 0x90...0x9F:
+            return try decodeSetcc(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0xA4: return try decodeDoubleShift(kind: .shld, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
         case 0xA5: return try decodeDoubleShift(kind: .shld, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAC: return try decodeDoubleShift(kind: .shrd, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
@@ -271,6 +275,32 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - CMOVcc / SETcc
+
+    private static func decodeCmovcc(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard let cond = X86.Condition.decode(opcode2 & 0x0F) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(
+            instruction: .cmovcc(cond, destination: destination, source: source),
+            length: cursor.consumed
+        )
+    }
+
+    private static func decodeSetcc(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard let cond = X86.Condition.decode(opcode2 & 0x0F) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: .byte, cursor: &cursor)
+        return Decoded(instruction: .setcc(cond, target: target), length: cursor.consumed)
     }
 
     // MARK: - XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B

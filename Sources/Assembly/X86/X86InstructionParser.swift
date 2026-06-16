@@ -75,6 +75,14 @@ internal enum X86Parser {
         if let kind = X86.CmpxchgWideKind(rawValue: instruction.mnemonic) {
             return try parseCmpxchgWide(kind, instruction)
         }
+        if instruction.mnemonic.hasPrefix("cmov"),
+           let cond = X86.Condition.resolve(suffix: String(instruction.mnemonic.dropFirst(4))) {
+            return try parseCmovcc(cond, instruction)
+        }
+        if instruction.mnemonic.hasPrefix("set"), instruction.mnemonic.count > 3,
+           let cond = X86.Condition.resolve(suffix: String(instruction.mnemonic.dropFirst(3))) {
+            return try parseSetcc(cond, instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -467,6 +475,66 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand must be a memory reference")
         }
         return .cmpxchgWide(kind, mem)
+    }
+
+    private static func parseCmovcc(_ condition: X86.Condition, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        let mnemonic = "cmov\(condition.rawValue)"
+        let (destination, source) = try parseRegisterMemoryPair(mnemonic: mnemonic, instruction: instruction)
+        return .cmovcc(condition, destination: destination, source: source)
+    }
+
+    private static func parseSetcc(_ condition: X86.Condition, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        let mnemonic = "set\(condition.rawValue)"
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: mnemonic,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        switch classified {
+        case .register(let r):
+            guard r.width == .byte else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): operand must be 8-bit")
+            }
+            return .setcc(condition, target: .register(r))
+        case .memory(let m, let explicit):
+            let width = explicit ?? .byte
+            guard width == .byte else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): operand must be 8-bit")
+            }
+            return .setcc(condition, target: .memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): target cannot be an immediate")
+        }
+    }
+
+    /// Shared helper for the `r, r/m` (RM-direction, non-byte) pattern
+    /// used by CMOVcc, BSF/BSR, and POPCNT/LZCNT/TZCNT.
+    private static func parseRegisterMemoryPair(mnemonic: String, instruction: ParsedInstruction) throws -> (X86.Register, X86.RegisterOrMemory) {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: mnemonic,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try register(instruction.operands[0])
+        guard destination.width != .byte else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): byte destination not supported")
+        }
+        let classified = try classifyOperand(instruction.operands[1])
+        switch classified {
+        case .register(let r):
+            try checkWidthsMatch(destination.width, r.width, mnemonic: mnemonic)
+            return (destination, .register(r))
+        case .memory(let m, let explicit):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: destination.width, mnemonic: mnemonic)
+            return (destination, .memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): source cannot be an immediate")
+        }
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

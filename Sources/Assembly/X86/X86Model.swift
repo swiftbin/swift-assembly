@@ -548,6 +548,12 @@ internal enum X86 {
         /// CMPXCHG8B / CMPXCHG16B — wide compare-and-swap whose width
         /// is intrinsic to the mnemonic (8 or 16 bytes).
         case cmpxchgWide(CmpxchgWideKind, MemoryOperand)
+        /// CMOVcc r, r/m — conditional move (16 condition codes, RM form,
+        /// no byte form).
+        case cmovcc(Condition, destination: Register, source: RegisterOrMemory)
+        /// SETcc r/m8 — set byte on condition. The ModR/M `reg` field is
+        /// don't-care and the encoder writes `/0` by convention.
+        case setcc(Condition, target: RegisterOrMemory)
     }
 
     enum ExtendingMoveKind: String, Equatable, CaseIterable {

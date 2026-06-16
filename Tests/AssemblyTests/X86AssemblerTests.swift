@@ -1506,4 +1506,97 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 9a CMOVcc / SETcc
+
+    private static let cmovccCases: [(String, [UInt8])] = [
+        // A sampling across condition codes, widths, and operand shapes.
+        ("cmove rax, rbx",       [0x48, 0x0F, 0x44, 0xC3]),
+        ("cmovne rax, rbx",      [0x48, 0x0F, 0x45, 0xC3]),
+        ("cmovb eax, ebx",       [0x0F, 0x42, 0xC3]),
+        ("cmovae rax, [rbx]",    [0x48, 0x0F, 0x43, 0x03]),
+        ("cmovbe ax, bx",        [0x66, 0x0F, 0x46, 0xC3]),
+        ("cmova rax, [rbx + 8]", [0x48, 0x0F, 0x47, 0x43, 0x08]),
+        ("cmovl rax, rbx",       [0x48, 0x0F, 0x4C, 0xC3]),
+        ("cmovge eax, ebx",      [0x0F, 0x4D, 0xC3]),
+        ("cmovle r8, r9",        [0x4D, 0x0F, 0x4E, 0xC1]),
+        ("cmovg rax, rbx",       [0x48, 0x0F, 0x4F, 0xC3]),
+        ("cmovo rax, rbx",       [0x48, 0x0F, 0x40, 0xC3]),
+        ("cmovs rax, rbx",       [0x48, 0x0F, 0x48, 0xC3]),
+        ("cmovp rax, rbx",       [0x48, 0x0F, 0x4A, 0xC3]),
+    ]
+
+    private static let setccCases: [(String, [UInt8])] = [
+        ("sete al",                  [0x0F, 0x94, 0xC0]),
+        ("setne bl",                 [0x0F, 0x95, 0xC3]),
+        ("setb cl",                  [0x0F, 0x92, 0xC1]),
+        ("setae dl",                 [0x0F, 0x93, 0xC2]),
+        ("setbe ah",                 [0x0F, 0x96, 0xC4]),
+        ("seta bh",                  [0x0F, 0x97, 0xC7]),
+        ("setl r8b",                 [0x41, 0x0F, 0x9C, 0xC0]),
+        ("setg r15b",                [0x41, 0x0F, 0x9F, 0xC7]),
+        ("seto byte ptr [rbx]",      [0x0F, 0x90, 0x03]),
+        ("setno byte ptr [rbx + 4]", [0x0F, 0x91, 0x43, 0x04]),
+        // REX-required byte regs
+        ("sete dil",                 [0x40, 0x0F, 0x94, 0xC7]),
+    ]
+
+    func testCmovccAssembles() throws {
+        for (source, expected) in Self.cmovccCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testCmovccDisassembles() throws {
+        for (source, bytes) in Self.cmovccCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSetccAssembles() throws {
+        for (source, expected) in Self.setccCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSetccDisassembles() throws {
+        for (source, bytes) in Self.setccCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// CMOVcc / SETcc aliases (jz/jc/jnae/jng/...) fold onto the
+    /// canonical condition codes the same way Jcc does.
+    func testConditionalMoveAliases() throws {
+        XCTAssertEqual(try X86Assembler.assemble("cmovz rax, rbx"),  [0x48, 0x0F, 0x44, 0xC3])
+        XCTAssertEqual(try X86Assembler.assemble("cmovnz rax, rbx"), [0x48, 0x0F, 0x45, 0xC3])
+        XCTAssertEqual(try X86Assembler.assemble("cmovc rax, rbx"),  [0x48, 0x0F, 0x42, 0xC3])
+        XCTAssertEqual(try X86Assembler.assemble("setz al"), [0x0F, 0x94, 0xC0])
+        XCTAssertEqual(try X86Assembler.assemble("setnz al"), [0x0F, 0x95, 0xC0])
+    }
+
+    func testCmovccRejectsByteWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("cmove al, bl")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testSetccRequiresByteWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("sete ax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testCmovccSetccStreamRoundTrip() throws {
+        let cases = Self.cmovccCases + Self.setccCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
