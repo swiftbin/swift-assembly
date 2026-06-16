@@ -554,6 +554,60 @@ internal enum X86 {
         /// SETcc r/m8 — set byte on condition. The ModR/M `reg` field is
         /// don't-care and the encoder writes `/0` by convention.
         case setcc(Condition, target: RegisterOrMemory)
+        /// BT / BTS / BTR / BTC — bit test (and optionally set/reset/
+        /// complement). Two operand shapes: `r/m, r` (`0F A3/AB/B3/BB
+        /// /r`) and `r/m, imm8` (`0F BA /n ib`).
+        case bitTest(BitTestKind, target: RegisterOrMemory, source: BitTestSource)
+        /// BSF / BSR — bit scan forward / reverse (`0F BC/BD /r`).
+        case bitScan(BitScanKind, destination: Register, source: RegisterOrMemory)
+    }
+
+    enum BitTestKind: String, Equatable, CaseIterable {
+        case bt, bts, btr, btc
+
+        /// `/n` slash-digit in the imm8 form (`0F BA /n ib`).
+        var slashDigit: UInt8 {
+            switch self {
+            case .bt:  return 4
+            case .bts: return 5
+            case .btr: return 6
+            case .btc: return 7
+            }
+        }
+
+        /// Second-byte opcode for the `r/m, r` form.
+        var registerFormOpcode: UInt8 {
+            switch self {
+            case .bt:  return 0xA3
+            case .bts: return 0xAB
+            case .btr: return 0xB3
+            case .btc: return 0xBB
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> BitTestKind? {
+            allCases.first { $0.slashDigit == slashDigit }
+        }
+
+        static func decodeRegisterForm(opcode2: UInt8) -> BitTestKind? {
+            allCases.first { $0.registerFormOpcode == opcode2 }
+        }
+    }
+
+    enum BitTestSource: Equatable {
+        case register(Register)
+        case immediate(UInt8)
+    }
+
+    enum BitScanKind: String, Equatable, CaseIterable {
+        case bsf, bsr
+
+        var opcode2: UInt8 {
+            switch self {
+            case .bsf: return 0xBC
+            case .bsr: return 0xBD
+            }
+        }
     }
 
     enum ExtendingMoveKind: String, Equatable, CaseIterable {

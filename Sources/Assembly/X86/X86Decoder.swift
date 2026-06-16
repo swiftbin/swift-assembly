@@ -250,18 +250,32 @@ internal enum X86InstructionDecoder {
             return try decodeJccRel32(opcode2: opcode2, cursor: &cursor)
         case 0x90...0x9F:
             return try decodeSetcc(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0xA3:
+            return try decodeBitTestRegister(kind: .bt, prefixes: prefixes, cursor: &cursor)
         case 0xA4: return try decodeDoubleShift(kind: .shld, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
         case 0xA5: return try decodeDoubleShift(kind: .shld, withImmediate: false, prefixes: prefixes, cursor: &cursor)
+        case 0xAB:
+            return try decodeBitTestRegister(kind: .bts, prefixes: prefixes, cursor: &cursor)
         case 0xAC: return try decodeDoubleShift(kind: .shrd, withImmediate: true,  prefixes: prefixes, cursor: &cursor)
         case 0xAD: return try decodeDoubleShift(kind: .shrd, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAF:
             return try decodeImulRegister(prefixes: prefixes, cursor: &cursor)
         case 0xB0, 0xB1:
             return try decodeXaddCmpxchg(opcode2: opcode2, isCmpxchg: true, prefixes: prefixes, cursor: &cursor)
+        case 0xB3:
+            return try decodeBitTestRegister(kind: .btr, prefixes: prefixes, cursor: &cursor)
         case 0xB6:
             return try decodeExtendingMove(kind: .movzx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
         case 0xB7:
             return try decodeExtendingMove(kind: .movzx, sourceWidth: .word, prefixes: prefixes, cursor: &cursor)
+        case 0xBA:
+            return try decodeBitTestImmediate(prefixes: prefixes, cursor: &cursor)
+        case 0xBB:
+            return try decodeBitTestRegister(kind: .btc, prefixes: prefixes, cursor: &cursor)
+        case 0xBC:
+            return try decodeBitScan(.bsf, prefixes: prefixes, cursor: &cursor)
+        case 0xBD:
+            return try decodeBitScan(.bsr, prefixes: prefixes, cursor: &cursor)
         case 0xBE:
             return try decodeExtendingMove(kind: .movsx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
         case 0xBF:
@@ -301,6 +315,38 @@ internal enum X86InstructionDecoder {
         let modrm = try cursor.takeByte()
         let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: .byte, cursor: &cursor)
         return Decoded(instruction: .setcc(cond, target: target), length: cursor.consumed)
+    }
+
+    // MARK: - BT / BTS / BTR / BTC and BSF / BSR
+
+    private static func decodeBitTestRegister(kind: X86.BitTestKind, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let source = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .bitTest(kind, target: target, source: .register(source)), length: cursor.consumed)
+    }
+
+    private static func decodeBitTestImmediate(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.BitTestKind.decode(slashDigit: nField) else {
+            throw AssemblerError.unknownEncoding(0xBA)
+        }
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .bitTest(kind, target: target, source: .immediate(imm)), length: cursor.consumed)
+    }
+
+    private static func decodeBitScan(_ kind: X86.BitScanKind, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .bitScan(kind, destination: destination, source: source), length: cursor.consumed)
     }
 
     // MARK: - XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B

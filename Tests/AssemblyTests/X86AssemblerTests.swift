@@ -1599,4 +1599,84 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 9b BT / BTS / BTR / BTC + BSF / BSR
+
+    private static let bitTestCases: [(String, [UInt8])] = [
+        // r/m, r form
+        ("bt rax, rbx",   [0x48, 0x0F, 0xA3, 0xD8]),
+        ("bts rax, rbx",  [0x48, 0x0F, 0xAB, 0xD8]),
+        ("btr rax, rbx",  [0x48, 0x0F, 0xB3, 0xD8]),
+        ("btc rax, rbx",  [0x48, 0x0F, 0xBB, 0xD8]),
+        ("bt eax, ebx",   [0x0F, 0xA3, 0xD8]),
+        ("bt ax, bx",     [0x66, 0x0F, 0xA3, 0xD8]),
+
+        // r/m, imm8 form (0F BA /n ib)
+        ("bt rax, 5",     [0x48, 0x0F, 0xBA, 0xE0, 0x05]),
+        ("bts rcx, 3",    [0x48, 0x0F, 0xBA, 0xE9, 0x03]),
+        ("btr rax, 7",    [0x48, 0x0F, 0xBA, 0xF0, 0x07]),
+        ("btc rax, 1",    [0x48, 0x0F, 0xBA, 0xF8, 0x01]),
+        ("bt eax, 0",     [0x0F, 0xBA, 0xE0, 0x00]),
+
+        // Memory operand
+        ("bt qword ptr [rbx], 5", [0x48, 0x0F, 0xBA, 0x23, 0x05]),
+        ("bt [rbx], rax",         [0x48, 0x0F, 0xA3, 0x03]),
+    ]
+
+    private static let bitScanCases: [(String, [UInt8])] = [
+        ("bsf rax, rbx",  [0x48, 0x0F, 0xBC, 0xC3]),
+        ("bsr rax, rbx",  [0x48, 0x0F, 0xBD, 0xC3]),
+        ("bsf eax, ebx",  [0x0F, 0xBC, 0xC3]),
+        ("bsr ax, bx",    [0x66, 0x0F, 0xBD, 0xC3]),
+        ("bsf rax, [rbx]", [0x48, 0x0F, 0xBC, 0x03]),
+    ]
+
+    func testBitTestAssembles() throws {
+        for (source, expected) in Self.bitTestCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBitTestDisassembles() throws {
+        for (source, bytes) in Self.bitTestCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testBitScanAssembles() throws {
+        for (source, expected) in Self.bitScanCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBitScanDisassembles() throws {
+        for (source, bytes) in Self.bitScanCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testBitTestRejectsByteWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("bt al, bl")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testBitScanRejectsByteWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("bsf al, bl")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testBitTestStreamRoundTrip() throws {
+        let cases = Self.bitTestCases + Self.bitScanCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

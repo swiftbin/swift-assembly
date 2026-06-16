@@ -65,6 +65,20 @@ internal enum X86InstructionFormatter {
             return "cmov\(cond.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         case .setcc(let cond, let target):
             return "set\(cond.rawValue) \(formatStandaloneTarget(target))"
+        case .bitTest(let kind, let target, let source):
+            let sourceStr: String
+            switch source {
+            case .register(let r): sourceStr = X86.RegisterTable.canonicalName(for: r)
+            case .immediate(let v): sourceStr = String(v)
+            }
+            // If source is immediate, target needs a size hint for memory
+            // since the width isn't carried by a paired register.
+            let needsHint: Bool
+            if case .immediate = source { needsHint = true } else { needsHint = false }
+            let targetStr = needsHint ? formatStandaloneTarget(target) : formatPairedTarget(target)
+            return "\(kind.rawValue) \(targetStr), \(sourceStr)"
+        case .bitScan(let kind, let dst, let source):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         }
     }
 

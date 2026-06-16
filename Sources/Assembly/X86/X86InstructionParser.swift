@@ -83,6 +83,13 @@ internal enum X86Parser {
            let cond = X86.Condition.resolve(suffix: String(instruction.mnemonic.dropFirst(3))) {
             return try parseSetcc(cond, instruction)
         }
+        if let kind = X86.BitTestKind(rawValue: instruction.mnemonic) {
+            return try parseBitTest(kind, instruction)
+        }
+        if let kind = X86.BitScanKind(rawValue: instruction.mnemonic) {
+            let (destination, source) = try parseRegisterMemoryPair(mnemonic: kind.rawValue, instruction: instruction)
+            return .bitScan(kind, destination: destination, source: source)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -535,6 +542,62 @@ internal enum X86Parser {
         case .immediate:
             throw AssemblerError.unsupportedOperand("\(mnemonic): source cannot be an immediate")
         }
+    }
+
+    private static func parseBitTest(_ kind: X86.BitTestKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        let mnemonic = kind.rawValue
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: mnemonic,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dstClassified = try classifyOperand(instruction.operands[0])
+        let srcClassified = try classifyOperand(instruction.operands[1])
+
+        // Determine the target's width — from a paired register, an
+        // explicit size hint on memory, or default qword for memory + imm.
+        let target: X86.RegisterOrMemory
+        let targetWidth: X86.RegisterWidth
+        switch (dstClassified, srcClassified) {
+        case (.register(let dst), _):
+            guard dst.width != .byte else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): byte operand not supported")
+            }
+            target = .register(dst)
+            targetWidth = dst.width
+        case (.memory(let m, let explicit), .register(let s)):
+            let width = try resolveMemoryWidth(explicit: explicit, paired: s.width, mnemonic: mnemonic)
+            target = .memory(m, width: width)
+            targetWidth = width
+        case (.memory(let m, let explicit), .immediate):
+            let width = explicit ?? .qword
+            target = .memory(m, width: width)
+            targetWidth = width
+        case (.memory, .memory):
+            throw AssemblerError.unsupportedOperand("\(mnemonic): cannot have two memory operands")
+        default:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): invalid destination")
+        }
+        guard targetWidth != .byte else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): operand must be 16/32/64-bit")
+        }
+
+        let source: X86.BitTestSource
+        switch srcClassified {
+        case .register(let r):
+            try checkWidthsMatch(r.width, targetWidth, mnemonic: mnemonic)
+            source = .register(r)
+        case .immediate(let imm):
+            guard imm >= 0 && imm <= 255 else {
+                throw AssemblerError.immediateOutOfRange(instruction: mnemonic, value: imm, range: 0...255)
+            }
+            source = .immediate(UInt8(truncatingIfNeeded: imm))
+        case .memory:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): source cannot be memory")
+        }
+        return .bitTest(kind, target: target, source: source)
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

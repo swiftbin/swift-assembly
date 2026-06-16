@@ -106,6 +106,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeCmovcc(cond, destination: dst, source: src), patches: [])
         case .setcc(let cond, let target):
             return Encoded(bytes: try encodeSetcc(cond, target: target), patches: [])
+        case .bitTest(let kind, let target, let source):
+            return Encoded(bytes: try encodeBitTest(kind, target: target, source: source), patches: [])
+        case .bitScan(let kind, let dst, let source):
+            return Encoded(bytes: try encodeBitScan(kind, destination: dst, source: source), patches: [])
         }
     }
 
@@ -903,6 +907,62 @@ internal enum X86InstructionEncoder {
             rmOperand: target,
             regHigh: 0,
             regLow: 0,
+            forceREX: forceREX
+        )
+    }
+
+    // MARK: - BT / BTS / BTR / BTC and BSF / BSR
+
+    private static func encodeBitTest(_ kind: X86.BitTestKind, target: X86.RegisterOrMemory, source: X86.BitTestSource) throws -> [UInt8] {
+        let width = target.width
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+        }
+        switch source {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+            let forceREX: Bool
+            if case .register(let t) = target { forceREX = needsForcedREX([t, r]) }
+            else { forceREX = needsForcedREX([r]) }
+            return try emitOperandPair(
+                opcodeBytes: [0x0F, kind.registerFormOpcode],
+                width: width,
+                rmOperand: target,
+                regHigh: r.highBit,
+                regLow: r.lowBits,
+                forceREX: forceREX
+            )
+        case .immediate(let imm):
+            let forceREX: Bool
+            if case .register(let t) = target { forceREX = needsForcedREX([t]) } else { forceREX = false }
+            var bytes = try emitOperandPair(
+                opcodeBytes: [0x0F, 0xBA],
+                width: width,
+                rmOperand: target,
+                regHigh: 0,
+                regLow: kind.slashDigit,
+                forceREX: forceREX
+            )
+            bytes.append(imm)
+            return bytes
+        }
+    }
+
+    private static func encodeBitScan(_ kind: X86.BitScanKind, destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: kind.rawValue)
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, kind.opcode2],
+            width: dst.width,
+            rmOperand: source,
+            regHigh: dst.highBit,
+            regLow: dst.lowBits,
             forceREX: forceREX
         )
     }
