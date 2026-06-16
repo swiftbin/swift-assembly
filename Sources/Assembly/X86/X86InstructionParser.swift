@@ -57,6 +57,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "lea" {
             return try parseLea(instruction)
         }
+        if let kind = X86.ExtendingMoveKind(rawValue: instruction.mnemonic) {
+            return try parseExtendingMove(kind, instruction)
+        }
+        if instruction.mnemonic == "bswap" {
+            return try parseBswap(instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -303,6 +309,78 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("lea: source must be a memory reference")
         }
         return .lea(destination: dst, source: mem)
+    }
+
+    private static func parseExtendingMove(_ kind: X86.ExtendingMoveKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try register(instruction.operands[0])
+        let classified = try classifyOperand(instruction.operands[1])
+        let source: X86.RegisterOrMemory
+        let sourceWidth: X86.RegisterWidth
+        switch classified {
+        case .register(let r):
+            source = .register(r)
+            sourceWidth = r.width
+        case .memory(let m, let explicit):
+            guard let width = explicit else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(kind.rawValue): memory source requires an explicit size hint (e.g. `byte ptr [...]`)"
+                )
+            }
+            source = .memory(m, width: width)
+            sourceWidth = width
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): source cannot be an immediate")
+        }
+        try validateExtendingMoveShape(kind: kind, destinationWidth: destination.width, sourceWidth: sourceWidth)
+        return .extendingMove(kind, destination: destination, source: source)
+    }
+
+    private static func validateExtendingMoveShape(kind: X86.ExtendingMoveKind, destinationWidth dst: X86.RegisterWidth, sourceWidth src: X86.RegisterWidth) throws {
+        switch kind {
+        case .movsx:
+            // 0F BE: byte → 16/32/64. 0F BF: word → 32/64.
+            switch (dst, src) {
+            case (.word, .byte), (.dword, .byte), (.qword, .byte),
+                 (.dword, .word), (.qword, .word):
+                return
+            default:
+                throw AssemblerError.unsupportedOperand("movsx: invalid width combination")
+            }
+        case .movzx:
+            switch (dst, src) {
+            case (.word, .byte), (.dword, .byte), (.qword, .byte),
+                 (.dword, .word), (.qword, .word):
+                return
+            default:
+                throw AssemblerError.unsupportedOperand("movzx: invalid width combination")
+            }
+        case .movsxd:
+            guard dst == .qword, src == .dword else {
+                throw AssemblerError.unsupportedOperand("movsxd: requires r64 destination and r/m32 source")
+            }
+        }
+    }
+
+    private static func parseBswap(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "bswap",
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let reg = try register(instruction.operands[0])
+        guard reg.width == .dword || reg.width == .qword else {
+            throw AssemblerError.unsupportedOperand("bswap: requires 32- or 64-bit register")
+        }
+        return .bswap(reg)
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

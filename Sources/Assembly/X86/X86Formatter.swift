@@ -48,6 +48,21 @@ internal enum X86InstructionFormatter {
             return "pop \(formatStandaloneTarget(target))"
         case .lea(let dst, let mem):
             return "lea \(X86.RegisterTable.canonicalName(for: dst)), \(formatMemory(mem))"
+        case .extendingMove(let kind, let dst, let source):
+            let dstName = X86.RegisterTable.canonicalName(for: dst)
+            return "\(kind.rawValue) \(dstName), \(formatExtendingSource(source))"
+        case .bswap(let reg):
+            return "bswap \(X86.RegisterTable.canonicalName(for: reg))"
+        }
+    }
+
+    /// MOVSX/MOVZX/MOVSXD memory sources need an explicit size hint
+    /// because the source width is intrinsic to the opcode but not
+    /// inferable from the destination register.
+    private static func formatExtendingSource(_ source: X86.RegisterOrMemory) -> String {
+        switch source {
+        case .register(let r): return X86.RegisterTable.canonicalName(for: r)
+        case .memory(let m, let w): return "\(sizeHintPrefix(w)) \(formatMemory(m))"
         }
     }
 

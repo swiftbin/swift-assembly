@@ -532,5 +532,15 @@ internal enum X86 {
         /// an address expression, not a memory access; its width is the
         /// destination register's width.
         case lea(destination: Register, source: MemoryOperand)
+        /// Sign- or zero-extending move. The destination's width is the
+        /// instruction operand size; the source's width determines the
+        /// 0F BE / BF / B6 / B7 opcode byte (or 63 for MOVSXD).
+        case extendingMove(ExtendingMoveKind, destination: Register, source: RegisterOrMemory)
+        /// BSWAP r32 / r64 — reverse the byte order of a register.
+        case bswap(Register)
+    }
+
+    enum ExtendingMoveKind: String, Equatable, CaseIterable {
+        case movsx, movzx, movsxd
     }
 }

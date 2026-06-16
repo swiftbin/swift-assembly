@@ -130,6 +130,8 @@ internal enum X86InstructionDecoder {
             return try decodeTwoByteOpcode(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x50...0x57:
             return try decodePushRegisterShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x63:
+            return try decodeMovsxd(prefixes: prefixes, cursor: &cursor)
         case 0x58...0x5F:
             return try decodePopRegisterShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x68:
@@ -243,9 +245,56 @@ internal enum X86InstructionDecoder {
         case 0xAD: return try decodeDoubleShift(kind: .shrd, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xAF:
             return try decodeImulRegister(prefixes: prefixes, cursor: &cursor)
+        case 0xB6:
+            return try decodeExtendingMove(kind: .movzx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
+        case 0xB7:
+            return try decodeExtendingMove(kind: .movzx, sourceWidth: .word, prefixes: prefixes, cursor: &cursor)
+        case 0xBE:
+            return try decodeExtendingMove(kind: .movsx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
+        case 0xBF:
+            return try decodeExtendingMove(kind: .movsx, sourceWidth: .word, prefixes: prefixes, cursor: &cursor)
+        case 0xC8...0xCF:
+            return try decodeBswap(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - MOVSX / MOVSXD / MOVZX and BSWAP
+
+    private static func decodeMovsxd(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        // Only the REX.W form is modelled here. The variants without
+        // REX.W are deprecated in long mode and read like a plain MOV.
+        guard prefixes.rexW == 1 else {
+            throw AssemblerError.unknownEncoding(0x63)
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: .qword, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: .dword, cursor: &cursor)
+        return Decoded(
+            instruction: .extendingMove(.movsxd, destination: destination, source: source),
+            length: cursor.consumed
+        )
+    }
+
+    private static func decodeExtendingMove(kind: X86.ExtendingMoveKind, sourceWidth: X86.RegisterWidth, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let dstWidth = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: dstWidth, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: sourceWidth, cursor: &cursor)
+        return Decoded(
+            instruction: .extendingMove(kind, destination: destination, source: source),
+            length: cursor.consumed
+        )
+    }
+
+    private static func decodeBswap(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+        let number = (prefixes.rexB << 3) | (opcode2 & 0x07)
+        let register = X86.Register(number: number, width: width)
+        return Decoded(instruction: .bswap(register), length: cursor.consumed)
     }
 
     // MARK: - PUSH / POP / LEA

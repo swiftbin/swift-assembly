@@ -90,6 +90,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodePop(target), patches: [])
         case .lea(let dst, let mem):
             return Encoded(bytes: try encodeLea(destination: dst, source: mem), patches: [])
+        case .extendingMove(let kind, let dst, let src):
+            return Encoded(bytes: try encodeExtendingMove(kind, destination: dst, source: src), patches: [])
+        case .bswap(let reg):
+            return Encoded(bytes: try encodeBswap(reg), patches: [])
         }
     }
 
@@ -789,6 +793,66 @@ internal enum X86InstructionEncoder {
             regLow: dst.lowBits,
             forceREX: needsForcedREX([dst])
         )
+    }
+
+    // MARK: - MOVSX / MOVSXD / MOVZX and BSWAP
+
+    /// Encode MOVSX / MOVZX / MOVSXD. The source's width selects the
+    /// opcode byte; the destination's width drives the operand-size
+    /// prefix and REX.W.
+    private static func encodeExtendingMove(_ kind: X86.ExtendingMoveKind, destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: kind.rawValue)
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+
+        switch kind {
+        case .movsx, .movzx:
+            let isByteSource = source.width == .byte
+            let opcode2: UInt8
+            switch (kind, isByteSource) {
+            case (.movsx, true):  opcode2 = 0xBE
+            case (.movsx, false): opcode2 = 0xBF
+            case (.movzx, true):  opcode2 = 0xB6
+            case (.movzx, false): opcode2 = 0xB7
+            default: throw AssemblerError.unsupportedOperand("\(kind.rawValue): internal width error")
+            }
+            return try emitOperandPair(
+                opcodeBytes: [0x0F, opcode2],
+                width: dst.width,
+                rmOperand: source,
+                regHigh: dst.highBit,
+                regLow: dst.lowBits,
+                forceREX: forceREX
+            )
+
+        case .movsxd:
+            return try emitOperandPair(
+                opcode: 0x63,
+                width: dst.width,
+                rmOperand: source,
+                regHigh: dst.highBit,
+                regLow: dst.lowBits,
+                forceREX: forceREX
+            )
+        }
+    }
+
+    /// `BSWAP r32/r64` rides the 0F-escape `C8+rd` form. The 16-bit
+    /// form is undefined and rejected by the parser.
+    private static func encodeBswap(_ reg: X86.Register) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        let rexW: UInt8 = reg.width == .qword ? 1 : 0
+        if let rex = X86.REX.build(w: rexW, b: reg.highBit) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xC8 | reg.lowBits)
+        return bytes
     }
 
     // MARK: - Indirect JMP / CALL (FF /4 and FF /2)

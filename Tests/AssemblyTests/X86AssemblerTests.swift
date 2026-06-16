@@ -1277,4 +1277,131 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 8b MOVSX / MOVSXD / MOVZX + BSWAP
+
+    private static let extendingMoveCases: [(String, [UInt8])] = [
+        // MOVSX byte → 16/32/64
+        ("movsx ax, bl",   [0x66, 0x0F, 0xBE, 0xC3]),
+        ("movsx eax, bl",  [0x0F, 0xBE, 0xC3]),
+        ("movsx rax, bl",  [0x48, 0x0F, 0xBE, 0xC3]),
+        ("movsx rax, byte ptr [rbx]", [0x48, 0x0F, 0xBE, 0x03]),
+
+        // MOVSX word → 32/64
+        ("movsx eax, bx",  [0x0F, 0xBF, 0xC3]),
+        ("movsx rax, bx",  [0x48, 0x0F, 0xBF, 0xC3]),
+        ("movsx rax, word ptr [rbx]", [0x48, 0x0F, 0xBF, 0x03]),
+
+        // MOVSXD r64, r/m32 (REX.W + 0x63)
+        ("movsxd rax, ebx",                  [0x48, 0x63, 0xC3]),
+        ("movsxd rax, dword ptr [rbx]",      [0x48, 0x63, 0x03]),
+        ("movsxd r8, eax",                   [0x4C, 0x63, 0xC0]),
+
+        // MOVZX byte → 16/32/64
+        ("movzx ax, bl",   [0x66, 0x0F, 0xB6, 0xC3]),
+        ("movzx eax, bl",  [0x0F, 0xB6, 0xC3]),
+        ("movzx rax, bl",  [0x48, 0x0F, 0xB6, 0xC3]),
+        ("movzx rax, byte ptr [rbx]", [0x48, 0x0F, 0xB6, 0x03]),
+
+        // MOVZX word → 32/64
+        ("movzx eax, bx",  [0x0F, 0xB7, 0xC3]),
+        ("movzx rax, bx",  [0x48, 0x0F, 0xB7, 0xC3]),
+        ("movzx rax, word ptr [rbx]", [0x48, 0x0F, 0xB7, 0x03]),
+
+        // Mixed extended-byte register sources with REX-forced regs
+        ("movsx rax, dil", [0x48, 0x0F, 0xBE, 0xC7]),
+        ("movzx eax, r8b", [0x41, 0x0F, 0xB6, 0xC0]),
+    ]
+
+    private static let bswapCases: [(String, [UInt8])] = [
+        ("bswap eax",  [0x0F, 0xC8]),
+        ("bswap ecx",  [0x0F, 0xC9]),
+        ("bswap edi",  [0x0F, 0xCF]),
+        ("bswap r8d",  [0x41, 0x0F, 0xC8]),
+        ("bswap r15d", [0x41, 0x0F, 0xCF]),
+        ("bswap rax",  [0x48, 0x0F, 0xC8]),
+        ("bswap rcx",  [0x48, 0x0F, 0xC9]),
+        ("bswap r8",   [0x49, 0x0F, 0xC8]),
+        ("bswap r15",  [0x49, 0x0F, 0xCF]),
+    ]
+
+    func testExtendingMoveAssembles() throws {
+        for (source, expected) in Self.extendingMoveCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testExtendingMoveDisassembles() throws {
+        for (source, bytes) in Self.extendingMoveCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testBswapAssembles() throws {
+        for (source, expected) in Self.bswapCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBswapDisassembles() throws {
+        for (source, bytes) in Self.bswapCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testExtendingMoveRejectsBadShapes() {
+        // MOVSX with same widths makes no sense.
+        XCTAssertThrowsError(try X86Assembler.assemble("movsx eax, ebx")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        // MOVSX byte-to-byte.
+        XCTAssertThrowsError(try X86Assembler.assemble("movsx al, bl")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        // MOVSX word source requires non-word destination.
+        XCTAssertThrowsError(try X86Assembler.assemble("movsx ax, bx")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        // MOVSXD only accepts r64, r/m32.
+        XCTAssertThrowsError(try X86Assembler.assemble("movsxd eax, ebx")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        // BSWAP rejects 16-bit operand.
+        XCTAssertThrowsError(try X86Assembler.assemble("bswap ax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        // BSWAP rejects 8-bit operand.
+        XCTAssertThrowsError(try X86Assembler.assemble("bswap al")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testExtendingMoveMemoryRequiresSizeHint() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movsx rax, [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testExtendingMoveAndBswapStreamRoundTrip() throws {
+        let cases = Self.extendingMoveCases + Self.bswapCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
