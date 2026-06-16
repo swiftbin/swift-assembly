@@ -14,7 +14,18 @@ internal enum X86Parser {
             return .zeroOperand(kind)
         }
         if instruction.mnemonic == "mov" {
+            if let sysMov = try parseMovSystemRegister(instruction) {
+                return sysMov
+            }
             return try parseMov(instruction)
+        }
+        if instruction.mnemonic == "lar" {
+            let (destination, source) = try parseRegisterMemoryPair(mnemonic: "lar", instruction: instruction)
+            return .lar(destination: destination, source: source)
+        }
+        if instruction.mnemonic == "lsl" {
+            let (destination, source) = try parseRegisterMemoryPair(mnemonic: "lsl", instruction: instruction)
+            return .lsl(destination: destination, source: source)
         }
         if let kind = X86.BinaryAluKind(rawValue: instruction.mnemonic) {
             let (dst, src) = try parseReadWritePair(instruction)
@@ -739,6 +750,49 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("\(mnemonic): operand must be a memory reference")
         }
         return mem
+    }
+
+    /// Recognise a `crN` / `drN` mnemonic (N = 0..15). Returns `nil`
+    /// when the text is anything else (a regular GPR, a memory
+    /// expression, etc.), letting MOV fall through to its standard
+    /// parsing.
+    private static func parseSystemRegisterName(_ text: String) -> (kind: X86.SystemRegisterKind, number: UInt8)? {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard lower.count >= 3 else { return nil }
+        let prefix = lower.prefix(2)
+        let suffix = lower.dropFirst(2)
+        let kind: X86.SystemRegisterKind
+        switch prefix {
+        case "cr": kind = .cr
+        case "dr": kind = .dr
+        default:   return nil
+        }
+        guard let number = UInt8(suffix), number <= 15 else { return nil }
+        return (kind, number)
+    }
+
+    /// Detect and parse `MOV r, CR/DR` and `MOV CR/DR, r`. Returns nil
+    /// when neither operand names a system register so the caller falls
+    /// through to the regular MOV parsing.
+    private static func parseMovSystemRegister(_ instruction: ParsedInstruction) throws -> X86.Instruction? {
+        guard instruction.operands.count == 2 else { return nil }
+        let op0 = instruction.operands[0]
+        let op1 = instruction.operands[1]
+        if let sys = parseSystemRegisterName(op0) {
+            let source = try register(op1)
+            guard source.width == .qword else {
+                throw AssemblerError.unsupportedOperand("mov \(sys.kind.rawValue)\(sys.number), reg: register must be 64-bit")
+            }
+            return .movToSystemRegister(sys.kind, number: sys.number, source: source)
+        }
+        if let sys = parseSystemRegisterName(op1) {
+            let destination = try register(op0)
+            guard destination.width == .qword else {
+                throw AssemblerError.unsupportedOperand("mov reg, \(sys.kind.rawValue)\(sys.number): register must be 64-bit")
+            }
+            return .movFromSystemRegister(sys.kind, destination: destination, number: sys.number)
+        }
+        return nil
     }
 
     private static func parseSystemRM(_ kind: X86.SystemRMKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {

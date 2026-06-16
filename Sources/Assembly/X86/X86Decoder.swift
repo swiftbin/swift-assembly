@@ -277,6 +277,10 @@ internal enum X86InstructionDecoder {
             return try decodeOpcode0F00(prefixes: prefixes, cursor: &cursor)
         case 0x01:
             return try decodeOpcode0F01(prefixes: prefixes, cursor: &cursor)
+        case 0x02, 0x03:
+            return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x20, 0x21, 0x22, 0x23:
+            return try decodeMovSystemRegister(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x40...0x4F:
             return try decodeCmovcc(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x80...0x8F:
@@ -338,6 +342,43 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - MOV CR/DR + LAR / LSL
+
+    /// 0F 20-23: MOV r64, CRn/DRn and MOV CRn/DRn, r64. In long mode
+    /// the data register is always 64-bit (no REX.W); REX.R extends
+    /// the system-register number, REX.B extends the GPR number.
+    private static func decodeMovSystemRegister(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard let resolved = X86.SystemRegisterKind.decode(opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        // CR/DR forms are always mod=11; an alternative interpretation
+        // doesn't exist.
+        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let sysregNumber = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let gprNumber = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+        let register = X86.Register(number: gprNumber, width: .qword)
+        let instruction: X86.Instruction = resolved.isRead
+            ? .movFromSystemRegister(resolved.kind, destination: register, number: sysregNumber)
+            : .movToSystemRegister(resolved.kind, number: sysregNumber, source: register)
+        return Decoded(instruction: instruction, length: cursor.consumed)
+    }
+
+    /// LAR / LSL — same `r, r/m` shape as CMOV / BSF / BSR.
+    private static func decodeLarLsl(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        let instruction: X86.Instruction = (opcode2 == 0x02)
+            ? .lar(destination: destination, source: source)
+            : .lsl(destination: destination, source: source)
+        return Decoded(instruction: instruction, length: cursor.consumed)
     }
 
     // MARK: - 0F 01 and 0F AE (system / fence groups)

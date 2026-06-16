@@ -2090,4 +2090,79 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 11c MOV CR/DR + LAR/LSL
+
+    private static let controlDebugMovCases: [(String, [UInt8])] = [
+        // MOV r64, CRn
+        ("mov rax, cr0",  [0x0F, 0x20, 0xC0]),
+        ("mov rax, cr3",  [0x0F, 0x20, 0xD8]),
+        ("mov rax, cr8",  [0x44, 0x0F, 0x20, 0xC0]),
+        ("mov r8, cr0",   [0x41, 0x0F, 0x20, 0xC0]),
+        // MOV CRn, r64
+        ("mov cr0, rax",  [0x0F, 0x22, 0xC0]),
+        ("mov cr3, rax",  [0x0F, 0x22, 0xD8]),
+        ("mov cr8, rax",  [0x44, 0x0F, 0x22, 0xC0]),
+        ("mov cr0, r8",   [0x41, 0x0F, 0x22, 0xC0]),
+        // MOV r64, DRn
+        ("mov rax, dr0",  [0x0F, 0x21, 0xC0]),
+        ("mov rax, dr7",  [0x0F, 0x21, 0xF8]),
+        // MOV DRn, r64
+        ("mov dr0, rax",  [0x0F, 0x23, 0xC0]),
+        ("mov dr7, rcx",  [0x0F, 0x23, 0xF9]),
+    ]
+
+    private static let larLslCases: [(String, [UInt8])] = [
+        ("lar ax, bx",      [0x66, 0x0F, 0x02, 0xC3]),
+        ("lar eax, ebx",    [0x0F, 0x02, 0xC3]),
+        ("lar rax, rbx",    [0x48, 0x0F, 0x02, 0xC3]),
+        ("lar rax, [rbx]",  [0x48, 0x0F, 0x02, 0x03]),
+
+        ("lsl ax, bx",      [0x66, 0x0F, 0x03, 0xC3]),
+        ("lsl eax, ebx",    [0x0F, 0x03, 0xC3]),
+        ("lsl rax, rbx",    [0x48, 0x0F, 0x03, 0xC3]),
+        ("lsl rax, [rbx]",  [0x48, 0x0F, 0x03, 0x03]),
+    ]
+
+    func testControlDebugMovAssembles() throws {
+        for (source, expected) in Self.controlDebugMovCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testControlDebugMovDisassembles() throws {
+        for (source, bytes) in Self.controlDebugMovCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testControlDebugMovRequiresQword() {
+        XCTAssertThrowsError(try X86Assembler.assemble("mov eax, cr0")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("mov cr0, eax")) { _ in }
+    }
+
+    func testLarLslAssembles() throws {
+        for (source, expected) in Self.larLslCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testLarLslDisassembles() throws {
+        for (source, bytes) in Self.larLslCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testControlDebugAndLarLslStreamRoundTrip() throws {
+        let cases = Self.controlDebugMovCases + Self.larLslCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

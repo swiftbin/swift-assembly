@@ -131,6 +131,14 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMemoryOnlySys(escape2: 0x01, slashDigit: kind.slashDigit, memory: mem), patches: [])
         case .systemRM(let kind, let target):
             return Encoded(bytes: try encodeSystemRM(kind, target: target), patches: [])
+        case .movFromSystemRegister(let kind, let dst, let number):
+            return Encoded(bytes: encodeMovSystemRegister(kind: kind, sysregNumber: number, register: dst, isRead: true), patches: [])
+        case .movToSystemRegister(let kind, let number, let source):
+            return Encoded(bytes: encodeMovSystemRegister(kind: kind, sysregNumber: number, register: source, isRead: false), patches: [])
+        case .lar(let dst, let src):
+            return Encoded(bytes: try encodeLarLsl(opcode2: 0x02, destination: dst, source: src, mnemonic: "lar"), patches: [])
+        case .lsl(let dst, let src):
+            return Encoded(bytes: try encodeLarLsl(opcode2: 0x03, destination: dst, source: src, mnemonic: "lsl"), patches: [])
         }
     }
 
@@ -929,6 +937,49 @@ internal enum X86InstructionEncoder {
             rmOperand: target,
             regHigh: 0,
             regLow: kind.slashDigit,
+            forceREX: forceREX
+        )
+    }
+
+    // MARK: - MOV CR/DR + LAR / LSL
+
+    /// MOV r64, CRn/DRn and MOV CRn/DRn, r64. Operand is implicitly
+    /// 64-bit in long mode, so REX.W is not set. REX.R extends the
+    /// system-register number (the modrm.reg field); REX.B extends
+    /// the GPR (the modrm.rm field).
+    private static func encodeMovSystemRegister(kind: X86.SystemRegisterKind, sysregNumber: UInt8, register reg: X86.Register, isRead: Bool) -> [UInt8] {
+        let opcode2 = isRead ? kind.readOpcode2 : kind.writeOpcode2
+        let rexR: UInt8 = (sysregNumber >> 3) & 0x1
+        let rexB: UInt8 = reg.highBit
+        var bytes: [UInt8] = []
+        if let rex = X86.REX.build(r: rexR, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(opcode2)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: sysregNumber & 0x7, rm: reg.lowBits))
+        return bytes
+    }
+
+    /// LAR and LSL share the same `r, r/m` shape as CMOVcc.
+    private static func encodeLarLsl(opcode2: UInt8, destination dst: X86.Register, source: X86.RegisterOrMemory, mnemonic: String) throws -> [UInt8] {
+        guard dst.width != .byte else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): byte destination not supported")
+        }
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: mnemonic)
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: mnemonic)
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, opcode2],
+            width: dst.width,
+            rmOperand: source,
+            regHigh: dst.highBit,
+            regLow: dst.lowBits,
             forceREX: forceREX
         )
     }

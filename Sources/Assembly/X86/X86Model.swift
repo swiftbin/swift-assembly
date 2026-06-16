@@ -602,6 +602,46 @@ internal enum X86 {
         /// SMSW/LMSW). Most are r/m16-only; the read variants
         /// (SLDT/STR/SMSW) also accept r32/r64 destinations.
         case systemRM(SystemRMKind, target: RegisterOrMemory)
+        /// `MOV r64, CRn/DRn` — read a control or debug register.
+        case movFromSystemRegister(SystemRegisterKind, destination: Register, number: UInt8)
+        /// `MOV CRn/DRn, r64` — write a control or debug register.
+        case movToSystemRegister(SystemRegisterKind, number: UInt8, source: Register)
+        /// `LAR r, r/m` — load access rights (`0F 02 /r`).
+        case lar(destination: Register, source: RegisterOrMemory)
+        /// `LSL r, r/m` — load segment limit (`0F 03 /r`).
+        case lsl(destination: Register, source: RegisterOrMemory)
+    }
+
+    enum SystemRegisterKind: String, Equatable, CaseIterable {
+        case cr, dr
+
+        /// `MOV r, <sysreg>` opcode (read direction): `0F 20` for CR,
+        /// `0F 21` for DR.
+        var readOpcode2: UInt8 {
+            switch self {
+            case .cr: return 0x20
+            case .dr: return 0x21
+            }
+        }
+
+        /// `MOV <sysreg>, r` opcode (write direction): `0F 22` for CR,
+        /// `0F 23` for DR.
+        var writeOpcode2: UInt8 {
+            switch self {
+            case .cr: return 0x22
+            case .dr: return 0x23
+            }
+        }
+
+        static func decode(opcode2: UInt8) -> (kind: SystemRegisterKind, isRead: Bool)? {
+            switch opcode2 {
+            case 0x20: return (.cr, true)
+            case 0x21: return (.dr, true)
+            case 0x22: return (.cr, false)
+            case 0x23: return (.dr, false)
+            default:   return nil
+            }
+        }
     }
 
     enum DescriptorTableKind: String, Equatable, CaseIterable {

@@ -105,6 +105,14 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(formatMemory(mem))"
         case .systemRM(let kind, let target):
             return "\(kind.rawValue) \(formatPairedTarget(target))"
+        case .movFromSystemRegister(let kind, let dst, let number):
+            return "mov \(X86.RegisterTable.canonicalName(for: dst)), \(kind.rawValue)\(number)"
+        case .movToSystemRegister(let kind, let number, let source):
+            return "mov \(kind.rawValue)\(number), \(X86.RegisterTable.canonicalName(for: source))"
+        case .lar(let dst, let source):
+            return "lar \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
+        case .lsl(let dst, let source):
+            return "lsl \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         }
     }
 
