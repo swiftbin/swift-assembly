@@ -726,22 +726,55 @@ internal enum X86 {
         case psubsb, psubsw, psubusb, psubusw
         // Bit-wise logic
         case pand, pandn, por, pxor
+        // Compare for equal / greater-than (byte / word / dword lanes)
+        case pcmpeqb, pcmpeqw, pcmpeqd
+        case pcmpgtb, pcmpgtw, pcmpgtd
+        // Multiplies and multiply-add
+        case pmullw          // low 16 of 16x16 → 16
+        case pmulhw          // high 16 of 16x16 (signed)
+        case pmulhuw         // high 16 of 16x16 (unsigned)
+        case pmuludq         // 32x32 → 64 (low 32 of each qword)
+        case pmaddwd         // multiply-then-add adjacent pairs
+        // Per-lane min / max
+        case pminub, pminsw
+        case pmaxub, pmaxsw
+        // Rounded average and sum-of-absolute-differences
+        case pavgb, pavgw
+        case psadbw
 
         var opcode2: UInt8 {
             switch self {
+            case .pcmpgtb:  return 0x64
+            case .pcmpgtw:  return 0x65
+            case .pcmpgtd:  return 0x66
+            case .pcmpeqb:  return 0x74
+            case .pcmpeqw:  return 0x75
+            case .pcmpeqd:  return 0x76
             case .paddq:    return 0xD4
+            case .pmullw:   return 0xD5
             case .psubusb:  return 0xD8
             case .psubusw:  return 0xD9
+            case .pminub:   return 0xDA
             case .pand:     return 0xDB
             case .paddusb:  return 0xDC
             case .paddusw:  return 0xDD
+            case .pmaxub:   return 0xDE
             case .pandn:    return 0xDF
+            case .pavgb:    return 0xE0
+            case .pavgw:    return 0xE3
+            case .pmulhuw:  return 0xE4
+            case .pmulhw:   return 0xE5
             case .psubsb:   return 0xE8
             case .psubsw:   return 0xE9
+            case .pminsw:   return 0xEA
             case .por:      return 0xEB
             case .paddsb:   return 0xEC
             case .paddsw:   return 0xED
+            case .pmaxsw:   return 0xEE
             case .pxor:     return 0xEF
+            case .pmuludq:  return 0xF4
+            case .pmaddwd:  return 0xF5
+            case .psadbw:   return 0xF6
             case .psubb:    return 0xF8
             case .psubw:    return 0xF9
             case .psubd:    return 0xFA

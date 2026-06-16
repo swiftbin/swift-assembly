@@ -2764,4 +2764,59 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14i PCMP / PMUL / PMIN / PMAX / PAVG / PSADBW
+
+    private static let ssePackedIntegerExtraCases: [(String, [UInt8])] = [
+        // Compare for equal (sets all-ones on equal lanes)
+        ("pcmpeqb xmm0, xmm1",              [0x66, 0x0F, 0x74, 0xC1]),
+        ("pcmpeqw xmm0, xmm1",              [0x66, 0x0F, 0x75, 0xC1]),
+        ("pcmpeqd xmm0, xmm1",              [0x66, 0x0F, 0x76, 0xC1]),
+        // Compare for greater-than (signed)
+        ("pcmpgtb xmm0, xmm1",              [0x66, 0x0F, 0x64, 0xC1]),
+        ("pcmpgtw xmm0, xmm1",              [0x66, 0x0F, 0x65, 0xC1]),
+        ("pcmpgtd xmm0, xmm1",              [0x66, 0x0F, 0x66, 0xC1]),
+
+        // Multiplies
+        ("pmullw xmm0, xmm1",               [0x66, 0x0F, 0xD5, 0xC1]),
+        ("pmulhw xmm0, xmm1",               [0x66, 0x0F, 0xE5, 0xC1]),
+        ("pmulhuw xmm0, xmm1",              [0x66, 0x0F, 0xE4, 0xC1]),
+        ("pmuludq xmm0, xmm1",              [0x66, 0x0F, 0xF4, 0xC1]),
+        ("pmaddwd xmm0, xmm1",              [0x66, 0x0F, 0xF5, 0xC1]),
+
+        // Per-lane min / max
+        ("pminub xmm0, xmm1",               [0x66, 0x0F, 0xDA, 0xC1]),
+        ("pminsw xmm0, xmm1",               [0x66, 0x0F, 0xEA, 0xC1]),
+        ("pmaxub xmm0, xmm1",               [0x66, 0x0F, 0xDE, 0xC1]),
+        ("pmaxsw xmm0, xmm1",               [0x66, 0x0F, 0xEE, 0xC1]),
+
+        // Rounded average and sum-of-absolute-differences
+        ("pavgb xmm0, xmm1",                [0x66, 0x0F, 0xE0, 0xC1]),
+        ("pavgw xmm0, xmm1",                [0x66, 0x0F, 0xE3, 0xC1]),
+        ("psadbw xmm0, xmm1",               [0x66, 0x0F, 0xF6, 0xC1]),
+
+        // Memory operand + extended XMM
+        ("pcmpeqd xmm0, xmmword ptr [rbx]", [0x66, 0x0F, 0x76, 0x03]),
+        ("pmullw xmm8, xmm9",               [0x66, 0x45, 0x0F, 0xD5, 0xC1]),
+    ]
+
+    func testSSEPackedIntegerExtraAssembles() throws {
+        for (source, expected) in Self.ssePackedIntegerExtraCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEPackedIntegerExtraDisassembles() throws {
+        for (source, bytes) in Self.ssePackedIntegerExtraCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEPackedIntegerExtraStreamRoundTrip() throws {
+        let source = Self.ssePackedIntegerExtraCases.map(\.0).joined(separator: "\n")
+        let expected = Self.ssePackedIntegerExtraCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
