@@ -130,7 +130,7 @@ internal enum X86 {
         case ret, retf
         case iret, iretd, iretq
         case leave
-        case int3, ud2
+        case int1, int3, ud2
         case clc, stc, cmc, cld, std, cli, sti
         case lahf, sahf
         case pause, hlt, wait, xlatb
@@ -158,6 +158,7 @@ internal enum X86 {
             case .iretd:    return [0xCF]
             case .iretq:    return [0x48, 0xCF]
             case .leave:    return [0xC9]
+            case .int1:     return [0xF1]
             case .int3:     return [0xCC]
             case .ud2:      return [0x0F, 0x0B]
             case .clc:      return [0xF8]
@@ -568,6 +569,21 @@ internal enum X86 {
         /// optional REP/REPE/REPNE prefix. The operands (RSI/RDI/RAX/DX)
         /// are implicit so the model only carries the kind + prefix.
         case stringOp(StringOpKind, prefix: StringPrefix?)
+        /// IN — read from a port into the AL/AX/EAX accumulator.
+        case inFromPort(target: Register, port: PortSource)
+        /// OUT — write the AL/AX/EAX accumulator out to a port.
+        case outToPort(source: Register, port: PortSource)
+        /// `INT imm8` — software interrupt with an 8-bit vector. INT3
+        /// and INT1 live in `ZeroOperandKind` because they have fixed
+        /// opcodes; this case covers the general `CD ib` form.
+        case interrupt(vector: UInt8)
+    }
+
+    /// The port specifier of IN/OUT: an 8-bit immediate (E4/E5/E6/E7)
+    /// or the DX register (EC/ED/EE/EF).
+    enum PortSource: Equatable {
+        case immediate(UInt8)
+        case dx
     }
 
     /// Identifies one of the implicit-operand string operations. The

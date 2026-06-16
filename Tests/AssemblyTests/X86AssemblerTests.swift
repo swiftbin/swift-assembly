@@ -1852,4 +1852,101 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 10b/c IN/OUT + INT
+
+    private static let portIOCases: [(String, [UInt8])] = [
+        // IN reg, imm8
+        ("in al, 128",   [0xE4, 0x80]),
+        ("in ax, 0",     [0x66, 0xE5, 0x00]),
+        ("in eax, 64",   [0xE5, 0x40]),
+
+        // IN reg, dx
+        ("in al, dx",    [0xEC]),
+        ("in ax, dx",    [0x66, 0xED]),
+        ("in eax, dx",   [0xED]),
+
+        // OUT imm8, reg
+        ("out 128, al",  [0xE6, 0x80]),
+        ("out 0, ax",    [0x66, 0xE7, 0x00]),
+        ("out 64, eax",  [0xE7, 0x40]),
+
+        // OUT dx, reg
+        ("out dx, al",   [0xEE]),
+        ("out dx, ax",   [0x66, 0xEF]),
+        ("out dx, eax",  [0xEF]),
+    ]
+
+    func testPortIOAssembles() throws {
+        for (source, expected) in Self.portIOCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testPortIODisassembles() throws {
+        for (source, bytes) in Self.portIOCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testPortIORejectsNonAccumulator() {
+        XCTAssertThrowsError(try X86Assembler.assemble("in bl, 5")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("out 5, bl")) { _ in }
+    }
+
+    func testPortIORejectsQword() {
+        XCTAssertThrowsError(try X86Assembler.assemble("in rax, dx")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    private static let interruptCases: [(String, [UInt8])] = [
+        ("int 0",    [0xCD, 0x00]),
+        ("int 128",  [0xCD, 0x80]),
+        ("int 255",  [0xCD, 0xFF]),
+        ("int1",     [0xF1]),
+        ("int3",     [0xCC]),
+    ]
+
+    func testInterruptAssembles() throws {
+        for (source, expected) in Self.interruptCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testInterruptDisassembles() throws {
+        for (source, bytes) in Self.interruptCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `int 3` parses but the encoder picks the shorter single-byte
+    /// INT3 form (0xCC); disassembly canonicalises to "int3".
+    func testInt3CanonicalisesToZeroOperand() throws {
+        XCTAssertEqual(try X86Assembler.assemble("int 3"), [0xCC])
+        XCTAssertEqual(try X86Assembler.disassemble([0xCC]), "int3")
+    }
+
+    func testInterruptVectorRange() {
+        XCTAssertThrowsError(try X86Assembler.assemble("int 256")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+    }
+
+    func testPortIOAndInterruptStreamRoundTrip() throws {
+        let cases = Self.portIOCases + Self.interruptCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

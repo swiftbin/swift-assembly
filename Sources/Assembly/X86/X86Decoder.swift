@@ -177,6 +177,14 @@ internal enum X86InstructionDecoder {
             return try decodeXchgShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xA4, 0xA5, 0xA6, 0xA7, 0xAA, 0xAB, 0xAC, 0xAD, 0xAE, 0xAF:
             return try decodeStringOp(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0xE4, 0xE5:
+            return try decodePortIO(opcode: opcode, isOut: false, withImmediate: true, prefixes: prefixes, cursor: &cursor)
+        case 0xE6, 0xE7:
+            return try decodePortIO(opcode: opcode, isOut: true, withImmediate: true, prefixes: prefixes, cursor: &cursor)
+        case 0xEC, 0xED:
+            return try decodePortIO(opcode: opcode, isOut: false, withImmediate: false, prefixes: prefixes, cursor: &cursor)
+        case 0xEE, 0xEF:
+            return try decodePortIO(opcode: opcode, isOut: true, withImmediate: false, prefixes: prefixes, cursor: &cursor)
         case 0xA8, 0xA9:
             return try decodeTestAccumulator(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
@@ -191,6 +199,9 @@ internal enum X86InstructionDecoder {
             return try decodeMovMIWord(prefixes: prefixes, cursor: &cursor)
         case 0xC8:
             return try decodeEnter(cursor: &cursor)
+        case 0xCD:
+            let vector = try cursor.takeByte()
+            return Decoded(instruction: .interrupt(vector: vector), length: cursor.consumed)
         case 0xE0, 0xE1, 0xE2, 0xE3:
             return try decodeLoop(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xE8:
@@ -321,6 +332,27 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - IN / OUT (port I/O)
+
+    private static func decodePortIO(opcode: UInt8, isOut: Bool, withImmediate: Bool, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let isByte = (opcode & 0x01) == 0
+        let width: X86.RegisterWidth
+        if isByte             { width = .byte }
+        else if prefixes.operandSize { width = .word }
+        else                  { width = .dword }
+        let register = X86.Register(number: 0, width: width)
+        let port: X86.PortSource
+        if withImmediate {
+            port = .immediate(try cursor.takeByte())
+        } else {
+            port = .dx
+        }
+        let instruction: X86.Instruction = isOut
+            ? .outToPort(source: register, port: port)
+            : .inFromPort(target: register, port: port)
+        return Decoded(instruction: instruction, length: cursor.consumed)
     }
 
     // MARK: - String operations

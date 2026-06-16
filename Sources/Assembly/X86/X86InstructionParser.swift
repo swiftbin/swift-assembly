@@ -107,6 +107,15 @@ internal enum X86Parser {
         if let prefix = parseStringRepetitionPrefix(instruction.mnemonic) {
             return try parseStringWithPrefix(prefix, mnemonic: instruction.mnemonic, instruction: instruction)
         }
+        if instruction.mnemonic == "in" {
+            return try parseInFromPort(instruction)
+        }
+        if instruction.mnemonic == "out" {
+            return try parseOutToPort(instruction)
+        }
+        if instruction.mnemonic == "int" {
+            return try parseInterrupt(instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -647,6 +656,79 @@ internal enum X86Parser {
             }
         }
         return .stringOp(kind, prefix: prefix)
+    }
+
+    private static func parseInFromPort(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "in",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let target = try parsePortRegister(instruction.operands[0], mnemonic: "in")
+        let port = try parsePortSource(instruction.operands[1], mnemonic: "in")
+        return .inFromPort(target: target, port: port)
+    }
+
+    private static func parseOutToPort(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "out",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let port = try parsePortSource(instruction.operands[0], mnemonic: "out")
+        let source = try parsePortRegister(instruction.operands[1], mnemonic: "out")
+        return .outToPort(source: source, port: port)
+    }
+
+    /// IN/OUT only accept AL/AX/EAX (the accumulator) as the data
+    /// register — no qword form exists.
+    private static func parsePortRegister(_ text: String, mnemonic: String) throws -> X86.Register {
+        let reg = try register(text)
+        guard reg.number == 0 else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): data register must be AL / AX / EAX")
+        }
+        guard reg.width != .qword else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): no 64-bit port I/O form")
+        }
+        return reg
+    }
+
+    /// The port operand of IN/OUT is either DX or an 8-bit immediate.
+    private static func parsePortSource(_ text: String, mnemonic: String) throws -> X86.PortSource {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if trimmed == "dx" {
+            return .dx
+        }
+        let value = try immediateAny(text)
+        guard value >= 0 && value <= 0xFF else {
+            throw AssemblerError.immediateOutOfRange(instruction: mnemonic, value: value, range: 0...0xFF)
+        }
+        return .immediate(UInt8(truncatingIfNeeded: value))
+    }
+
+    private static func parseInterrupt(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "int",
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let value = try immediateAny(instruction.operands[0])
+        guard value >= 0 && value <= 0xFF else {
+            throw AssemblerError.immediateOutOfRange(instruction: "int", value: value, range: 0...0xFF)
+        }
+        // INT 3 has a dedicated single-byte opcode (0xCC) that's
+        // semantically identical to the general form `CD 03`; pick the
+        // shorter encoding so disassembly canonicalises to "int 3".
+        if value == 3 {
+            return .zeroOperand(.int3)
+        }
+        return .interrupt(vector: UInt8(truncatingIfNeeded: value))
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

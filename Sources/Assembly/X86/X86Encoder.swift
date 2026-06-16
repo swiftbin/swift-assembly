@@ -117,6 +117,12 @@ internal enum X86InstructionEncoder {
             if let prefix { bytes.append(prefix.byte) }
             bytes.append(contentsOf: kind.baseBytes)
             return Encoded(bytes: bytes, patches: [])
+        case .inFromPort(let target, let port):
+            return Encoded(bytes: encodePortIO(register: target, port: port, isOut: false), patches: [])
+        case .outToPort(let source, let port):
+            return Encoded(bytes: encodePortIO(register: source, port: port, isOut: true), patches: [])
+        case .interrupt(let vector):
+            return Encoded(bytes: [0xCD, vector], patches: [])
         }
     }
 
@@ -875,6 +881,27 @@ internal enum X86InstructionEncoder {
         }
         bytes.append(0x0F)
         bytes.append(0xC8 | reg.lowBits)
+        return bytes
+    }
+
+    // MARK: - IN / OUT
+
+    /// IN/OUT opcodes are paired across direction and port form:
+    /// E4/E5 IN imm, E6/E7 OUT imm, EC/ED IN DX, EE/EF OUT DX. The
+    /// low bit selects byte (0) vs word/dword (1).
+    private static func encodePortIO(register reg: X86.Register, port: X86.PortSource, isOut: Bool) -> [UInt8] {
+        let isByte = reg.width == .byte
+        var bytes: [UInt8] = []
+        if reg.width == .word { bytes.append(X86.operandSizeOverride) }
+        let opcode: UInt8
+        switch (port, isOut) {
+        case (.immediate, false): opcode = isByte ? 0xE4 : 0xE5
+        case (.immediate, true):  opcode = isByte ? 0xE6 : 0xE7
+        case (.dx, false):        opcode = isByte ? 0xEC : 0xED
+        case (.dx, true):         opcode = isByte ? 0xEE : 0xEF
+        }
+        bytes.append(opcode)
+        if case .immediate(let imm) = port { bytes.append(imm) }
         return bytes
     }
 

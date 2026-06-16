@@ -91,6 +91,19 @@ internal enum X86InstructionFormatter {
             case .some(.f2):
                 return "repne \(kind.rawValue)"
             }
+        case .inFromPort(let target, let port):
+            return "in \(X86.RegisterTable.canonicalName(for: target)), \(formatPort(port))"
+        case .outToPort(let source, let port):
+            return "out \(formatPort(port)), \(X86.RegisterTable.canonicalName(for: source))"
+        case .interrupt(let vector):
+            return "int \(vector)"
+        }
+    }
+
+    private static func formatPort(_ port: X86.PortSource) -> String {
+        switch port {
+        case .immediate(let value): return String(value)
+        case .dx: return "dx"
         }
     }
 
