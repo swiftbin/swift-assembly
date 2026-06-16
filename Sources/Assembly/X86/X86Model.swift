@@ -720,12 +720,22 @@ internal enum X86 {
         // COMI signals invalid on QNaN; UCOMI doesn't.
         case ucomiss, ucomisd
         case comiss, comisd
+        // Floating-point format conversions (XMM ↔ XMM). All ride the
+        // `0F 5A` (precision change) and `0F 5B` (FP ↔ int) opcodes
+        // with mandatory prefixes selecting the source/destination
+        // type pair.
+        case cvtss2sd, cvtsd2ss   // scalar single ↔ scalar double
+        case cvtps2pd, cvtpd2ps   // packed
+        case cvtdq2ps, cvtps2dq, cvttps2dq   // integer ↔ packed single
 
         /// Second-byte opcode (operation selector).
         var opcode2: UInt8 {
             switch self {
             case .ucomiss, .ucomisd:                 return 0x2E
             case .comiss,  .comisd:                  return 0x2F
+            case .cvtss2sd, .cvtsd2ss,
+                 .cvtps2pd, .cvtpd2ps:               return 0x5A
+            case .cvtdq2ps, .cvtps2dq, .cvttps2dq:   return 0x5B
             case .sqrtps, .sqrtpd, .sqrtss, .sqrtsd: return 0x51
             case .rsqrtps, .rsqrtss:                 return 0x52
             case .rcpps, .rcpss:                     return 0x53
@@ -748,29 +758,40 @@ internal enum X86 {
             case .addps, .subps, .mulps, .divps, .minps, .maxps, .sqrtps,
                  .rcpps, .rsqrtps,
                  .andps, .andnps, .orps, .xorps,
-                 .ucomiss, .comiss:
+                 .ucomiss, .comiss,
+                 .cvtps2pd, .cvtdq2ps:
                 return nil
             case .addpd, .subpd, .mulpd, .divpd, .minpd, .maxpd, .sqrtpd,
                  .andpd, .andnpd, .orpd, .xorpd,
-                 .ucomisd, .comisd:
+                 .ucomisd, .comisd,
+                 .cvtpd2ps, .cvtps2dq:
                 return 0x66
             case .addss, .subss, .mulss, .divss, .minss, .maxss, .sqrtss,
-                 .rcpss, .rsqrtss:
+                 .rcpss, .rsqrtss,
+                 .cvtss2sd, .cvttps2dq:
                 return 0xF3
-            case .addsd, .subsd, .mulsd, .divsd, .minsd, .maxsd, .sqrtsd:
+            case .addsd, .subsd, .mulsd, .divsd, .minsd, .maxsd, .sqrtsd,
+                 .cvtsd2ss:
                 return 0xF2
             }
         }
 
         /// Memory operand width when the source is a memory reference.
-        /// COMI/UCOMI are scalar (m32 / m64) despite using PS/PD-style
-        /// prefixes, so they can't be derived from the prefix alone.
+        /// Most variants follow the prefix-based rule (66/none → m128,
+        /// F3 → m32, F2 → m64), but COMI/UCOMI and several conversions
+        /// have intrinsic widths that disagree with the prefix shortcut.
         var memoryWidth: RegisterWidth {
             switch self {
-            case .ucomiss, .comiss:
+            case .ucomiss, .comiss,
+                 .cvtss2sd:                     // src: m32 (single)
                 return .dword
-            case .ucomisd, .comisd:
+            case .ucomisd, .comisd,
+                 .cvtsd2ss,                     // src: m64 (double)
+                 .cvtps2pd:                     // src: m64 (two singles in low half)
                 return .qword
+            case .cvtpd2ps, .cvtdq2ps,
+                 .cvtps2dq, .cvttps2dq:         // src: m128 (packed)
+                return .xmmword
             default:
                 switch self.mandatoryPrefix {
                 case 0xF3: return .dword   // SS: scalar single

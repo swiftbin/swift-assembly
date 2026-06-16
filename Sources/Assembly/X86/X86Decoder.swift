@@ -283,7 +283,7 @@ internal enum X86InstructionDecoder {
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x2E, 0x2F,
              0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57,
-             0x58, 0x59, 0x5C, 0x5D, 0x5E, 0x5F:
+             0x58, 0x59, 0x5A, 0x5B, 0x5C, 0x5D, 0x5E, 0x5F:
             return try decodeSSEArithmetic(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x20, 0x21, 0x22, 0x23:
             return try decodeMovSystemRegister(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)

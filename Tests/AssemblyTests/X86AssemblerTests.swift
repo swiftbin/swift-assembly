@@ -2510,4 +2510,63 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14e SSE float ↔ float / int conversions (0F 5A / 5B)
+
+    private static let sseConvertXMMCases: [(String, [UInt8])] = [
+        // Scalar precision change
+        ("cvtss2sd xmm0, xmm1",              [0xF3, 0x0F, 0x5A, 0xC1]),
+        ("cvtss2sd xmm0, dword ptr [rbx]",   [0xF3, 0x0F, 0x5A, 0x03]),
+        ("cvtsd2ss xmm0, xmm1",              [0xF2, 0x0F, 0x5A, 0xC1]),
+        ("cvtsd2ss xmm0, qword ptr [rbx]",   [0xF2, 0x0F, 0x5A, 0x03]),
+
+        // Packed precision change (note source widths)
+        ("cvtps2pd xmm0, xmm1",              [0x0F, 0x5A, 0xC1]),
+        ("cvtps2pd xmm0, qword ptr [rbx]",   [0x0F, 0x5A, 0x03]),
+        ("cvtpd2ps xmm0, xmm1",              [0x66, 0x0F, 0x5A, 0xC1]),
+        ("cvtpd2ps xmm0, xmmword ptr [rbx]", [0x66, 0x0F, 0x5A, 0x03]),
+
+        // Integer ↔ packed single (0F 5B family)
+        ("cvtdq2ps xmm0, xmm1",              [0x0F, 0x5B, 0xC1]),
+        ("cvtdq2ps xmm0, xmmword ptr [rbx]", [0x0F, 0x5B, 0x03]),
+        ("cvtps2dq xmm0, xmm1",              [0x66, 0x0F, 0x5B, 0xC1]),
+        ("cvttps2dq xmm0, xmm1",             [0xF3, 0x0F, 0x5B, 0xC1]),
+
+        // Extended XMM
+        ("cvtss2sd xmm8, xmm9",              [0xF3, 0x45, 0x0F, 0x5A, 0xC1]),
+        ("cvtdq2ps xmm15, xmm0",             [0x44, 0x0F, 0x5B, 0xF8]),
+    ]
+
+    func testSSEConvertXMMAssembles() throws {
+        for (source, expected) in Self.sseConvertXMMCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEConvertXMMDisassembles() throws {
+        for (source, bytes) in Self.sseConvertXMMCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// Each kind has an intrinsic source width — a hint that disagrees
+    /// is rejected.
+    func testSSEConvertXMMRejectsWidthMismatch() {
+        // CVTSS2SD source is m32; m64 hint is wrong.
+        XCTAssertThrowsError(try X86Assembler.assemble("cvtss2sd xmm0, qword ptr [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        // CVTPS2PD source is m64 (low half of an xmm).
+        XCTAssertThrowsError(try X86Assembler.assemble("cvtps2pd xmm0, xmmword ptr [rbx]")) { _ in }
+    }
+
+    func testSSEConvertXMMStreamRoundTrip() throws {
+        let source = Self.sseConvertXMMCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseConvertXMMCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
