@@ -84,6 +84,12 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeImulRegister(destination: dst, source: src), patches: [])
         case .imulImmediate(let dst, let src, let imm):
             return Encoded(bytes: try encodeImulImmediate(destination: dst, source: src, immediate: imm), patches: [])
+        case .push(let operand):
+            return Encoded(bytes: try encodePush(operand), patches: [])
+        case .pop(let target):
+            return Encoded(bytes: try encodePop(target), patches: [])
+        case .lea(let dst, let mem):
+            return Encoded(bytes: try encodeLea(destination: dst, source: mem), patches: [])
         }
     }
 
@@ -718,6 +724,73 @@ internal enum X86InstructionEncoder {
         return bytes
     }
 
+    // MARK: - PUSH / POP / LEA
+
+    private static func encodePush(_ operand: X86.Operand) throws -> [UInt8] {
+        switch operand {
+        case .register(let r):
+            // Short form 50+rd. Default operand size is qword in long
+            // mode; the 0x66 prefix selects the word form.
+            var bytes: [UInt8] = []
+            if r.width == .word { bytes.append(X86.operandSizeOverride) }
+            if let rex = X86.REX.build(b: r.highBit) { bytes.append(rex) }
+            bytes.append(0x50 | r.lowBits)
+            return bytes
+        case .memory(let mem, let width):
+            return try emitOperandPair(
+                opcode: 0xFF,
+                width: width,
+                rmOperand: .memory(mem, width: width),
+                regHigh: 0,
+                regLow: 6,
+                useREXW: false
+            )
+        case .immediate(let imm):
+            // 6A ib (sign-extended to the stack slot) when the value
+            // fits int8; otherwise 68 id (sign-extended imm32).
+            if Int64(Int8(truncatingIfNeeded: imm)) == imm {
+                return [0x6A, UInt8(bitPattern: Int8(truncatingIfNeeded: imm))]
+            }
+            var bytes: [UInt8] = [0x68]
+            appendLE32(UInt32(truncatingIfNeeded: imm), into: &bytes)
+            return bytes
+        }
+    }
+
+    private static func encodePop(_ target: X86.RegisterOrMemory) throws -> [UInt8] {
+        switch target {
+        case .register(let r):
+            var bytes: [UInt8] = []
+            if r.width == .word { bytes.append(X86.operandSizeOverride) }
+            if let rex = X86.REX.build(b: r.highBit) { bytes.append(rex) }
+            bytes.append(0x58 | r.lowBits)
+            return bytes
+        case .memory(let mem, let width):
+            return try emitOperandPair(
+                opcode: 0x8F,
+                width: width,
+                rmOperand: .memory(mem, width: width),
+                regHigh: 0,
+                regLow: 0,
+                useREXW: false
+            )
+        }
+    }
+
+    /// LEA r, m. The source is a pure address expression — its width
+    /// only matters insofar as REX.W is set for a qword destination.
+    private static func encodeLea(destination dst: X86.Register, source mem: X86.MemoryOperand) throws -> [UInt8] {
+        try checkRegisterRegisterCompat([dst], mnemonic: "lea")
+        return try emitOperandPair(
+            opcode: 0x8D,
+            width: dst.width,
+            rmOperand: .memory(mem, width: dst.width),
+            regHigh: dst.highBit,
+            regLow: dst.lowBits,
+            forceREX: needsForcedREX([dst])
+        )
+    }
+
     // MARK: - Indirect JMP / CALL (FF /4 and FF /2)
 
     /// In 64-bit mode JMP / CALL with an `r/m` operand are always r/m64;
@@ -765,7 +838,8 @@ internal enum X86InstructionEncoder {
         rmOperand: X86.RegisterOrMemory,
         regHigh: UInt8,
         regLow: UInt8,
-        forceREX: Bool = false
+        forceREX: Bool = false,
+        useREXW: Bool = true
     ) throws -> [UInt8] {
         try emitOperandPair(
             opcodeBytes: [opcode],
@@ -773,23 +847,27 @@ internal enum X86InstructionEncoder {
             rmOperand: rmOperand,
             regHigh: regHigh,
             regLow: regLow,
-            forceREX: forceREX
+            forceREX: forceREX,
+            useREXW: useREXW
         )
     }
 
     /// Variant accepting a multi-byte opcode (e.g. `[0x0F, 0xAF]` for
-    /// IMUL r, r/m).
+    /// IMUL r, r/m). When `useREXW` is `false`, REX.W is suppressed even
+    /// for qword operands — used by instructions whose operand size is
+    /// implicitly 64-bit in long mode (PUSH/POP, indirect CALL/JMP).
     private static func emitOperandPair(
         opcodeBytes: [UInt8],
         width: X86.RegisterWidth,
         rmOperand: X86.RegisterOrMemory,
         regHigh: UInt8,
         regLow: UInt8,
-        forceREX: Bool = false
+        forceREX: Bool = false,
+        useREXW: Bool = true
     ) throws -> [UInt8] {
         var bytes: [UInt8] = []
         if width == .word { bytes.append(X86.operandSizeOverride) }
-        let rexW: UInt8 = width == .qword ? 1 : 0
+        let rexW: UInt8 = (useREXW && width == .qword) ? 1 : 0
         switch rmOperand {
         case .register(let rm):
             if let rex = X86.REX.build(w: rexW, r: regHigh, x: 0, b: rm.highBit, forceEmit: forceREX) {

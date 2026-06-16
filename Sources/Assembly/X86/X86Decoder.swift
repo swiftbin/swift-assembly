@@ -128,8 +128,16 @@ internal enum X86InstructionDecoder {
         case 0x0F:
             let opcode2 = try cursor.takeByte()
             return try decodeTwoByteOpcode(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x50...0x57:
+            return try decodePushRegisterShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x58...0x5F:
+            return try decodePopRegisterShort(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x68:
+            return try decodePushImm32(cursor: &cursor)
         case 0x69, 0x6B:
             return try decodeImulImmediate(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x6A:
+            return try decodePushImm8(cursor: &cursor)
         case 0x70...0x7F:
             return try decodeJccRel8(opcode: opcode, cursor: &cursor)
         case 0x80, 0x81, 0x83:
@@ -138,6 +146,10 @@ internal enum X86InstructionDecoder {
             return try decodeTestMR(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0x88, 0x89, 0x8A, 0x8B:
             return try decodeMovRegisterMemory(opcode: opcode, prefixes: prefixes, cursor: &cursor)
+        case 0x8D:
+            return try decodeLea(prefixes: prefixes, cursor: &cursor)
+        case 0x8F:
+            return try decodePopMemory(prefixes: prefixes, cursor: &cursor)
         case 0xA8, 0xA9:
             return try decodeTestAccumulator(opcode: opcode, prefixes: prefixes, cursor: &cursor)
         case 0xB0...0xB7:
@@ -234,6 +246,60 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - PUSH / POP / LEA
+
+    /// PUSH/POP operand size is implicitly qword in long mode; the 0x66
+    /// prefix selects word. REX.W is ignored.
+    private static func selectPushPopWidth(prefixes: Prefixes) -> X86.RegisterWidth {
+        prefixes.operandSize ? .word : .qword
+    }
+
+    private static func decodePushRegisterShort(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectPushPopWidth(prefixes: prefixes)
+        let number = (prefixes.rexB << 3) | (opcode & 0x07)
+        let register = X86.Register(number: number, width: width)
+        return Decoded(instruction: .push(.register(register)), length: cursor.consumed)
+    }
+
+    private static func decodePopRegisterShort(opcode: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectPushPopWidth(prefixes: prefixes)
+        let number = (prefixes.rexB << 3) | (opcode & 0x07)
+        let register = X86.Register(number: number, width: width)
+        return Decoded(instruction: .pop(.register(register)), length: cursor.consumed)
+    }
+
+    private static func decodePushImm8(cursor: inout Cursor) throws -> Decoded {
+        let imm = Int64(Int8(bitPattern: try cursor.takeByte()))
+        return Decoded(instruction: .push(.immediate(imm)), length: cursor.consumed)
+    }
+
+    private static func decodePushImm32(cursor: inout Cursor) throws -> Decoded {
+        let imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        return Decoded(instruction: .push(.immediate(imm)), length: cursor.consumed)
+    }
+
+    private static func decodePopMemory(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        try requireSlash0(modrm: modrm, opcode: 0x8F)
+        let width = selectPushPopWidth(prefixes: prefixes)
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .pop(target), length: cursor.consumed)
+    }
+
+    private static func decodeLea(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+            // LEA with a register source is an UD; gas/objdump report
+            // `(bad)` here. We surface it as unknownEncoding.
+            throw AssemblerError.unknownEncoding(0x8D)
+        }
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        return Decoded(instruction: .lea(destination: destination, source: memory), length: cursor.consumed)
     }
 
     // MARK: - IMUL (2-op and 3-op)
@@ -388,6 +454,19 @@ internal enum X86InstructionDecoder {
                 ? .callIndirect(target: target)
                 : .jumpIndirect(target: target)
             return Decoded(instruction: instruction, length: cursor.consumed)
+        }
+
+        // FF /6 = PUSH r/m. Width is word (with 0x66) or qword (default);
+        // REX.W is ignored.
+        if !isByte && nField == 6 {
+            let pushWidth = selectPushPopWidth(prefixes: prefixes)
+            let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: pushWidth, cursor: &cursor)
+            let operand: X86.Operand
+            switch target {
+            case .register(let r): operand = .register(r)
+            case .memory(let m, let w): operand = .memory(m, width: w)
+            }
+            return Decoded(instruction: .push(operand), length: cursor.consumed)
         }
 
         let width = isByte ? X86.RegisterWidth.byte : selectWidth(prefixes: prefixes)

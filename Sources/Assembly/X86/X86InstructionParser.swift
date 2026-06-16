@@ -48,6 +48,15 @@ internal enum X86Parser {
         if let kind = X86.MulDivKind(rawValue: instruction.mnemonic), kind != .imul {
             return try parseMulDivOneOperand(kind, instruction)
         }
+        if instruction.mnemonic == "push" {
+            return try parsePush(instruction)
+        }
+        if instruction.mnemonic == "pop" {
+            return try parsePop(instruction)
+        }
+        if instruction.mnemonic == "lea" {
+            return try parseLea(instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -214,6 +223,86 @@ internal enum X86Parser {
         case .immediate:
             throw AssemblerError.unsupportedOperand("imul: source cannot be an immediate")
         }
+    }
+
+    private static func parsePush(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "push",
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        switch classified {
+        case .register(let r):
+            try validatePushPopWidth(r.width, mnemonic: "push")
+            return .push(.register(r))
+        case .memory(let m, let explicit):
+            // Long-mode default is qword; the 0x66 prefix selects word.
+            let width = explicit ?? .qword
+            try validatePushPopWidth(width, mnemonic: "push")
+            return .push(.memory(m, width: width))
+        case .immediate(let imm):
+            // No imm64 form. Sign-extended imm32 is the widest available.
+            guard imm >= Int64(Int32.min) && imm <= Int64(Int32.max) else {
+                throw AssemblerError.immediateOutOfRange(
+                    instruction: "push",
+                    value: imm,
+                    range: Int64(Int32.min)...Int64(Int32.max)
+                )
+            }
+            return .push(.immediate(imm))
+        }
+    }
+
+    private static func parsePop(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "pop",
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        switch classified {
+        case .register(let r):
+            try validatePushPopWidth(r.width, mnemonic: "pop")
+            return .pop(.register(r))
+        case .memory(let m, let explicit):
+            let width = explicit ?? .qword
+            try validatePushPopWidth(width, mnemonic: "pop")
+            return .pop(.memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("pop: target cannot be an immediate")
+        }
+    }
+
+    private static func validatePushPopWidth(_ width: X86.RegisterWidth, mnemonic: String) throws {
+        guard width == .word || width == .qword else {
+            throw AssemblerError.unsupportedOperand(
+                "\(mnemonic): operand must be 16- or 64-bit in long mode"
+            )
+        }
+    }
+
+    private static func parseLea(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "lea",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try register(instruction.operands[0])
+        guard dst.width != .byte else {
+            throw AssemblerError.unsupportedOperand("lea: destination cannot be 8-bit")
+        }
+        let classified = try classifyOperand(instruction.operands[1])
+        guard case .memory(let mem, _) = classified else {
+            throw AssemblerError.unsupportedOperand("lea: source must be a memory reference")
+        }
+        return .lea(destination: dst, source: mem)
     }
 
     private static func parseEnter(_ instruction: ParsedInstruction) throws -> X86.Instruction {

@@ -144,6 +144,10 @@ internal enum X86 {
         // CWD = AX→DX:AX, CDQ = EAX→EDX:EAX, CQO = RAX→RDX:RAX.
         case cbw, cwde, cdqe
         case cwd, cdq, cqo
+        // Stack flag push/pop. In long mode the default operand size is
+        // qword; the 0x66 prefix selects the 16-bit form.
+        case pushfq, popfq
+        case pushfw, popfw
 
         var bytes: [UInt8] {
             switch self {
@@ -187,6 +191,10 @@ internal enum X86 {
             case .cwd:      return [0x66, 0x99]
             case .cdq:      return [0x99]
             case .cqo:      return [0x48, 0x99]
+            case .pushfq:   return [0x9C]
+            case .popfq:    return [0x9D]
+            case .pushfw:   return [0x66, 0x9C]
+            case .popfw:    return [0x66, 0x9D]
             }
         }
 
@@ -194,6 +202,9 @@ internal enum X86 {
             switch mnemonic {
             case "fwait": return .wait
             case "xlat":  return .xlatb
+            // In long mode `pushf`/`popf` default to qword.
+            case "pushf": return .pushfq
+            case "popf":  return .popfq
             default:      return ZeroOperandKind(rawValue: mnemonic)
             }
         }
@@ -513,5 +524,13 @@ internal enum X86 {
         case imulRegister(destination: Register, source: RegisterOrMemory)
         /// 3-operand IMUL (`69 /r iw/id`, `6B /r ib`): r = r/m × imm, signed.
         case imulImmediate(destination: Register, source: RegisterOrMemory, immediate: Int64)
+        /// PUSH r/m/imm. Operand width must be word or qword in long mode.
+        case push(Operand)
+        /// POP r/m. No immediate form.
+        case pop(RegisterOrMemory)
+        /// LEA r, m — load effective address. The source is treated as
+        /// an address expression, not a memory access; its width is the
+        /// destination register's width.
+        case lea(destination: Register, source: MemoryOperand)
     }
 }

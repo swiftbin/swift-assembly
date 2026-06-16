@@ -1143,4 +1143,138 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 8a PUSH / POP / PUSHFQ / POPFQ / LEA
+
+    private static let pushPopFlagsCases: [(String, [UInt8])] = [
+        ("pushfq", [0x9C]),
+        ("popfq",  [0x9D]),
+        ("pushfw", [0x66, 0x9C]),
+        ("popfw",  [0x66, 0x9D]),
+    ]
+
+    private static let pushPopLeaCases: [(String, [UInt8])] = [
+        // PUSH register short form
+        ("push rax", [0x50]),
+        ("push rcx", [0x51]),
+        ("push rbp", [0x55]),
+        ("push r8",  [0x41, 0x50]),
+        ("push r15", [0x41, 0x57]),
+        ("push ax",  [0x66, 0x50]),
+        ("push r8w", [0x66, 0x41, 0x50]),
+
+        // PUSH memory (FF /6) — qword by default in long mode
+        ("push qword ptr [rbx]",       [0xFF, 0x33]),
+        ("push qword ptr [rbx + 8]",   [0xFF, 0x73, 0x08]),
+        ("push word ptr [rbx]",        [0x66, 0xFF, 0x33]),
+
+        // PUSH immediate (6A ib / 68 id)
+        ("push 5",       [0x6A, 0x05]),
+        ("push -1",      [0x6A, 0xFF]),
+        ("push 127",     [0x6A, 0x7F]),
+        ("push 128",     [0x68, 0x80, 0x00, 0x00, 0x00]),
+        ("push 1000",    [0x68, 0xE8, 0x03, 0x00, 0x00]),
+        ("push -1000",   [0x68, 0x18, 0xFC, 0xFF, 0xFF]),
+
+        // POP register short form
+        ("pop rax", [0x58]),
+        ("pop r15", [0x41, 0x5F]),
+        ("pop ax",  [0x66, 0x58]),
+
+        // POP memory (8F /0)
+        ("pop qword ptr [rbx]",        [0x8F, 0x03]),
+        ("pop qword ptr [rbx + 8]",    [0x8F, 0x43, 0x08]),
+        ("pop word ptr [rbx]",         [0x66, 0x8F, 0x03]),
+
+        // LEA
+        ("lea rax, [rbx]",                  [0x48, 0x8D, 0x03]),
+        ("lea rax, [rbx + 8]",              [0x48, 0x8D, 0x43, 0x08]),
+        ("lea rax, [rbx + rcx*4 + 256]",    [0x48, 0x8D, 0x84, 0x8B, 0x00, 0x01, 0x00, 0x00]),
+        ("lea rax, [rip + 16]",             [0x48, 0x8D, 0x05, 0x10, 0x00, 0x00, 0x00]),
+        ("lea eax, [rbx]",                  [0x8D, 0x03]),
+        ("lea ax, [rbx]",                   [0x66, 0x8D, 0x03]),
+        ("lea r8, [rbx]",                   [0x4C, 0x8D, 0x03]),
+    ]
+
+    func testPushPopFlagsAssembles() throws {
+        for (mnemonic, expected) in Self.pushPopFlagsCases {
+            XCTAssertEqual(try X86Assembler.assemble(mnemonic), expected, "assemble \(mnemonic)")
+        }
+    }
+
+    func testPushPopFlagsDisassembles() throws {
+        for (mnemonic, bytes) in Self.pushPopFlagsCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), mnemonic, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testPushPopLeaAssembles() throws {
+        for (source, expected) in Self.pushPopLeaCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testPushPopLeaDisassembles() throws {
+        for (source, bytes) in Self.pushPopLeaCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `pushf` / `popf` are NASM aliases for the qword forms in long mode.
+    func testPushPopFlagsAliases() throws {
+        XCTAssertEqual(try X86Assembler.assemble("pushf"), [0x9C])
+        XCTAssertEqual(try X86Assembler.assemble("popf"),  [0x9D])
+    }
+
+    /// `push [mem]` without a size hint defaults to qword in long mode.
+    func testPushMemoryDefaultsToQword() throws {
+        XCTAssertEqual(try X86Assembler.assemble("push [rbx]"), [0xFF, 0x33])
+    }
+
+    func testPushPopRejectsByteAndDwordWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("push al")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("push eax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("pop edi")) { _ in }
+    }
+
+    /// PUSH has no imm64 form. A value outside Int32 errors out.
+    func testPushImmediateOutOfInt32() {
+        XCTAssertThrowsError(try X86Assembler.assemble("push 4294967296")) { error in
+            guard case AssemblerError.immediateOutOfRange = error else {
+                return XCTFail("expected immediateOutOfRange, got \(error)")
+            }
+        }
+    }
+
+    /// LEA accepts a size hint on the source but ignores it; the
+    /// destination register's width determines the operation width.
+    func testLeaIgnoresSourceSizeHint() throws {
+        XCTAssertEqual(try X86Assembler.assemble("lea rax, qword ptr [rbx]"), [0x48, 0x8D, 0x03])
+        XCTAssertEqual(try X86Assembler.assemble("lea rax, dword ptr [rbx]"), [0x48, 0x8D, 0x03])
+    }
+
+    func testLeaRejectsRegisterSource() {
+        XCTAssertThrowsError(try X86Assembler.assemble("lea rax, rbx")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testPushPopLeaStreamRoundTrip() throws {
+        let cases = Self.pushPopFlagsCases + Self.pushPopLeaCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

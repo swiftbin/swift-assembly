@@ -42,6 +42,20 @@ internal enum X86InstructionFormatter {
             return "imul \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         case .imulImmediate(let dst, let source, let imm):
             return "imul \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source)), \(imm)"
+        case .push(let operand):
+            return "push \(formatPushOperand(operand))"
+        case .pop(let target):
+            return "pop \(formatStandaloneTarget(target))"
+        case .lea(let dst, let mem):
+            return "lea \(X86.RegisterTable.canonicalName(for: dst)), \(formatMemory(mem))"
+        }
+    }
+
+    private static func formatPushOperand(_ operand: X86.Operand) -> String {
+        switch operand {
+        case .register(let r): return X86.RegisterTable.canonicalName(for: r)
+        case .memory(let m, let w): return "\(sizeHintPrefix(w)) \(formatMemory(m))"
+        case .immediate(let v): return String(v)
         }
     }
 
