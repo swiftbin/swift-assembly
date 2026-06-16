@@ -2240,4 +2240,88 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14a SSE MOV family
+
+    private static let sseMovCases: [(String, [UInt8])] = [
+        // MOVAPS / MOVUPS — no mandatory prefix
+        ("movaps xmm0, xmm1",              [0x0F, 0x28, 0xC1]),
+        ("movaps xmm0, xmmword ptr [rbx]", [0x0F, 0x28, 0x03]),
+        ("movaps xmmword ptr [rbx], xmm0", [0x0F, 0x29, 0x03]),
+        ("movups xmm0, xmm1",              [0x0F, 0x10, 0xC1]),
+        ("movups xmmword ptr [rbx], xmm1", [0x0F, 0x11, 0x0B]),
+
+        // MOVAPD / MOVUPD — 0x66 mandatory prefix
+        ("movapd xmm0, xmm1",              [0x66, 0x0F, 0x28, 0xC1]),
+        ("movupd xmm0, xmmword ptr [rbx]", [0x66, 0x0F, 0x10, 0x03]),
+
+        // MOVDQA / MOVDQU
+        ("movdqa xmm0, xmm1",              [0x66, 0x0F, 0x6F, 0xC1]),
+        ("movdqa xmmword ptr [rbx], xmm0", [0x66, 0x0F, 0x7F, 0x03]),
+        ("movdqu xmm0, xmm1",              [0xF3, 0x0F, 0x6F, 0xC1]),
+        ("movdqu xmm0, xmmword ptr [rbx]", [0xF3, 0x0F, 0x6F, 0x03]),
+
+        // MOVSS (m32 source/destination)
+        ("movss xmm0, xmm1",            [0xF3, 0x0F, 0x10, 0xC1]),
+        ("movss xmm0, dword ptr [rbx]", [0xF3, 0x0F, 0x10, 0x03]),
+        ("movss dword ptr [rbx], xmm0", [0xF3, 0x0F, 0x11, 0x03]),
+
+        // MOVSD (m64 source/destination)
+        ("movsd xmm0, xmm1",            [0xF2, 0x0F, 0x10, 0xC1]),
+        ("movsd xmm0, qword ptr [rbx]", [0xF2, 0x0F, 0x10, 0x03]),
+        ("movsd qword ptr [rbx], xmm0", [0xF2, 0x0F, 0x11, 0x03]),
+
+        // Extended XMM registers (XMM8..XMM15)
+        ("movaps xmm8, xmm0",  [0x44, 0x0F, 0x28, 0xC0]),
+        ("movaps xmm0, xmm8",  [0x41, 0x0F, 0x28, 0xC0]),
+        ("movaps xmm8, xmm9",  [0x45, 0x0F, 0x28, 0xC1]),
+        ("movaps xmm15, xmm0", [0x44, 0x0F, 0x28, 0xF8]),
+
+        // XMM register + memory with extended SIB
+        ("movaps xmm8, xmmword ptr [r9 + 16]",  [0x45, 0x0F, 0x28, 0x41, 0x10]),
+    ]
+
+    func testSSEMovAssembles() throws {
+        for (source, expected) in Self.sseMovCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEMovDisassembles() throws {
+        for (source, bytes) in Self.sseMovCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// `movsd` with no operands stays the string-op (MOVSD scalar
+    /// double-word). With two operands it routes to the SSE2 scalar
+    /// double-precision move.
+    func testMovsdMnemonicDisambiguation() throws {
+        XCTAssertEqual(try X86Assembler.assemble("movsd"), [0xA5])
+        XCTAssertEqual(try X86Assembler.assemble("movsd xmm0, xmm1"), [0xF2, 0x0F, 0x10, 0xC1])
+        XCTAssertEqual(try X86Assembler.disassemble([0xA5]), "movsd")
+        XCTAssertEqual(try X86Assembler.disassemble([0xF2, 0x0F, 0x10, 0xC1]), "movsd xmm0, xmm1")
+    }
+
+    /// Memory operand width must match the mnemonic's intrinsic size.
+    func testSSEMovMemoryWidthMismatch() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movaps xmm0, qword ptr [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("movss xmm0, qword ptr [rbx]")) { _ in }
+    }
+
+    func testSSEMovRejectsTwoMemoryOperands() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movaps [rbx], [rcx]")) { _ in }
+    }
+
+    func testSSEMovStreamRoundTrip() throws {
+        let source = Self.sseMovCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseMovCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

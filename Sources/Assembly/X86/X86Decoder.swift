@@ -279,6 +279,8 @@ internal enum X86InstructionDecoder {
             return try decodeOpcode0F01(prefixes: prefixes, cursor: &cursor)
         case 0x02, 0x03:
             return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x10, 0x11, 0x28, 0x29, 0x6F, 0x7F:
+            return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x20, 0x21, 0x22, 0x23:
             return try decodeMovSystemRegister(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x40...0x4F:
@@ -342,6 +344,44 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - SSE MOV
+
+    private static func decodeSSEMov(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8?
+        if prefixes.f3Prefix         { mandatoryPrefix = 0xF3 }
+        else if prefixes.f2Prefix    { mandatoryPrefix = 0xF2 }
+        else if prefixes.operandSize { mandatoryPrefix = 0x66 }
+        else                         { mandatoryPrefix = nil }
+
+        guard let resolved = X86.SSEMovKind.decode(mandatoryPrefix: mandatoryPrefix, opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let xmm = X86.XMMRegister(number: regNum)
+
+        let rm: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            rm = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            rm = .memory(mem)
+        }
+
+        let destination: X86.XMMOrMemory
+        let source: X86.XMMOrMemory
+        if resolved.isLoad {
+            destination = .register(xmm)
+            source = rm
+        } else {
+            destination = rm
+            source = .register(xmm)
+        }
+        return Decoded(instruction: .sseMov(resolved.kind, destination: destination, source: source), length: cursor.consumed)
     }
 
     // MARK: - MOV CR/DR + LAR / LSL
@@ -719,7 +759,7 @@ internal enum X86InstructionDecoder {
             case .word:  immediate = Int64(try cursor.takeLE16())
             case .dword: immediate = Int64(try cursor.takeLE32())
             case .qword: immediate = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .byte:  throw AssemblerError.unknownEncoding(UInt32(opcode))
+            case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
             }
         }
         return Decoded(
@@ -794,6 +834,7 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+        case .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
         let acc = X86.Register(number: 0, width: width)
         return Decoded(instruction: .test(left: .register(acc), right: .immediate(imm)), length: cursor.consumed)
@@ -816,6 +857,7 @@ internal enum X86InstructionDecoder {
             case .word:  imm = Int64(try cursor.takeLE16())
             case .dword: imm = Int64(try cursor.takeLE32())
             case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            case .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
             }
             return Decoded(instruction: .test(left: target, right: .immediate(imm)), length: cursor.consumed)
         case 2, 3:
@@ -923,7 +965,7 @@ internal enum X86InstructionDecoder {
             case .word:  imm = Int64(try cursor.takeLE16())
             case .dword: imm = Int64(try cursor.takeLE32())
             case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .byte:  throw AssemblerError.unknownEncoding(UInt32(variant))
+            case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(variant))
             }
             let rax = X86.Register(number: 0, width: width)
             return Decoded(
@@ -958,7 +1000,7 @@ internal enum X86InstructionDecoder {
             case .word:  imm = Int64(try cursor.takeLE16())
             case .dword: imm = Int64(try cursor.takeLE32())
             case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .byte:  throw AssemblerError.unknownEncoding(UInt32(opcode))
+            case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
             }
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode))
@@ -1097,7 +1139,7 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(bitPattern: try cursor.takeLE64())
-        case .byte:  throw AssemblerError.unknownEncoding(UInt32(opcode))
+        case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
         return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
     }
@@ -1126,7 +1168,7 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-        case .byte:  throw AssemblerError.unknownEncoding(0xC7)
+        case .byte, .xmmword: throw AssemblerError.unknownEncoding(0xC7)
         }
         return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
     }

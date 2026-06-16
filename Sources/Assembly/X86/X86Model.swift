@@ -4,12 +4,34 @@ import Foundation
 /// `A64`. Domain types (registers, memory operands, instruction kinds) live
 /// here; the byte-level format descriptors live in `X86InstructionFormats`.
 internal enum X86 {
-    /// General-purpose register width.
+    /// Operand width tag. The first four cases are GPR widths; the
+    /// remaining vector widths are used by SSE/AVX memory operands and
+    /// SIMD-register types. (Registers themselves are GPR-only; SIMD
+    /// register references go through dedicated types like `XMMRegister`.)
     enum RegisterWidth: Int, Equatable {
         case byte = 8
         case word = 16
         case dword = 32
         case qword = 64
+        case xmmword = 128
+    }
+
+    /// A 128-bit SSE/AVX register (XMM0..XMM15). Distinct from `Register`
+    /// because XMMs have no high-byte / REX-byte quirks and never share
+    /// encoding slots with general-purpose registers.
+    struct XMMRegister: Equatable {
+        var number: UInt8
+
+        var lowBits: UInt8 { number & 0x7 }
+        var highBit: UInt8 { (number >> 3) & 0x1 }
+    }
+
+    /// SSE operand: a 128-bit XMM register or a memory reference. The
+    /// memory operand's width depends on the instruction (m32 for MOVSS,
+    /// m64 for MOVSD, m128 for the rest).
+    enum XMMOrMemory: Equatable {
+        case register(XMMRegister)
+        case memory(MemoryOperand)
     }
 
     /// A general-purpose register slot.
@@ -48,10 +70,11 @@ internal enum X86 {
         /// The width tag used in human-readable diagnostics.
         var widthSuffix: String {
             switch width {
-            case .byte:  return "byte"
-            case .word:  return "word"
-            case .dword: return "dword"
-            case .qword: return "qword"
+            case .byte:    return "byte"
+            case .word:    return "word"
+            case .dword:   return "dword"
+            case .qword:   return "qword"
+            case .xmmword: return "xmmword"
             }
         }
     }
@@ -660,6 +683,68 @@ internal enum X86 {
         case lar(destination: Register, source: RegisterOrMemory)
         /// `LSL r, r/m` — load segment limit (`0F 03 /r`).
         case lsl(destination: Register, source: RegisterOrMemory)
+        /// SSE/SSE2 MOV family: MOVAPS/MOVUPS/MOVAPD/MOVUPD/MOVDQA/
+        /// MOVDQU/MOVSS/MOVSD. The kind determines the mandatory prefix
+        /// (none/66/F3/F2) and the load/store opcode pair.
+        case sseMov(SSEMovKind, destination: XMMOrMemory, source: XMMOrMemory)
+    }
+
+    /// SSE/SSE2 data movement variants. Each kind owns its mandatory
+    /// prefix (none/66/F3/F2) and the two 0F-escape opcodes that
+    /// implement the load (xmm ← r/m) and store (r/m ← xmm) directions.
+    enum SSEMovKind: String, Equatable, CaseIterable {
+        case movaps, movups, movapd, movupd
+        case movdqa, movdqu
+        case movss, movsd
+
+        /// Mandatory legacy prefix byte (or nil for the no-prefix forms).
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .movaps, .movups:                  return nil
+            case .movapd, .movupd, .movdqa:         return 0x66
+            case .movdqu, .movss:                   return 0xF3
+            case .movsd:                            return 0xF2
+            }
+        }
+
+        /// Second-byte opcode for the load direction (RM, xmm ← r/m).
+        var loadOpcode: UInt8 {
+            switch self {
+            case .movaps, .movapd:                   return 0x28
+            case .movups, .movupd, .movss, .movsd:   return 0x10
+            case .movdqa, .movdqu:                   return 0x6F
+            }
+        }
+
+        /// Second-byte opcode for the store direction (MR, r/m ← xmm).
+        var storeOpcode: UInt8 {
+            switch self {
+            case .movaps, .movapd:                   return 0x29
+            case .movups, .movupd, .movss, .movsd:   return 0x11
+            case .movdqa, .movdqu:                   return 0x7F
+            }
+        }
+
+        /// Memory operand width. MOVSS / MOVSD touch a single scalar
+        /// (32 / 64 bits); everything else moves a full 128-bit vector.
+        var memoryWidth: RegisterWidth {
+            switch self {
+            case .movss: return .dword
+            case .movsd: return .qword
+            default:     return .xmmword
+            }
+        }
+
+        /// Decode the kind from (mandatory prefix, opcode2). Returns
+        /// `nil` if the combination doesn't name an SSE MOV variant.
+        static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> (kind: SSEMovKind, isLoad: Bool)? {
+            for kind in allCases {
+                guard kind.mandatoryPrefix == mandatoryPrefix else { continue }
+                if kind.loadOpcode == opcode2  { return (kind, true) }
+                if kind.storeOpcode == opcode2 { return (kind, false) }
+            }
+            return nil
+        }
     }
 
     enum SystemRegisterKind: String, Equatable, CaseIterable {

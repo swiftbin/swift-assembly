@@ -19,6 +19,14 @@ internal enum X86Parser {
             }
             return try parseMov(instruction)
         }
+        if let kind = X86.SSEMovKind(rawValue: instruction.mnemonic) {
+            // `movsd` doubles as the SSE scalar form and the string-op
+            // mnemonic; with no operands it's still the string form.
+            if kind == .movsd && instruction.operands.isEmpty {
+                return .stringOp(.movsd, prefix: nil)
+            }
+            return try parseSSEMov(kind, instruction)
+        }
         if instruction.mnemonic == "lar" {
             let (destination, source) = try parseRegisterMemoryPair(mnemonic: "lar", instruction: instruction)
             return .lar(destination: destination, source: source)
@@ -830,6 +838,56 @@ internal enum X86Parser {
         }
     }
 
+    /// Recognise `xmm0` ... `xmm15` as an XMM register name. Returns
+    /// `nil` for anything else so the caller falls through to GPR /
+    /// memory / immediate parsing.
+    static func parseXMMRegister(_ text: String) -> X86.XMMRegister? {
+        let lower = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard lower.hasPrefix("xmm") else { return nil }
+        let suffix = lower.dropFirst(3)
+        guard let number = UInt8(suffix), number <= 15 else { return nil }
+        return X86.XMMRegister(number: number)
+    }
+
+    /// Parse the source-level operand of an SSE MOV variant: an XMM
+    /// register, or a memory expression whose width must match the
+    /// kind's intrinsic operand size (m32 for MOVSS, m64 for MOVSD,
+    /// m128 for the rest).
+    private static func parseXMMOperand(_ text: String, kind: X86.SSEMovKind) throws -> X86.XMMOrMemory {
+        if let xmm = parseXMMRegister(text) {
+            return .register(xmm)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, body) = stripSizeHint(trimmed) {
+            guard width == kind.memoryWidth else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(kind.rawValue): memory operand width disagrees with mnemonic"
+                )
+            }
+            return .memory(try memoryOperand(body))
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed))
+        }
+        throw AssemblerError.unsupportedOperand("\(kind.rawValue): expected xmm register or memory operand")
+    }
+
+    private static func parseSSEMov(_ kind: X86.SSEMovKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try parseXMMOperand(instruction.operands[0], kind: kind)
+        let src = try parseXMMOperand(instruction.operands[1], kind: kind)
+        if case .memory = dst, case .memory = src {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): cannot have two memory operands")
+        }
+        return .sseMov(kind, destination: dst, source: src)
+    }
+
     private static func parseInterrupt(_ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 1 else {
             throw AssemblerError.invalidOperandCount(
@@ -1065,14 +1123,16 @@ internal enum X86Parser {
     private static func stripSizeHint(_ text: String) -> (width: X86.RegisterWidth, rest: String)? {
         let lower = text.lowercased()
         let hints: [(prefix: String, width: X86.RegisterWidth)] = [
-            ("byte ptr",  .byte),
-            ("word ptr",  .word),
-            ("dword ptr", .dword),
-            ("qword ptr", .qword),
-            ("byte",  .byte),
-            ("word",  .word),
-            ("dword", .dword),
-            ("qword", .qword),
+            ("xmmword ptr", .xmmword),
+            ("byte ptr",    .byte),
+            ("word ptr",    .word),
+            ("dword ptr",   .dword),
+            ("qword ptr",   .qword),
+            ("xmmword",     .xmmword),
+            ("byte",        .byte),
+            ("word",        .word),
+            ("dword",       .dword),
+            ("qword",       .qword),
         ]
         for (prefix, width) in hints {
             guard lower.hasPrefix(prefix) else { continue }
@@ -1159,6 +1219,8 @@ internal enum X86Parser {
             }
         case .qword:
             break
+        case .xmmword:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): immediate with xmmword width not supported")
         }
     }
 

@@ -113,6 +113,19 @@ internal enum X86InstructionFormatter {
             return "lar \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         case .lsl(let dst, let source):
             return "lsl \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
+        case .sseMov(let kind, let dst, let src):
+            return "\(kind.rawValue) \(formatXMMOrMemory(dst, kind: kind)), \(formatXMMOrMemory(src, kind: kind))"
+        }
+    }
+
+    /// Render an SSE MOV operand. XMM registers are bare; memory
+    /// references show the size hint that matches the mnemonic's
+    /// intrinsic width.
+    private static func formatXMMOrMemory(_ operand: X86.XMMOrMemory, kind: X86.SSEMovKind) -> String {
+        switch operand {
+        case .register(let r): return "xmm\(r.number)"
+        case .memory(let m):
+            return "\(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(m))"
         }
     }
 
@@ -223,10 +236,11 @@ internal enum X86InstructionFormatter {
 
     static func sizeHintPrefix(_ width: X86.RegisterWidth) -> String {
         switch width {
-        case .byte:  return "byte ptr"
-        case .word:  return "word ptr"
-        case .dword: return "dword ptr"
-        case .qword: return "qword ptr"
+        case .byte:    return "byte ptr"
+        case .word:    return "word ptr"
+        case .dword:   return "dword ptr"
+        case .qword:   return "qword ptr"
+        case .xmmword: return "xmmword ptr"
         }
     }
 

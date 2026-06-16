@@ -139,6 +139,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeLarLsl(opcode2: 0x02, destination: dst, source: src, mnemonic: "lar"), patches: [])
         case .lsl(let dst, let src):
             return Encoded(bytes: try encodeLarLsl(opcode2: 0x03, destination: dst, source: src, mnemonic: "lsl"), patches: [])
+        case .sseMov(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEMov(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -383,6 +385,8 @@ internal enum X86InstructionEncoder {
                 appendLE64(UInt64(bitPattern: imm), into: &bytes)
                 return bytes
             }
+        case .xmmword:
+            throw AssemblerError.unsupportedOperand("mov: xmmword immediate not supported")
         }
     }
 
@@ -941,6 +945,52 @@ internal enum X86InstructionEncoder {
         )
     }
 
+    // MARK: - SSE MOV
+
+    /// SSE/SSE2 MOV family. Each kind has its own mandatory prefix
+    /// (none/66/F2/F3) and a load/store opcode pair. The encoder picks
+    /// the form by which side is the register vs memory.
+    private static func encodeSSEMov(_ kind: X86.SSEMovKind, destination: X86.XMMOrMemory, source: X86.XMMOrMemory) throws -> [UInt8] {
+        let isLoad: Bool
+        let xmm: X86.XMMRegister
+        let rm: X86.XMMOrMemory
+        switch (destination, source) {
+        case (.register(let dst), _):
+            isLoad = true
+            xmm = dst
+            rm = source
+        case (_, .register(let src)):
+            isLoad = false
+            xmm = src
+            rm = destination
+        default:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): cannot have two memory operands")
+        }
+
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix { bytes.append(prefix) }
+        let opcode2 = isLoad ? kind.loadOpcode : kind.storeOpcode
+
+        switch rm {
+        case .register(let rmReg):
+            if let rex = X86.REX.build(r: xmm.highBit, b: rmReg.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: xmm.lowBits, rm: rmReg.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: xmm.lowBits)
+            if let rex = X86.REX.build(r: xmm.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
     // MARK: - MOV CR/DR + LAR / LSL
 
     /// MOV r64, CRn/DRn and MOV CRn/DRn, r64. Operand is implicitly
@@ -1442,6 +1492,8 @@ internal enum X86InstructionEncoder {
             appendLE16(UInt16(truncatingIfNeeded: imm), into: &bytes)
         case .dword, .qword:
             appendLE32(UInt32(truncatingIfNeeded: imm), into: &bytes)
+        case .xmmword:
+            throw AssemblerError.unsupportedOperand("xmmword immediate not supported")
         }
     }
 
