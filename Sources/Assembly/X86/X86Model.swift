@@ -716,10 +716,16 @@ internal enum X86 {
         case andnps, andnpd
         case orps, orpd
         case xorps, xorpd
+        // Compare-with-flags (sets EFLAGS, doesn't write back to dst).
+        // COMI signals invalid on QNaN; UCOMI doesn't.
+        case ucomiss, ucomisd
+        case comiss, comisd
 
         /// Second-byte opcode (operation selector).
         var opcode2: UInt8 {
             switch self {
+            case .ucomiss, .ucomisd:                 return 0x2E
+            case .comiss,  .comisd:                  return 0x2F
             case .sqrtps, .sqrtpd, .sqrtss, .sqrtsd: return 0x51
             case .rsqrtps, .rsqrtss:                 return 0x52
             case .rcpps, .rcpss:                     return 0x53
@@ -741,10 +747,12 @@ internal enum X86 {
             switch self {
             case .addps, .subps, .mulps, .divps, .minps, .maxps, .sqrtps,
                  .rcpps, .rsqrtps,
-                 .andps, .andnps, .orps, .xorps:
+                 .andps, .andnps, .orps, .xorps,
+                 .ucomiss, .comiss:
                 return nil
             case .addpd, .subpd, .mulpd, .divpd, .minpd, .maxpd, .sqrtpd,
-                 .andpd, .andnpd, .orpd, .xorpd:
+                 .andpd, .andnpd, .orpd, .xorpd,
+                 .ucomisd, .comisd:
                 return 0x66
             case .addss, .subss, .mulss, .divss, .minss, .maxss, .sqrtss,
                  .rcpss, .rsqrtss:
@@ -755,11 +763,20 @@ internal enum X86 {
         }
 
         /// Memory operand width when the source is a memory reference.
+        /// COMI/UCOMI are scalar (m32 / m64) despite using PS/PD-style
+        /// prefixes, so they can't be derived from the prefix alone.
         var memoryWidth: RegisterWidth {
-            switch self.mandatoryPrefix {
-            case 0xF3: return .dword   // SS: scalar single
-            case 0xF2: return .qword   // SD: scalar double
-            default:   return .xmmword // PS/PD: packed
+            switch self {
+            case .ucomiss, .comiss:
+                return .dword
+            case .ucomisd, .comisd:
+                return .qword
+            default:
+                switch self.mandatoryPrefix {
+                case 0xF3: return .dword   // SS: scalar single
+                case 0xF2: return .qword   // SD: scalar double
+                default:   return .xmmword // PS/PD: packed
+                }
             }
         }
 

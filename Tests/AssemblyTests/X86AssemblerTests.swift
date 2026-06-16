@@ -2460,4 +2460,54 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14d SSE COMI / UCOMI
+
+    private static let sseCompareCases: [(String, [UInt8])] = [
+        // UCOMI (quiet — doesn't signal on QNaN)
+        ("ucomiss xmm0, xmm1",              [0x0F, 0x2E, 0xC1]),
+        ("ucomisd xmm0, xmm1",              [0x66, 0x0F, 0x2E, 0xC1]),
+        ("ucomiss xmm0, dword ptr [rbx]",   [0x0F, 0x2E, 0x03]),
+        ("ucomisd xmm0, qword ptr [rbx]",   [0x66, 0x0F, 0x2E, 0x03]),
+
+        // COMI (ordered — signals on QNaN)
+        ("comiss xmm0, xmm1",               [0x0F, 0x2F, 0xC1]),
+        ("comisd xmm0, xmm1",               [0x66, 0x0F, 0x2F, 0xC1]),
+        ("comiss xmm0, dword ptr [rbx]",    [0x0F, 0x2F, 0x03]),
+        ("comisd xmm0, qword ptr [rbx]",    [0x66, 0x0F, 0x2F, 0x03]),
+
+        // Extended XMM register
+        ("ucomiss xmm15, xmm0",             [0x44, 0x0F, 0x2E, 0xF8]),
+        ("comisd xmm0, xmm8",               [0x66, 0x41, 0x0F, 0x2F, 0xC0]),
+    ]
+
+    func testSSECompareAssembles() throws {
+        for (source, expected) in Self.sseCompareCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSECompareDisassembles() throws {
+        for (source, bytes) in Self.sseCompareCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSECompareWidthMismatch() {
+        // COMISS / UCOMISS expect m32; COMISD / UCOMISD expect m64.
+        XCTAssertThrowsError(try X86Assembler.assemble("ucomiss xmm0, qword ptr [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("comisd xmm0, dword ptr [rbx]")) { _ in }
+    }
+
+    func testSSECompareStreamRoundTrip() throws {
+        let source = Self.sseCompareCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseCompareCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
