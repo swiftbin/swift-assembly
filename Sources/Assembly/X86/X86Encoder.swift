@@ -110,6 +110,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeBitTest(kind, target: target, source: source), patches: [])
         case .bitScan(let kind, let dst, let source):
             return Encoded(bytes: try encodeBitScan(kind, destination: dst, source: source), patches: [])
+        case .bitCount(let kind, let dst, let source):
+            return Encoded(bytes: try encodeBitCount(kind, destination: dst, source: source), patches: [])
         }
     }
 
@@ -946,6 +948,51 @@ internal enum X86InstructionEncoder {
             bytes.append(imm)
             return bytes
         }
+    }
+
+    /// POPCNT / LZCNT / TZCNT share `0F B8/BC/BD` with the F3
+    /// mandatory prefix. Without the F3 prefix the same opcodes mean
+    /// BSF/BSR (and the B8 form is undefined in 64-bit mode).
+    ///
+    /// Prefix order is `66 F3 REX 0F ..` — the operand-size override
+    /// comes first, followed by the mandatory F3, followed by the REX
+    /// byte. Inlined rather than going through emitOperandPair because
+    /// that helper places its single legacy prefix (0x66) directly
+    /// before REX, leaving no slot for F3.
+    private static func encodeBitCount(_ kind: X86.BitCountKind, destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        let width = dst.width
+        if case .register(let r) = source {
+            try checkRegisterRegisterCompat([dst, r], mnemonic: kind.rawValue)
+        } else {
+            try checkRegisterRegisterCompat([dst], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = source { forceREX = needsForcedREX([dst, r]) }
+        else { forceREX = needsForcedREX([dst]) }
+
+        var bytes: [UInt8] = []
+        if width == .word { bytes.append(X86.operandSizeOverride) }
+        bytes.append(0xF3)
+        let rexW: UInt8 = width == .qword ? 1 : 0
+
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, x: 0, b: rm.highBit, forceEmit: forceREX) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem, _):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, x: rexX, b: rexB, forceEmit: forceREX) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
     }
 
     private static func encodeBitScan(_ kind: X86.BitScanKind, destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {

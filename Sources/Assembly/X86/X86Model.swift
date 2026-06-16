@@ -560,6 +560,23 @@ internal enum X86 {
         case bitTest(BitTestKind, target: RegisterOrMemory, source: BitTestSource)
         /// BSF / BSR — bit scan forward / reverse (`0F BC/BD /r`).
         case bitScan(BitScanKind, destination: Register, source: RegisterOrMemory)
+        /// POPCNT / LZCNT / TZCNT — population/leading-zero/trailing-zero
+        /// counts (`F3 0F B8/BD/BC /r`). The F3 prefix is mandatory and
+        /// distinguishes LZCNT/TZCNT from BSR/BSF at the same opcode.
+        case bitCount(BitCountKind, destination: Register, source: RegisterOrMemory)
+    }
+
+    enum BitCountKind: String, Equatable, CaseIterable {
+        case popcnt, lzcnt, tzcnt
+
+        /// Second-byte opcode after the mandatory F3 prefix.
+        var opcode2: UInt8 {
+            switch self {
+            case .popcnt: return 0xB8
+            case .tzcnt:  return 0xBC
+            case .lzcnt:  return 0xBD
+            }
+        }
     }
 
     enum BitTestKind: String, Equatable, CaseIterable {

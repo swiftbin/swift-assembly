@@ -90,6 +90,10 @@ internal enum X86Parser {
             let (destination, source) = try parseRegisterMemoryPair(mnemonic: kind.rawValue, instruction: instruction)
             return .bitScan(kind, destination: destination, source: source)
         }
+        if let kind = X86.BitCountKind(rawValue: instruction.mnemonic) {
+            let (destination, source) = try parseRegisterMemoryPair(mnemonic: kind.rawValue, instruction: instruction)
+            return .bitCount(kind, destination: destination, source: source)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }

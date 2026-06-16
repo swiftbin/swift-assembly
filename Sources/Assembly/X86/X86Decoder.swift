@@ -42,6 +42,11 @@ internal enum X86InstructionDecoder {
     private struct Prefixes {
         var operandSize: Bool = false
         var addressSize: Bool = false
+        /// The 0xF3 mandatory prefix. It doubles as the REP/REPZ string
+        /// prefix when paired with MOVS/CMPS/SCAS/...; for SSE-style
+        /// instructions and POPCNT/LZCNT/TZCNT it selects an alternate
+        /// opcode at the 0F escape.
+        var f3Prefix: Bool = false
         var rex: UInt8? = nil
 
         var hasREX: Bool { rex != nil }
@@ -101,6 +106,9 @@ internal enum X86InstructionDecoder {
                     offset += 1
                 } else if byte == 0x67 && !prefixes.addressSize {
                     prefixes.addressSize = true
+                    offset += 1
+                } else if byte == 0xF3 && !prefixes.f3Prefix {
+                    prefixes.f3Prefix = true
                     offset += 1
                 } else if X86.REX.matches(byte) && prefixes.rex == nil {
                     prefixes.rex = byte
@@ -268,13 +276,27 @@ internal enum X86InstructionDecoder {
             return try decodeExtendingMove(kind: .movzx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
         case 0xB7:
             return try decodeExtendingMove(kind: .movzx, sourceWidth: .word, prefixes: prefixes, cursor: &cursor)
+        case 0xB8:
+            // POPCNT requires the F3 mandatory prefix; without F3, the
+            // opcode is unassigned in 64-bit mode (legacy JMPE was
+            // Itanium-only).
+            guard prefixes.f3Prefix else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode2))
+            }
+            return try decodeBitCount(.popcnt, prefixes: prefixes, cursor: &cursor)
         case 0xBA:
             return try decodeBitTestImmediate(prefixes: prefixes, cursor: &cursor)
         case 0xBB:
             return try decodeBitTestRegister(kind: .btc, prefixes: prefixes, cursor: &cursor)
         case 0xBC:
+            if prefixes.f3Prefix {
+                return try decodeBitCount(.tzcnt, prefixes: prefixes, cursor: &cursor)
+            }
             return try decodeBitScan(.bsf, prefixes: prefixes, cursor: &cursor)
         case 0xBD:
+            if prefixes.f3Prefix {
+                return try decodeBitCount(.lzcnt, prefixes: prefixes, cursor: &cursor)
+            }
             return try decodeBitScan(.bsr, prefixes: prefixes, cursor: &cursor)
         case 0xBE:
             return try decodeExtendingMove(kind: .movsx, sourceWidth: .byte, prefixes: prefixes, cursor: &cursor)
@@ -347,6 +369,15 @@ internal enum X86InstructionDecoder {
         let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
         let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
         return Decoded(instruction: .bitScan(kind, destination: destination, source: source), length: cursor.consumed)
+    }
+
+    private static func decodeBitCount(_ kind: X86.BitCountKind, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width = selectWidth(prefixes: prefixes)
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let source = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .bitCount(kind, destination: destination, source: source), length: cursor.consumed)
     }
 
     // MARK: - XCHG / XADD / CMPXCHG / CMPXCHG8B / 16B

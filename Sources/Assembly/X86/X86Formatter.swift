@@ -79,6 +79,8 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(targetStr), \(sourceStr)"
         case .bitScan(let kind, let dst, let source):
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
+        case .bitCount(let kind, let dst, let source):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatPairedTarget(source))"
         }
     }
 

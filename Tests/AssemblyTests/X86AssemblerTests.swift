@@ -1679,4 +1679,66 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 9c POPCNT / LZCNT / TZCNT
+
+    private static let bitCountCases: [(String, [UInt8])] = [
+        // POPCNT
+        ("popcnt eax, ebx",     [0xF3, 0x0F, 0xB8, 0xC3]),
+        ("popcnt rax, rbx",     [0xF3, 0x48, 0x0F, 0xB8, 0xC3]),
+        ("popcnt ax, bx",       [0x66, 0xF3, 0x0F, 0xB8, 0xC3]),
+        ("popcnt rax, [rbx]",   [0xF3, 0x48, 0x0F, 0xB8, 0x03]),
+
+        // TZCNT (same opcode as BSF, distinguished by F3)
+        ("tzcnt eax, ebx",      [0xF3, 0x0F, 0xBC, 0xC3]),
+        ("tzcnt rax, rbx",      [0xF3, 0x48, 0x0F, 0xBC, 0xC3]),
+        ("tzcnt r8, r9",        [0xF3, 0x4D, 0x0F, 0xBC, 0xC1]),
+
+        // LZCNT (same opcode as BSR, distinguished by F3)
+        ("lzcnt eax, ebx",      [0xF3, 0x0F, 0xBD, 0xC3]),
+        ("lzcnt rax, rbx",      [0xF3, 0x48, 0x0F, 0xBD, 0xC3]),
+        ("lzcnt rax, [rbx + 8]", [0xF3, 0x48, 0x0F, 0xBD, 0x43, 0x08]),
+    ]
+
+    func testBitCountAssembles() throws {
+        for (source, expected) in Self.bitCountCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBitCountDisassembles() throws {
+        for (source, bytes) in Self.bitCountCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// BSF/BSR vs TZCNT/LZCNT share opcodes 0F BC and 0F BD; the F3
+    /// mandatory prefix selects the latter pair.
+    func testBitCountVersusBitScanOpcodeSharing() throws {
+        // BSF / TZCNT share 0F BC
+        XCTAssertEqual(try X86Assembler.assemble("bsf rax, rbx"),    [0x48, 0x0F, 0xBC, 0xC3])
+        XCTAssertEqual(try X86Assembler.assemble("tzcnt rax, rbx"),  [0xF3, 0x48, 0x0F, 0xBC, 0xC3])
+        // BSR / LZCNT share 0F BD
+        XCTAssertEqual(try X86Assembler.assemble("bsr rax, rbx"),    [0x48, 0x0F, 0xBD, 0xC3])
+        XCTAssertEqual(try X86Assembler.assemble("lzcnt rax, rbx"),  [0xF3, 0x48, 0x0F, 0xBD, 0xC3])
+        // Disassembly chooses based on the F3 prefix
+        XCTAssertEqual(try X86Assembler.disassemble([0x48, 0x0F, 0xBC, 0xC3]),       "bsf rax, rbx")
+        XCTAssertEqual(try X86Assembler.disassemble([0xF3, 0x48, 0x0F, 0xBC, 0xC3]), "tzcnt rax, rbx")
+    }
+
+    func testBitCountRejectsByteWidth() {
+        XCTAssertThrowsError(try X86Assembler.assemble("popcnt al, bl")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testBitCountStreamRoundTrip() throws {
+        let source = Self.bitCountCases.map(\.0).joined(separator: "\n")
+        let expected = Self.bitCountCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
