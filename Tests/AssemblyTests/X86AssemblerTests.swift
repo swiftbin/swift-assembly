@@ -2000,4 +2000,94 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 11b GDT/IDT/LDT/TR/MSW family
+
+    private static let descriptorTableCases: [(String, [UInt8])] = [
+        ("sgdt [rbx]",       [0x0F, 0x01, 0x03]),
+        ("sidt [rbx]",       [0x0F, 0x01, 0x0B]),
+        ("lgdt [rbx]",       [0x0F, 0x01, 0x13]),
+        ("lidt [rbx]",       [0x0F, 0x01, 0x1B]),
+        ("sgdt [rbx + 8]",   [0x0F, 0x01, 0x43, 0x08]),
+        ("lidt [rax + rcx]", [0x0F, 0x01, 0x1C, 0x08]),
+    ]
+
+    private static let systemRMCases: [(String, [UInt8])] = [
+        // 0F 00 family (r/m16 — emitted with 0x66 for register operand)
+        ("sldt ax",     [0x66, 0x0F, 0x00, 0xC0]),
+        ("str ax",      [0x66, 0x0F, 0x00, 0xC8]),
+        ("lldt ax",     [0x66, 0x0F, 0x00, 0xD0]),
+        ("ltr ax",      [0x66, 0x0F, 0x00, 0xD8]),
+        ("verr ax",     [0x66, 0x0F, 0x00, 0xE0]),
+        ("verw ax",     [0x66, 0x0F, 0x00, 0xE8]),
+        ("lldt [rbx]",  [0x66, 0x0F, 0x00, 0x13]),
+        ("verr [rbx]",  [0x66, 0x0F, 0x00, 0x23]),
+
+        // SLDT/STR allow wider destinations (zero-extending).
+        ("sldt eax",    [0x0F, 0x00, 0xC0]),
+        ("sldt rax",    [0x48, 0x0F, 0x00, 0xC0]),
+        ("str ecx",     [0x0F, 0x00, 0xC9]),
+
+        // 0F 01 /4 SMSW, /6 LMSW
+        ("smsw ax",     [0x66, 0x0F, 0x01, 0xE0]),
+        ("smsw eax",    [0x0F, 0x01, 0xE0]),
+        ("smsw rax",    [0x48, 0x0F, 0x01, 0xE0]),
+        ("lmsw ax",     [0x66, 0x0F, 0x01, 0xF0]),
+        ("lmsw [rbx]",  [0x66, 0x0F, 0x01, 0x33]),
+    ]
+
+    func testDescriptorTableAssembles() throws {
+        for (source, expected) in Self.descriptorTableCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testDescriptorTableDisassembles() throws {
+        for (source, bytes) in Self.descriptorTableCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSystemRMAssembles() throws {
+        for (source, expected) in Self.systemRMCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSystemRMDisassembles() throws {
+        for (source, bytes) in Self.systemRMCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// LLDT / LTR / LMSW / VERR / VERW are r/m16-only; the parser rejects
+    /// 32- or 64-bit registers.
+    func testNarrowSystemOpsRejectWiderRegisters() {
+        XCTAssertThrowsError(try X86Assembler.assemble("lldt eax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("lmsw rax")) { _ in }
+        XCTAssertThrowsError(try X86Assembler.assemble("ltr ebx")) { _ in }
+        XCTAssertThrowsError(try X86Assembler.assemble("verr ebx")) { _ in }
+    }
+
+    /// SGDT/SIDT/LGDT/LIDT take a memory operand only.
+    func testDescriptorTableRejectsRegister() {
+        XCTAssertThrowsError(try X86Assembler.assemble("sgdt rax")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testDescriptorAndSystemRMStreamRoundTrip() throws {
+        let cases = Self.descriptorTableCases + Self.systemRMCases
+        let source = cases.map(\.0).joined(separator: "\n")
+        let expected = cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

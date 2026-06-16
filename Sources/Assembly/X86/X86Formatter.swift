@@ -101,6 +101,10 @@ internal enum X86InstructionFormatter {
             return "clflush \(formatMemory(mem))"
         case .invlpg(let mem):
             return "invlpg \(formatMemory(mem))"
+        case .descriptorTable(let kind, let mem):
+            return "\(kind.rawValue) \(formatMemory(mem))"
+        case .systemRM(let kind, let target):
+            return "\(kind.rawValue) \(formatPairedTarget(target))"
         }
     }
 

@@ -122,6 +122,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "invlpg" {
             return .invlpg(try parseSingleMemoryOperand(mnemonic: "invlpg", instruction: instruction))
         }
+        if let kind = X86.DescriptorTableKind(rawValue: instruction.mnemonic) {
+            return .descriptorTable(kind, memory: try parseSingleMemoryOperand(mnemonic: kind.rawValue, instruction: instruction))
+        }
+        if let kind = X86.SystemRMKind(rawValue: instruction.mnemonic) {
+            return try parseSystemRM(kind, instruction)
+        }
         if let kind = X86.LoopKind.resolve(mnemonic: instruction.mnemonic) {
             return .loop(kind, try parseSingleBranchTarget(instruction))
         }
@@ -733,6 +739,41 @@ internal enum X86Parser {
             throw AssemblerError.unsupportedOperand("\(mnemonic): operand must be a memory reference")
         }
         return mem
+    }
+
+    private static func parseSystemRM(_ kind: X86.SystemRMKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let classified = try classifyOperand(instruction.operands[0])
+        switch classified {
+        case .register(let r):
+            // Read variants accept wider registers (zero-extending the
+            // 16-bit source). Load / verify variants are r16-only.
+            if kind.allowsWideRegister {
+                guard r.width != .byte else {
+                    throw AssemblerError.unsupportedOperand("\(kind.rawValue): byte register not supported")
+                }
+            } else {
+                guard r.width == .word else {
+                    throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand must be r/m16")
+                }
+            }
+            return .systemRM(kind, target: .register(r))
+        case .memory(let m, let explicit):
+            // Memory width is always 16-bit for these instructions.
+            let width = explicit ?? .word
+            guard width == .word else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory operand must be 16-bit")
+            }
+            return .systemRM(kind, target: .memory(m, width: width))
+        case .immediate:
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): target cannot be an immediate")
+        }
     }
 
     private static func parseInterrupt(_ instruction: ParsedInstruction) throws -> X86.Instruction {

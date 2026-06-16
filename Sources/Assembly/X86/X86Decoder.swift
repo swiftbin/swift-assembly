@@ -273,6 +273,8 @@ internal enum X86InstructionDecoder {
 
     private static func decodeTwoByteOpcode(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         switch opcode2 {
+        case 0x00:
+            return try decodeOpcode0F00(prefixes: prefixes, cursor: &cursor)
         case 0x01:
             return try decodeOpcode0F01(prefixes: prefixes, cursor: &cursor)
         case 0x40...0x4F:
@@ -342,24 +344,46 @@ internal enum X86InstructionDecoder {
 
     /// 0F 01 covers the descriptor-table family (SGDT/SIDT/LGDT/LIDT,
     /// SMSW/LMSW, INVLPG) plus mod=11 sub-encodings already in the
-    /// zero-operand table (SWAPGS/RDTSCP/MONITOR/MWAIT). Phase 11a
-    /// handles the `/7 mem` form (INVLPG); future commits extend the
-    /// other slash-digits.
+    /// zero-operand table (SWAPGS/RDTSCP/MONITOR/MWAIT).
     private static func decodeOpcode0F01(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
         let nField = X86.ModRM.reg.extract(modrm)
-        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
-            // mod=11 sub-encodings of 0F 01 — currently all in the
-            // zero-operand table (SWAPGS/RDTSCP/MONITOR/MWAIT). If we
-            // got here, no zero-operand entry matched, so it's
-            // something not yet modelled.
+        let modRegister = X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister
+
+        // /4 SMSW and /6 LMSW accept r/m (register or memory); other
+        // slash-digits are memory-only (SGDT/SIDT/LGDT/LIDT, INVLPG).
+        if let kind = X86.SystemRMKind.decode(escape2: 0x01, slashDigit: nField) {
+            let width = kind.allowsWideRegister ? selectWidth(prefixes: prefixes) : .word
+            let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+            return Decoded(instruction: .systemRM(kind, target: target), length: cursor.consumed)
+        }
+        if modRegister {
+            // mod=11 sub-encodings without a SystemRMKind entry are
+            // SWAPGS/RDTSCP/MONITOR/MWAIT (zero-operand) or unmodelled.
             throw AssemblerError.unknownEncoding(0x01)
         }
-        guard nField == 7 else {
-            throw AssemblerError.unknownEncoding(0x01)
+        if nField == 7 {
+            let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .invlpg(memory), length: cursor.consumed)
         }
-        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
-        return Decoded(instruction: .invlpg(memory), length: cursor.consumed)
+        if let kind = X86.DescriptorTableKind.decode(slashDigit: nField) {
+            let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .descriptorTable(kind, memory: memory), length: cursor.consumed)
+        }
+        throw AssemblerError.unknownEncoding(0x01)
+    }
+
+    /// 0F 00 covers SLDT/STR/LLDT/LTR/VERR/VERW — all r/m16 (with
+    /// optional wider register destinations for the read variants).
+    private static func decodeOpcode0F00(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.SystemRMKind.decode(escape2: 0x00, slashDigit: nField) else {
+            throw AssemblerError.unknownEncoding(0x00)
+        }
+        let width = kind.allowsWideRegister ? selectWidth(prefixes: prefixes) : .word
+        let target = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)
+        return Decoded(instruction: .systemRM(kind, target: target), length: cursor.consumed)
     }
 
     /// 0F AE covers FXSAVE/FXRSTOR/LDMXCSR/STMXCSR/XSAVE/XRSTOR and

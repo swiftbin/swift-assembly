@@ -127,6 +127,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMemoryOnlySys(escape2: 0xAE, slashDigit: 7, memory: mem), patches: [])
         case .invlpg(let mem):
             return Encoded(bytes: try encodeMemoryOnlySys(escape2: 0x01, slashDigit: 7, memory: mem), patches: [])
+        case .descriptorTable(let kind, let mem):
+            return Encoded(bytes: try encodeMemoryOnlySys(escape2: 0x01, slashDigit: kind.slashDigit, memory: mem), patches: [])
+        case .systemRM(let kind, let target):
+            return Encoded(bytes: try encodeSystemRM(kind, target: target), patches: [])
         }
     }
 
@@ -907,6 +911,26 @@ internal enum X86InstructionEncoder {
         bytes.append(opcode)
         if case .immediate(let imm) = port { bytes.append(imm) }
         return bytes
+    }
+
+    /// SLDT/STR/LLDT/LTR/VERR/VERW/SMSW/LMSW share the `0F (00|01) /n`
+    /// shape with a single r/m operand. Width follows the standard 0x66
+    /// / REX.W rules: r/m16 with the 0x66 prefix, r/m64 with REX.W, and
+    /// r/m32 by default.
+    private static func encodeSystemRM(_ kind: X86.SystemRMKind, target: X86.RegisterOrMemory) throws -> [UInt8] {
+        if case .register(let r) = target {
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+        }
+        let forceREX: Bool
+        if case .register(let r) = target { forceREX = needsForcedREX([r]) } else { forceREX = false }
+        return try emitOperandPair(
+            opcodeBytes: [0x0F, kind.escape2],
+            width: target.width,
+            rmOperand: target,
+            regHigh: 0,
+            regLow: kind.slashDigit,
+            forceREX: forceREX
+        )
     }
 
     // MARK: - Memory-only system instructions

@@ -595,6 +595,71 @@ internal enum X86 {
         /// `mod != 11`). The mod=11 sub-encodings of `/7` (`SWAPGS`,
         /// `RDTSCP`) live in `ZeroOperandKind`.
         case invlpg(MemoryOperand)
+        /// Descriptor-table load/store with a 10-byte memory operand:
+        /// SGDT, SIDT, LGDT, LIDT (`0F 01 /0..3`).
+        case descriptorTable(DescriptorTableKind, memory: MemoryOperand)
+        /// System r/m instructions (SLDT/STR/LLDT/LTR/VERR/VERW,
+        /// SMSW/LMSW). Most are r/m16-only; the read variants
+        /// (SLDT/STR/SMSW) also accept r32/r64 destinations.
+        case systemRM(SystemRMKind, target: RegisterOrMemory)
+    }
+
+    enum DescriptorTableKind: String, Equatable, CaseIterable {
+        case sgdt, sidt, lgdt, lidt
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .sgdt: return 0
+            case .sidt: return 1
+            case .lgdt: return 2
+            case .lidt: return 3
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> DescriptorTableKind? {
+            allCases.first { $0.slashDigit == slashDigit }
+        }
+    }
+
+    enum SystemRMKind: String, Equatable, CaseIterable {
+        case sldt, str, lldt, ltr, verr, verw   // 0F 00 /0..5
+        case smsw, lmsw                          // 0F 01 /4 and /6
+
+        /// Second-byte opcode (the 0F-escape sub-table).
+        var escape2: UInt8 {
+            switch self {
+            case .smsw, .lmsw: return 0x01
+            default:           return 0x00
+            }
+        }
+
+        /// `/n` slash-digit placed in ModR/M.reg.
+        var slashDigit: UInt8 {
+            switch self {
+            case .sldt: return 0
+            case .str:  return 1
+            case .lldt: return 2
+            case .ltr:  return 3
+            case .verr: return 4
+            case .verw: return 5
+            case .smsw: return 4
+            case .lmsw: return 6
+            }
+        }
+
+        /// SLDT/STR/SMSW are "store" variants that can write into a
+        /// wider register (r32/r64), zero-extending the 16-bit source.
+        /// The "load/verify" variants are r/m16 only.
+        var allowsWideRegister: Bool {
+            switch self {
+            case .sldt, .str, .smsw: return true
+            default:                 return false
+            }
+        }
+
+        static func decode(escape2: UInt8, slashDigit: UInt8) -> SystemRMKind? {
+            allCases.first { $0.escape2 == escape2 && $0.slashDigit == slashDigit }
+        }
     }
 
     /// The port specifier of IN/OUT: an 8-bit immediate (E4/E5/E6/E7)
