@@ -2410,4 +2410,54 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14c SSE logic + RCP/RSQRT
+
+    private static let sseLogicAndReciprocalCases: [(String, [UInt8])] = [
+        // RCP / RSQRT — single-precision only
+        ("rcpps xmm0, xmm1",                [0x0F, 0x53, 0xC1]),
+        ("rcpss xmm0, xmm1",                [0xF3, 0x0F, 0x53, 0xC1]),
+        ("rcpss xmm0, dword ptr [rbx]",     [0xF3, 0x0F, 0x53, 0x03]),
+        ("rsqrtps xmm0, xmm1",              [0x0F, 0x52, 0xC1]),
+        ("rsqrtss xmm0, xmm1",              [0xF3, 0x0F, 0x52, 0xC1]),
+
+        // Bit-wise logic — PS / PD only
+        ("andps xmm0, xmm1",                [0x0F, 0x54, 0xC1]),
+        ("andpd xmm0, xmm1",                [0x66, 0x0F, 0x54, 0xC1]),
+        ("andnps xmm0, xmm1",               [0x0F, 0x55, 0xC1]),
+        ("andnpd xmm0, xmm1",               [0x66, 0x0F, 0x55, 0xC1]),
+        ("orps xmm0, xmm1",                 [0x0F, 0x56, 0xC1]),
+        ("orpd xmm0, xmm1",                 [0x66, 0x0F, 0x56, 0xC1]),
+        ("xorps xmm0, xmm1",                [0x0F, 0x57, 0xC1]),
+        ("xorpd xmm0, xmm1",                [0x66, 0x0F, 0x57, 0xC1]),
+
+        // Common idiom: zero a register via XOR with itself
+        ("xorps xmm0, xmm0",                [0x0F, 0x57, 0xC0]),
+        ("xorpd xmm0, xmm0",                [0x66, 0x0F, 0x57, 0xC0]),
+
+        // Memory operands and extended XMM registers
+        ("andps xmm0, xmmword ptr [rbx]",   [0x0F, 0x54, 0x03]),
+        ("xorpd xmm8, xmmword ptr [r9]",    [0x66, 0x45, 0x0F, 0x57, 0x01]),
+        ("rsqrtps xmm15, xmm0",             [0x44, 0x0F, 0x52, 0xF8]),
+    ]
+
+    func testSSELogicAndReciprocalAssembles() throws {
+        for (source, expected) in Self.sseLogicAndReciprocalCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSELogicAndReciprocalDisassembles() throws {
+        for (source, bytes) in Self.sseLogicAndReciprocalCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSELogicAndReciprocalStreamRoundTrip() throws {
+        let source = Self.sseLogicAndReciprocalCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseLogicAndReciprocalCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

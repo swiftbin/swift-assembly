@@ -707,11 +707,26 @@ internal enum X86 {
         case minps, minpd, minss, minsd
         case maxps, maxpd, maxss, maxsd
         case sqrtps, sqrtpd, sqrtss, sqrtsd
+        // Reciprocal / reciprocal square-root — single-precision only
+        // (no PD/SD variants exist).
+        case rcpps, rcpss
+        case rsqrtps, rsqrtss
+        // Bit-wise logic — PS/PD only (no SS/SD).
+        case andps, andpd
+        case andnps, andnpd
+        case orps, orpd
+        case xorps, xorpd
 
         /// Second-byte opcode (operation selector).
         var opcode2: UInt8 {
             switch self {
             case .sqrtps, .sqrtpd, .sqrtss, .sqrtsd: return 0x51
+            case .rsqrtps, .rsqrtss:                 return 0x52
+            case .rcpps, .rcpss:                     return 0x53
+            case .andps, .andpd:                     return 0x54
+            case .andnps, .andnpd:                   return 0x55
+            case .orps, .orpd:                       return 0x56
+            case .xorps, .xorpd:                     return 0x57
             case .addps,  .addpd,  .addss,  .addsd:  return 0x58
             case .mulps,  .mulpd,  .mulss,  .mulsd:  return 0x59
             case .subps,  .subpd,  .subss,  .subsd:  return 0x5C
@@ -724,10 +739,18 @@ internal enum X86 {
         /// Mandatory prefix byte (variant selector).
         var mandatoryPrefix: UInt8? {
             switch self {
-            case .addps, .subps, .mulps, .divps, .minps, .maxps, .sqrtps: return nil
-            case .addpd, .subpd, .mulpd, .divpd, .minpd, .maxpd, .sqrtpd: return 0x66
-            case .addss, .subss, .mulss, .divss, .minss, .maxss, .sqrtss: return 0xF3
-            case .addsd, .subsd, .mulsd, .divsd, .minsd, .maxsd, .sqrtsd: return 0xF2
+            case .addps, .subps, .mulps, .divps, .minps, .maxps, .sqrtps,
+                 .rcpps, .rsqrtps,
+                 .andps, .andnps, .orps, .xorps:
+                return nil
+            case .addpd, .subpd, .mulpd, .divpd, .minpd, .maxpd, .sqrtpd,
+                 .andpd, .andnpd, .orpd, .xorpd:
+                return 0x66
+            case .addss, .subss, .mulss, .divss, .minss, .maxss, .sqrtss,
+                 .rcpss, .rsqrtss:
+                return 0xF3
+            case .addsd, .subsd, .mulsd, .divsd, .minsd, .maxsd, .sqrtsd:
+                return 0xF2
             }
         }
 
