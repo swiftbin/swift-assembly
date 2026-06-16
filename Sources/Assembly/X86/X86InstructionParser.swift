@@ -27,6 +27,9 @@ internal enum X86Parser {
             }
             return try parseSSEMov(kind, instruction)
         }
+        if let kind = X86.SSEArithmeticKind(rawValue: instruction.mnemonic) {
+            return try parseSSEArithmetic(kind, instruction)
+        }
         if instruction.mnemonic == "lar" {
             let (destination, source) = try parseRegisterMemoryPair(mnemonic: "lar", instruction: instruction)
             return .lar(destination: destination, source: source)
@@ -870,6 +873,46 @@ internal enum X86Parser {
             return .memory(try memoryOperand(trimmed))
         }
         throw AssemblerError.unsupportedOperand("\(kind.rawValue): expected xmm register or memory operand")
+    }
+
+    /// Pull an XMM source operand for the SSE arithmetic family. The
+    /// destination is always an XMM register; the source is an XMM
+    /// register or memory of the kind's intrinsic width.
+    private static func parseSSEArithmetic(_ kind: X86.SSEArithmeticKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(instruction.operands[1], width: kind.memoryWidth, mnemonic: kind.rawValue)
+        return .sseArithmetic(kind, destination: destination, source: source)
+    }
+
+    /// Parse an XMM register or a memory operand of the given width.
+    /// Shared between SSE MOV (the load form), SSE arithmetic, and any
+    /// future SSE op that takes an `xmm, xmm/m` shape.
+    private static func parseXMMOrMemorySource(_ text: String, width: X86.RegisterWidth, mnemonic: String) throws -> X86.XMMOrMemory {
+        if let xmm = parseXMMRegister(text) {
+            return .register(xmm)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (hintedWidth, body) = stripSizeHint(trimmed) {
+            guard hintedWidth == width else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(mnemonic): memory operand width disagrees with mnemonic"
+                )
+            }
+            return .memory(try memoryOperand(body))
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed))
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected xmm register or memory operand")
     }
 
     private static func parseSSEMov(_ kind: X86.SSEMovKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {

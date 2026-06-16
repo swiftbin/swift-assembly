@@ -2324,4 +2324,90 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14b SSE arithmetic
+
+    private static let sseArithmeticCases: [(String, [UInt8])] = [
+        // ADD across all four variants
+        ("addps xmm0, xmm1",                [0x0F, 0x58, 0xC1]),
+        ("addpd xmm0, xmm1",                [0x66, 0x0F, 0x58, 0xC1]),
+        ("addss xmm0, xmm1",                [0xF3, 0x0F, 0x58, 0xC1]),
+        ("addsd xmm0, xmm1",                [0xF2, 0x0F, 0x58, 0xC1]),
+        ("addps xmm0, xmmword ptr [rbx]",   [0x0F, 0x58, 0x03]),
+        ("addss xmm0, dword ptr [rbx]",     [0xF3, 0x0F, 0x58, 0x03]),
+        ("addsd xmm0, qword ptr [rbx]",     [0xF2, 0x0F, 0x58, 0x03]),
+
+        // SUB
+        ("subps xmm0, xmm1",                [0x0F, 0x5C, 0xC1]),
+        ("subpd xmm0, xmm1",                [0x66, 0x0F, 0x5C, 0xC1]),
+        ("subss xmm2, xmm3",                [0xF3, 0x0F, 0x5C, 0xD3]),
+        ("subsd xmm0, xmm1",                [0xF2, 0x0F, 0x5C, 0xC1]),
+
+        // MUL
+        ("mulps xmm0, xmm1",                [0x0F, 0x59, 0xC1]),
+        ("mulpd xmm0, xmm1",                [0x66, 0x0F, 0x59, 0xC1]),
+        ("mulss xmm0, xmm1",                [0xF3, 0x0F, 0x59, 0xC1]),
+        ("mulsd xmm0, xmm1",                [0xF2, 0x0F, 0x59, 0xC1]),
+
+        // DIV
+        ("divps xmm0, xmm1",                [0x0F, 0x5E, 0xC1]),
+        ("divpd xmm0, xmm1",                [0x66, 0x0F, 0x5E, 0xC1]),
+        ("divss xmm0, xmm1",                [0xF3, 0x0F, 0x5E, 0xC1]),
+        ("divsd xmm0, xmm1",                [0xF2, 0x0F, 0x5E, 0xC1]),
+
+        // MIN / MAX
+        ("minps xmm0, xmm1",                [0x0F, 0x5D, 0xC1]),
+        ("maxps xmm0, xmm1",                [0x0F, 0x5F, 0xC1]),
+        ("minsd xmm0, xmm1",                [0xF2, 0x0F, 0x5D, 0xC1]),
+        ("maxss xmm0, xmm1",                [0xF3, 0x0F, 0x5F, 0xC1]),
+
+        // SQRT (binary form: src is r/m even though the operation is
+        // mathematically unary)
+        ("sqrtps xmm0, xmm1",               [0x0F, 0x51, 0xC1]),
+        ("sqrtpd xmm0, xmm1",               [0x66, 0x0F, 0x51, 0xC1]),
+        ("sqrtss xmm0, xmm1",               [0xF3, 0x0F, 0x51, 0xC1]),
+        ("sqrtsd xmm0, xmm1",               [0xF2, 0x0F, 0x51, 0xC1]),
+        ("sqrtps xmm0, xmmword ptr [rbx]",  [0x0F, 0x51, 0x03]),
+
+        // Extended XMM
+        ("addps xmm8, xmm9",                [0x45, 0x0F, 0x58, 0xC1]),
+        ("subsd xmm15, qword ptr [r8]",     [0xF2, 0x45, 0x0F, 0x5C, 0x38]),
+    ]
+
+    func testSSEArithmeticAssembles() throws {
+        for (source, expected) in Self.sseArithmeticCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEArithmeticDisassembles() throws {
+        for (source, bytes) in Self.sseArithmeticCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEArithmeticMemoryWidthMismatch() {
+        XCTAssertThrowsError(try X86Assembler.assemble("addps xmm0, dword ptr [rbx]")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+        XCTAssertThrowsError(try X86Assembler.assemble("addss xmm0, qword ptr [rbx]")) { _ in }
+    }
+
+    func testSSEArithmeticRejectsNonXMMDestination() {
+        XCTAssertThrowsError(try X86Assembler.assemble("addps rax, xmm1")) { error in
+            guard case AssemblerError.unsupportedOperand = error else {
+                return XCTFail("expected unsupportedOperand, got \(error)")
+            }
+        }
+    }
+
+    func testSSEArithmeticStreamRoundTrip() throws {
+        let source = Self.sseArithmeticCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseArithmeticCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

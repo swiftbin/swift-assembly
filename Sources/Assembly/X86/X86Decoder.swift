@@ -281,6 +281,8 @@ internal enum X86InstructionDecoder {
             return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x10, 0x11, 0x28, 0x29, 0x6F, 0x7F:
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x51, 0x58, 0x59, 0x5C, 0x5D, 0x5E, 0x5F:
+            return try decodeSSEArithmetic(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x20, 0x21, 0x22, 0x23:
             return try decodeMovSystemRegister(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x40...0x4F:
@@ -344,6 +346,34 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - SSE arithmetic
+
+    private static func decodeSSEArithmetic(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8?
+        if prefixes.f3Prefix         { mandatoryPrefix = 0xF3 }
+        else if prefixes.f2Prefix    { mandatoryPrefix = 0xF2 }
+        else if prefixes.operandSize { mandatoryPrefix = 0x66 }
+        else                         { mandatoryPrefix = nil }
+
+        guard let kind = X86.SSEArithmeticKind.decode(mandatoryPrefix: mandatoryPrefix, opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        return Decoded(instruction: .sseArithmetic(kind, destination: dst, source: source), length: cursor.consumed)
     }
 
     // MARK: - SSE MOV

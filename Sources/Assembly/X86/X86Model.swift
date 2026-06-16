@@ -687,6 +687,62 @@ internal enum X86 {
         /// MOVDQU/MOVSS/MOVSD. The kind determines the mandatory prefix
         /// (none/66/F3/F2) and the load/store opcode pair.
         case sseMov(SSEMovKind, destination: XMMOrMemory, source: XMMOrMemory)
+        /// SSE arithmetic: ADD/SUB/MUL/DIV/MIN/MAX/SQRT in PS/PD/SS/SD
+        /// variants. All ride `0F 5x /r` with a mandatory prefix
+        /// selecting the variant (none for PS, 66 for PD, F3 for SS,
+        /// F2 for SD).
+        case sseArithmetic(SSEArithmeticKind, destination: XMMRegister, source: XMMOrMemory)
+    }
+
+    /// SSE/SSE2 arithmetic variants. The opcode byte at `0F xx`
+    /// selects the operation (ADD/SUB/MUL/DIV/MIN/MAX/SQRT); the
+    /// mandatory prefix (none / 0x66 / 0xF3 / 0xF2) selects the
+    /// PS/PD/SS/SD precision form, which also determines the memory
+    /// operand width (m128 for PS/PD, m32 for SS, m64 for SD).
+    enum SSEArithmeticKind: String, Equatable, CaseIterable {
+        case addps, addpd, addss, addsd
+        case subps, subpd, subss, subsd
+        case mulps, mulpd, mulss, mulsd
+        case divps, divpd, divss, divsd
+        case minps, minpd, minss, minsd
+        case maxps, maxpd, maxss, maxsd
+        case sqrtps, sqrtpd, sqrtss, sqrtsd
+
+        /// Second-byte opcode (operation selector).
+        var opcode2: UInt8 {
+            switch self {
+            case .sqrtps, .sqrtpd, .sqrtss, .sqrtsd: return 0x51
+            case .addps,  .addpd,  .addss,  .addsd:  return 0x58
+            case .mulps,  .mulpd,  .mulss,  .mulsd:  return 0x59
+            case .subps,  .subpd,  .subss,  .subsd:  return 0x5C
+            case .minps,  .minpd,  .minss,  .minsd:  return 0x5D
+            case .divps,  .divpd,  .divss,  .divsd:  return 0x5E
+            case .maxps,  .maxpd,  .maxss,  .maxsd:  return 0x5F
+            }
+        }
+
+        /// Mandatory prefix byte (variant selector).
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .addps, .subps, .mulps, .divps, .minps, .maxps, .sqrtps: return nil
+            case .addpd, .subpd, .mulpd, .divpd, .minpd, .maxpd, .sqrtpd: return 0x66
+            case .addss, .subss, .mulss, .divss, .minss, .maxss, .sqrtss: return 0xF3
+            case .addsd, .subsd, .mulsd, .divsd, .minsd, .maxsd, .sqrtsd: return 0xF2
+            }
+        }
+
+        /// Memory operand width when the source is a memory reference.
+        var memoryWidth: RegisterWidth {
+            switch self.mandatoryPrefix {
+            case 0xF3: return .dword   // SS: scalar single
+            case 0xF2: return .qword   // SD: scalar double
+            default:   return .xmmword // PS/PD: packed
+            }
+        }
+
+        static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSEArithmeticKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
     }
 
     /// SSE/SSE2 data movement variants. Each kind owns its mandatory

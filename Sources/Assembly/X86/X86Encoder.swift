@@ -141,6 +141,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeLarLsl(opcode2: 0x03, destination: dst, source: src, mnemonic: "lsl"), patches: [])
         case .sseMov(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEMov(kind, destination: dst, source: src), patches: [])
+        case .sseArithmetic(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEArithmetic(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -943,6 +945,36 @@ internal enum X86InstructionEncoder {
             regLow: kind.slashDigit,
             forceREX: forceREX
         )
+    }
+
+    // MARK: - SSE arithmetic (ADD/SUB/MUL/DIV/MIN/MAX/SQRT)
+
+    /// All SSE arithmetic ops share the `prefix? 0F 5x /r` shape with
+    /// `xmm` destination and `xmm/m` source. The shared helper writes
+    /// the mandatory prefix, the REX byte for any extended XMM register
+    /// references, the 0F escape, the operation opcode, and the
+    /// ModR/M+SIB+disp body for the source.
+    private static func encodeSSEArithmetic(_ kind: X86.SSEArithmeticKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix { bytes.append(prefix) }
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
     }
 
     // MARK: - SSE MOV
