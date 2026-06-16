@@ -747,6 +747,11 @@ internal enum X86 {
         // Pack with saturation: word → byte and dword → word
         case packsswb, packssdw    // signed
         case packuswb              // unsigned
+        // Variable shifts (count taken from xmm/m128). The imm8 forms
+        // ride a different opcode group and live in their own case.
+        case psllw, pslld, psllq
+        case psrlw, psrld, psrlq
+        case psraw, psrad
 
         var opcode2: UInt8 {
             switch self {
@@ -767,6 +772,9 @@ internal enum X86 {
             case .pcmpeqb:  return 0x74
             case .pcmpeqw:  return 0x75
             case .pcmpeqd:  return 0x76
+            case .psrlw:    return 0xD1
+            case .psrld:    return 0xD2
+            case .psrlq:    return 0xD3
             case .paddq:    return 0xD4
             case .pmullw:   return 0xD5
             case .psubusb:  return 0xD8
@@ -778,6 +786,8 @@ internal enum X86 {
             case .pmaxub:   return 0xDE
             case .pandn:    return 0xDF
             case .pavgb:    return 0xE0
+            case .psraw:    return 0xE1
+            case .psrad:    return 0xE2
             case .pavgw:    return 0xE3
             case .pmulhuw:  return 0xE4
             case .pmulhw:   return 0xE5
@@ -789,6 +799,9 @@ internal enum X86 {
             case .paddsw:   return 0xED
             case .pmaxsw:   return 0xEE
             case .pxor:     return 0xEF
+            case .psllw:    return 0xF1
+            case .pslld:    return 0xF2
+            case .psllq:    return 0xF3
             case .pmuludq:  return 0xF4
             case .pmaddwd:  return 0xF5
             case .psadbw:   return 0xF6

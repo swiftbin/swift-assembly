@@ -2861,4 +2861,44 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14k SIMD variable shifts (count taken from xmm/m128)
+
+    private static let sseVariableShiftCases: [(String, [UInt8])] = [
+        // Logical shift left
+        ("psllw xmm0, xmm1",                [0x66, 0x0F, 0xF1, 0xC1]),
+        ("pslld xmm0, xmm1",                [0x66, 0x0F, 0xF2, 0xC1]),
+        ("psllq xmm0, xmm1",                [0x66, 0x0F, 0xF3, 0xC1]),
+        // Logical shift right
+        ("psrlw xmm0, xmm1",                [0x66, 0x0F, 0xD1, 0xC1]),
+        ("psrld xmm0, xmm1",                [0x66, 0x0F, 0xD2, 0xC1]),
+        ("psrlq xmm0, xmm1",                [0x66, 0x0F, 0xD3, 0xC1]),
+        // Arithmetic (signed) shift right — byte and qword variants
+        // don't exist, only word and dword.
+        ("psraw xmm0, xmm1",                [0x66, 0x0F, 0xE1, 0xC1]),
+        ("psrad xmm0, xmm1",                [0x66, 0x0F, 0xE2, 0xC1]),
+        // Memory operand + extended XMM
+        ("psllq xmm0, xmmword ptr [rbx]",   [0x66, 0x0F, 0xF3, 0x03]),
+        ("psraw xmm8, xmm9",                [0x66, 0x45, 0x0F, 0xE1, 0xC1]),
+    ]
+
+    func testSSEVariableShiftAssembles() throws {
+        for (source, expected) in Self.sseVariableShiftCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEVariableShiftDisassembles() throws {
+        for (source, bytes) in Self.sseVariableShiftCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEVariableShiftStreamRoundTrip() throws {
+        let source = Self.sseVariableShiftCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseVariableShiftCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
