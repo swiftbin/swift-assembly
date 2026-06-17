@@ -42,6 +42,9 @@ internal enum X86Parser {
         if let kind = X86.SSEShuffleKind(rawValue: instruction.mnemonic) {
             return try parseSSEShuffle(kind, instruction)
         }
+        if let kind = X86.SSEHalfMoveKind(rawValue: instruction.mnemonic) {
+            return try parseSSEHalfMove(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -975,6 +978,41 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// MOVLPS/MOVHPS/MOVLPD/MOVHPD/MOVHLPS/MOVLHPS — two operands of
+    /// type XMM or m64. The encoder picks the load/store opcode based
+    /// on which side is memory.
+    private static func parseSSEHalfMove(_ kind: X86.SSEHalfMoveKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try parseHalfMoveOperand(instruction.operands[0], kind: kind)
+        let src = try parseHalfMoveOperand(instruction.operands[1], kind: kind)
+        return .sseHalfMove(kind, destination: dst, source: src)
+    }
+
+    private static func parseHalfMoveOperand(_ text: String, kind: X86.SSEHalfMoveKind) throws -> X86.XMMOrMemory {
+        if let xmm = parseXMMRegister(text) {
+            return .register(xmm)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, body) = stripSizeHint(trimmed) {
+            guard width == kind.partnerWidth else {
+                throw AssemblerError.unsupportedOperand(
+                    "\(kind.rawValue): memory operand width disagrees with mnemonic"
+                )
+            }
+            return .memory(try memoryOperand(body))
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed))
+        }
+        throw AssemblerError.unsupportedOperand("\(kind.rawValue): expected xmm register or memory operand")
     }
 
     /// CMPPS/CMPPD/CMPSS/CMPSD — `xmm, xmm/m128, imm8`. Same shape as

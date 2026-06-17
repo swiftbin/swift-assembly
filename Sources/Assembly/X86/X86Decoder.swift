@@ -281,6 +281,8 @@ internal enum X86InstructionDecoder {
             return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x10, 0x11, 0x28, 0x29, 0x6F, 0x7F:
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x12, 0x13, 0x16, 0x17:
+            return try decodeSSEHalfMove(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
             return try decodeMovDQ(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x70:
@@ -416,6 +418,53 @@ internal enum X86InstructionDecoder {
         }
         let imm = try cursor.takeByte()
         return Decoded(instruction: .sseShuffle(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
+    }
+
+    // MARK: - SSE half-vector moves
+
+    private static func decodeSSEHalfMove(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8? = prefixes.operandSize ? 0x66 : nil
+        let modrm = try cursor.takeByte()
+        let isRegisterForm = X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister
+        let isStoreOpcode = (opcode2 == 0x13 || opcode2 == 0x17)
+        // Store opcodes (13/17) are reserved with mod==11; only the
+        // load opcodes have a register-form sibling.
+        if isStoreOpcode && isRegisterForm {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let isLowHalf = (opcode2 == 0x12 || opcode2 == 0x13)
+        let kind: X86.SSEHalfMoveKind
+        switch (mandatoryPrefix, isLowHalf, isRegisterForm) {
+        case (nil, true,  true):  kind = .movhlps
+        case (nil, true,  false): kind = .movlps
+        case (nil, false, true):  kind = .movlhps
+        case (nil, false, false): kind = .movhps
+        case (0x66?, true,  false): kind = .movlpd
+        case (0x66?, false, false): kind = .movhpd
+        // 66-prefixed register-form is reserved.
+        default:
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let xmm = X86.XMMRegister(number: regNum)
+        let partner: X86.XMMOrMemory
+        if isRegisterForm {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            partner = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            partner = .memory(mem)
+        }
+        let dst: X86.XMMOrMemory
+        let src: X86.XMMOrMemory
+        if isStoreOpcode {
+            dst = partner
+            src = .register(xmm)
+        } else {
+            dst = .register(xmm)
+            src = partner
+        }
+        return Decoded(instruction: .sseHalfMove(kind, destination: dst, source: src), length: cursor.consumed)
     }
 
     // MARK: - SSE compares (imm8 predicate)

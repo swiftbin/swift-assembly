@@ -157,6 +157,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSEShuffle(kind, destination: dst, source: src, immediate: imm), patches: [])
         case .sseCompare(let kind, let dst, let src, let pred):
             return Encoded(bytes: try encodeSSECompare(kind, destination: dst, source: src, predicate: pred), patches: [])
+        case .sseHalfMove(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEHalfMove(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -1092,6 +1094,56 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
         }
         bytes.append(predicate)
+        return bytes
+    }
+
+    // MARK: - SSE half-vector moves (MOV*PS / MOV*PD / MOVHLPS / MOVLHPS)
+
+    /// `[66] 0F 12/13/16/17 /r`. Load opcode (12/16) is used when the
+    /// destination is a register; store opcode (13/17) when it is
+    /// memory. The register-only kinds (MOVHLPS / MOVLHPS) always use
+    /// the load opcode.
+    private static func encodeSSEHalfMove(_ kind: X86.SSEHalfMoveKind, destination: X86.XMMOrMemory, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix {
+            bytes.append(prefix)
+        }
+        switch (destination, source) {
+        case let (.register(dst), .register(src)):
+            guard kind.allowsRegister else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): requires a memory operand")
+            }
+            if let rex = X86.REX.build(r: dst.highBit, b: src.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.loadOpcode)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: src.lowBits))
+        case let (.register(dst), .memory(mem)):
+            guard kind.allowsMemory else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): operands must both be XMM registers")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.loadOpcode)
+            bytes.append(contentsOf: addressing)
+        case let (.memory(mem), .register(src)):
+            guard kind.allowsMemory else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): operands must both be XMM registers")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: src.lowBits)
+            if let rex = X86.REX.build(r: src.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.loadOpcode + 1)
+            bytes.append(contentsOf: addressing)
+        case (.memory, .memory):
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): cannot have two memory operands")
+        }
         return bytes
     }
 

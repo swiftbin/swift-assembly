@@ -136,6 +136,8 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: .xmmword)), \(imm)"
         case .sseCompare(let kind, let dst, let src, let pred):
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: kind.sourceWidth)), \(pred)"
+        case .sseHalfMove(let kind, let dst, let src):
+            return "\(kind.rawValue) \(formatXMMOrMemory(dst, width: kind.partnerWidth)), \(formatXMMOrMemory(src, width: kind.partnerWidth))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

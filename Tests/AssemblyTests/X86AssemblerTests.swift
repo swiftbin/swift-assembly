@@ -3041,4 +3041,55 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14o SSE half-vector moves
+
+    private static let sseHalfMoveCases: [(String, [UInt8])] = [
+        // MOVLPS — 0F 12/13
+        ("movlps xmm0, qword ptr [rdi]",        [0x0F, 0x12, 0x07]),
+        ("movlps qword ptr [rdi], xmm0",        [0x0F, 0x13, 0x07]),
+        // MOVHPS — 0F 16/17
+        ("movhps xmm1, qword ptr [rsi]",        [0x0F, 0x16, 0x0E]),
+        ("movhps qword ptr [rsi], xmm1",        [0x0F, 0x17, 0x0E]),
+        // MOVLPD — 66 0F 12/13
+        ("movlpd xmm2, qword ptr [rbx]",        [0x66, 0x0F, 0x12, 0x13]),
+        ("movlpd qword ptr [rbx], xmm2",        [0x66, 0x0F, 0x13, 0x13]),
+        // MOVHPD — 66 0F 16/17
+        ("movhpd xmm3, qword ptr [rcx]",        [0x66, 0x0F, 0x16, 0x19]),
+        ("movhpd qword ptr [rcx], xmm3",        [0x66, 0x0F, 0x17, 0x19]),
+        // MOVHLPS / MOVLHPS — register-only
+        ("movhlps xmm0, xmm1",                  [0x0F, 0x12, 0xC1]),
+        ("movlhps xmm0, xmm1",                  [0x0F, 0x16, 0xC1]),
+        // Extended XMM
+        ("movlps xmm15, qword ptr [rax]",       [0x44, 0x0F, 0x12, 0x38]),
+        ("movhpd qword ptr [r9], xmm8",         [0x66, 0x45, 0x0F, 0x17, 0x01]),
+        ("movhlps xmm8, xmm15",                 [0x45, 0x0F, 0x12, 0xC7]),
+    ]
+
+    func testSSEHalfMoveAssembles() throws {
+        for (source, expected) in Self.sseHalfMoveCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEHalfMoveDisassembles() throws {
+        for (source, bytes) in Self.sseHalfMoveCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// Reg-only mnemonics must reject memory; memory mnemonics must
+    /// reject xmm-only forms.
+    func testSSEHalfMoveOperandShapeRejections() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movhlps xmm0, qword ptr [rdi]")) { _ in }
+        XCTAssertThrowsError(try X86Assembler.assemble("movlps xmm0, xmm1")) { _ in }
+    }
+
+    func testSSEHalfMoveStreamRoundTrip() throws {
+        let source = Self.sseHalfMoveCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseHalfMoveCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

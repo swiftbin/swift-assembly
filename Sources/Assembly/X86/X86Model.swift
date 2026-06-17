@@ -726,6 +726,12 @@ internal enum X86 {
         /// shape is `xmm, xmm/m128, imm8`; the kind picks the mandatory
         /// prefix while the opcode is fixed at `0F C2`.
         case sseCompare(SSECompareKind, destination: XMMRegister, source: XMMOrMemory, predicate: UInt8)
+        /// Half-vector moves: MOVLPS/MOVHPS/MOVLPD/MOVHPD shuttle a
+        /// 64-bit lane between an XMM register and memory; MOVHLPS and
+        /// MOVLHPS shuttle a lane between two XMM registers. The same
+        /// opcode (0F 12 or 0F 16) covers a memory pair and its
+        /// register-only sibling, disambiguated by ModR/M.mod.
+        case sseHalfMove(SSEHalfMoveKind, destination: XMMOrMemory, source: XMMOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -823,6 +829,52 @@ internal enum X86 {
         static func decode(mandatoryPrefix: UInt8?) -> SSECompareKind? {
             allCases.first { $0.mandatoryPrefix == mandatoryPrefix }
         }
+    }
+
+    /// MOV*PS/MOV*PD half-vector moves and their register-only
+    /// siblings (MOVHLPS/MOVLHPS). The load opcode is 0F 12 (low half)
+    /// or 0F 16 (high half); the store opcode is one higher (13/17)
+    /// and only applies to the memory-form mnemonics.
+    enum SSEHalfMoveKind: String, Equatable, CaseIterable {
+        case movlps         //    0F 12/13 m64 — low quad load/store
+        case movhlps        //    0F 12 reg-only — src.high → dst.low
+        case movhps         //    0F 16/17 m64 — high quad load/store
+        case movlhps        //    0F 16 reg-only — src.low → dst.high
+        case movlpd         // 66 0F 12/13 m64
+        case movhpd         // 66 0F 16/17 m64
+
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .movlpd, .movhpd: return 0x66
+            default:               return nil
+            }
+        }
+
+        /// Load opcode (memory → xmm or reg-only form). Store opcode is
+        /// one higher.
+        var loadOpcode: UInt8 {
+            switch self {
+            case .movlps, .movhlps, .movlpd: return 0x12
+            case .movhps, .movlhps, .movhpd: return 0x16
+            }
+        }
+
+        var allowsMemory: Bool {
+            switch self {
+            case .movhlps, .movlhps: return false
+            default:                 return true
+            }
+        }
+
+        var allowsRegister: Bool {
+            switch self {
+            case .movhlps, .movlhps: return true
+            default:                 return false
+            }
+        }
+
+        /// The partner operand is a 64-bit lane.
+        var partnerWidth: RegisterWidth { .qword }
     }
 
     /// SSE2 packed integer operations on 128-bit XMM operands.
