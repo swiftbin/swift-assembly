@@ -183,6 +183,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSE41Packed(kind, destination: dst, source: src), patches: [])
         case .movntdqa(let dst, let mem):
             return Encoded(bytes: try encodeMovntdqa(destination: dst, memory: mem), patches: [])
+        case .sse41Imm(let kind, let dst, let src, let imm):
+            return Encoded(bytes: try encodeSSE41Immediate(kind, destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1428,6 +1430,33 @@ internal enum X86InstructionEncoder {
         bytes.append(0x38)
         bytes.append(0x2A)
         bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    // MARK: - SSE4.1 imm8 ops (0F 3A)
+
+    private static func encodeSSE41Immediate(_ kind: X86.SSE41ImmediateKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(kind.opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
         return bytes
     }
 

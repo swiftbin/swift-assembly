@@ -566,24 +566,25 @@ internal enum X86InstructionDecoder {
             throw AssemblerError.unknownEncoding(0x3A)
         }
         let opcode3 = try cursor.takeByte()
-        switch opcode3 {
-        case 0x0F:
-            let modrm = try cursor.takeByte()
-            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
-            let dst = X86.XMMRegister(number: regNum)
-            let source: X86.XMMOrMemory
-            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
-                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
-                source = .register(X86.XMMRegister(number: rmNum))
-            } else {
-                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
-                source = .memory(mem)
-            }
-            let imm = try cursor.takeByte()
-            return Decoded(instruction: .palignr(destination: dst, source: source, immediate: imm), length: cursor.consumed)
-        default:
-            throw AssemblerError.unknownEncoding(UInt32(opcode3))
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
         }
+        let imm = try cursor.takeByte()
+        if opcode3 == 0x0F {
+            return Decoded(instruction: .palignr(destination: dst, source: source, immediate: imm), length: cursor.consumed)
+        }
+        if let kind = X86.SSE41ImmediateKind.decode(opcode3: opcode3) {
+            return Decoded(instruction: .sse41Imm(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
+        }
+        throw AssemblerError.unknownEncoding(UInt32(opcode3))
     }
 
     // MARK: - SSE3

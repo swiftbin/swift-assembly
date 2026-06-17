@@ -778,6 +778,9 @@ internal enum X86 {
         /// MOVNTDQA — non-temporal aligned dqword load from memory.
         /// `66 0F 38 2A /r` with memory-only `rm` operand.
         case movntdqa(destination: XMMRegister, memory: MemoryOperand)
+        /// SSE4.1 imm8 instructions on the 0F 3A escape:
+        /// ROUNDPS/PD/SS/SD, BLENDPS/PD, PBLENDW, DPPS/DPPD, MPSADBW.
+        case sse41Imm(SSE41ImmediateKind, destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1209,6 +1212,48 @@ internal enum X86 {
         }
 
         static func decode(opcode3: UInt8) -> SSE41PackedKind? {
+            allCases.first { $0.opcode3 == opcode3 }
+        }
+    }
+
+    /// SSE4.1 imm8 operations on the 0F 3A escape. ROUNDSS/ROUNDSD
+    /// narrow the memory source to m32/m64; everything else is m128.
+    enum SSE41ImmediateKind: String, Equatable, CaseIterable {
+        case roundps        // 66 0F 3A 08 — packed single round
+        case roundpd        // 66 0F 3A 09 — packed double round
+        case roundss        // 66 0F 3A 0A — scalar single round (m32 src)
+        case roundsd        // 66 0F 3A 0B — scalar double round (m64 src)
+        case blendps        // 66 0F 3A 0C — blend singles
+        case blendpd        // 66 0F 3A 0D — blend doubles
+        case pblendw        // 66 0F 3A 0E — blend words
+        case dpps           // 66 0F 3A 40 — dot product singles
+        case dppd           // 66 0F 3A 41 — dot product doubles
+        case mpsadbw        // 66 0F 3A 42 — multiple packed SAD bytes
+
+        var opcode3: UInt8 {
+            switch self {
+            case .roundps: return 0x08
+            case .roundpd: return 0x09
+            case .roundss: return 0x0A
+            case .roundsd: return 0x0B
+            case .blendps: return 0x0C
+            case .blendpd: return 0x0D
+            case .pblendw: return 0x0E
+            case .dpps:    return 0x40
+            case .dppd:    return 0x41
+            case .mpsadbw: return 0x42
+            }
+        }
+
+        var sourceWidth: RegisterWidth {
+            switch self {
+            case .roundss: return .dword
+            case .roundsd: return .qword
+            default:       return .xmmword
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> SSE41ImmediateKind? {
             allCases.first { $0.opcode3 == opcode3 }
         }
     }

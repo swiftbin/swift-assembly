@@ -81,6 +81,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "movntdqa" {
             return try parseMovntdqa(instruction)
         }
+        if let kind = X86.SSE41ImmediateKind(rawValue: instruction.mnemonic) {
+            return try parseSSE41Immediate(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1014,6 +1017,30 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// SSE4.1 imm8 ops (ROUND/BLEND/DPP/MPSADBW etc.).
+    private static func parseSSE41Immediate(_ kind: X86.SSE41ImmediateKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: kind.sourceWidth,
+            mnemonic: kind.rawValue
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .sse41Imm(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// SSE4.1 PMUL/PMIN/PMAX/PACKUSDW/PCMPEQQ/PHMINPOSUW/PTEST.

@@ -3410,4 +3410,49 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 16c SSE4.1 imm8 (ROUND/BLEND/DPP/MPSADBW)
+
+    private static let sse41ImmediateCases: [(String, [UInt8])] = [
+        ("roundps xmm0, xmm1, 0",                       [0x66, 0x0F, 0x3A, 0x08, 0xC1, 0x00]),
+        ("roundpd xmm0, xmm1, 1",                       [0x66, 0x0F, 0x3A, 0x09, 0xC1, 0x01]),
+        ("roundss xmm0, xmm1, 2",                       [0x66, 0x0F, 0x3A, 0x0A, 0xC1, 0x02]),
+        ("roundsd xmm0, xmm1, 3",                       [0x66, 0x0F, 0x3A, 0x0B, 0xC1, 0x03]),
+        ("blendps xmm0, xmm1, 4",                       [0x66, 0x0F, 0x3A, 0x0C, 0xC1, 0x04]),
+        ("blendpd xmm0, xmm1, 5",                       [0x66, 0x0F, 0x3A, 0x0D, 0xC1, 0x05]),
+        ("pblendw xmm0, xmm1, 6",                       [0x66, 0x0F, 0x3A, 0x0E, 0xC1, 0x06]),
+        ("dpps xmm0, xmm1, 240",                        [0x66, 0x0F, 0x3A, 0x40, 0xC1, 0xF0]),
+        ("dppd xmm0, xmm1, 51",                         [0x66, 0x0F, 0x3A, 0x41, 0xC1, 0x33]),
+        ("mpsadbw xmm0, xmm1, 7",                       [0x66, 0x0F, 0x3A, 0x42, 0xC1, 0x07]),
+        // Memory source — ROUNDSS narrows to m32, ROUNDSD to m64.
+        ("roundss xmm0, dword ptr [rdi], 0",            [0x66, 0x0F, 0x3A, 0x0A, 0x07, 0x00]),
+        ("roundsd xmm0, qword ptr [rdi], 1",            [0x66, 0x0F, 0x3A, 0x0B, 0x07, 0x01]),
+        ("blendps xmm0, xmmword ptr [rdi], 8",          [0x66, 0x0F, 0x3A, 0x0C, 0x07, 0x08]),
+        // Extended XMM
+        ("dpps xmm15, xmm0, 1",                         [0x66, 0x44, 0x0F, 0x3A, 0x40, 0xF8, 0x01]),
+    ]
+
+    func testSSE41ImmediateAssembles() throws {
+        for (source, expected) in Self.sse41ImmediateCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSE41ImmediateDisassembles() throws {
+        for (source, bytes) in Self.sse41ImmediateCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testRoundssWidthMismatchRejected() {
+        XCTAssertThrowsError(try X86Assembler.assemble("roundss xmm0, qword ptr [rdi], 0")) { _ in }
+    }
+
+    func testSSE41ImmediateStreamRoundTrip() throws {
+        let source = Self.sse41ImmediateCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sse41ImmediateCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
