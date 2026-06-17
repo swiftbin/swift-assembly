@@ -3455,4 +3455,64 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 16d SSE4.1 PINSR / PEXTR / INSERTPS / EXTRACTPS / BLENDV
+
+    private static let sse41LaneCases: [(String, [UInt8])] = [
+        // PINSRB / PINSRW / PINSRD / PINSRQ
+        ("pinsrb xmm0, eax, 3",                         [0x66, 0x0F, 0x3A, 0x20, 0xC0, 0x03]),
+        ("pinsrb xmm0, byte ptr [rdi], 4",              [0x66, 0x0F, 0x3A, 0x20, 0x07, 0x04]),
+        ("pinsrw xmm0, eax, 2",                         [0x66, 0x0F, 0xC4, 0xC0, 0x02]),
+        ("pinsrw xmm0, word ptr [rdi], 1",              [0x66, 0x0F, 0xC4, 0x07, 0x01]),
+        ("pinsrd xmm0, eax, 1",                         [0x66, 0x0F, 0x3A, 0x22, 0xC0, 0x01]),
+        ("pinsrq xmm0, rax, 0",                         [0x66, 0x48, 0x0F, 0x3A, 0x22, 0xC0, 0x00]),
+        // PEXTRB / PEXTRW / PEXTRD / PEXTRQ — using the SSE4.1 form
+        ("pextrb eax, xmm0, 7",                         [0x66, 0x0F, 0x3A, 0x14, 0xC0, 0x07]),
+        ("pextrb byte ptr [rdi], xmm0, 5",              [0x66, 0x0F, 0x3A, 0x14, 0x07, 0x05]),
+        ("pextrw eax, xmm0, 3",                         [0x66, 0x0F, 0x3A, 0x15, 0xC0, 0x03]),
+        ("pextrw word ptr [rdi], xmm0, 2",              [0x66, 0x0F, 0x3A, 0x15, 0x07, 0x02]),
+        ("pextrd eax, xmm0, 1",                         [0x66, 0x0F, 0x3A, 0x16, 0xC0, 0x01]),
+        ("pextrq rax, xmm0, 0",                         [0x66, 0x48, 0x0F, 0x3A, 0x16, 0xC0, 0x00]),
+        // INSERTPS / EXTRACTPS
+        ("insertps xmm0, xmm1, 16",                     [0x66, 0x0F, 0x3A, 0x21, 0xC1, 0x10]),
+        ("insertps xmm0, dword ptr [rdi], 0",           [0x66, 0x0F, 0x3A, 0x21, 0x07, 0x00]),
+        ("extractps eax, xmm0, 2",                      [0x66, 0x0F, 0x3A, 0x17, 0xC0, 0x02]),
+        ("extractps dword ptr [rdi], xmm0, 1",          [0x66, 0x0F, 0x3A, 0x17, 0x07, 0x01]),
+        // BLENDV — implicit XMM0
+        ("blendvps xmm0, xmm1, xmm0",                   [0x66, 0x0F, 0x38, 0x14, 0xC1]),
+        ("blendvpd xmm0, xmm1, xmm0",                   [0x66, 0x0F, 0x38, 0x15, 0xC1]),
+        ("pblendvb xmm0, xmm1, xmm0",                   [0x66, 0x0F, 0x38, 0x10, 0xC1]),
+        ("pblendvb xmm0, xmmword ptr [rdi], xmm0",      [0x66, 0x0F, 0x38, 0x10, 0x07]),
+    ]
+
+    func testSSE41LaneAssembles() throws {
+        for (source, expected) in Self.sse41LaneCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSE41LaneDisassembles() throws {
+        for (source, bytes) in Self.sse41LaneCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// The SSE2 PEXTRW form (66 0F C5 /r ib) should decode equally to
+    /// the canonical pextrw representation.
+    func testPextrwSSE2FormDecodes() throws {
+        XCTAssertEqual(try X86Assembler.disassemble([0x66, 0x0F, 0xC5, 0xC0, 0x03]),
+                       "pextrw eax, xmm0, 3")
+    }
+
+    func testBlendvRejectsNonXmm0Mask() {
+        XCTAssertThrowsError(try X86Assembler.assemble("blendvps xmm0, xmm1, xmm1")) { _ in }
+    }
+
+    func testSSE41LaneStreamRoundTrip() throws {
+        let source = Self.sse41LaneCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sse41LaneCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

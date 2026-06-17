@@ -164,6 +164,31 @@ internal enum X86InstructionFormatter {
             return "movntdqa xmm\(dst.number), \(formatSizedMemory(mem, width: .xmmword))"
         case .sse41Imm(let kind, let dst, let src, let imm):
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: kind.sourceWidth)), \(imm)"
+        case .sseInsertLane(let kind, let dst, let src, let imm):
+            let srcStr: String
+            switch src {
+            case .register(let r): srcStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, _): srcStr = "\(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) xmm\(dst.number), \(srcStr), \(imm)"
+        case .sseExtractLane(let kind, let dst, let src, let imm):
+            let dstStr: String
+            switch dst {
+            case .register(let r): dstStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, _): dstStr = "\(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(dstStr), xmm\(src.number), \(imm)"
+        case .insertps(let dst, let src, let imm):
+            return "insertps xmm\(dst.number), \(formatXMMOrMemory(src, width: .dword)), \(imm)"
+        case .extractps(let dst, let src, let imm):
+            let dstStr: String
+            switch dst {
+            case .register(let r): dstStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, _): dstStr = "\(sizeHintPrefix(.dword)) \(formatMemory(m))"
+            }
+            return "extractps \(dstStr), xmm\(src.number), \(imm)"
+        case .sseBlendv(let kind, let dst, let src):
+            return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: .xmmword)), xmm0"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

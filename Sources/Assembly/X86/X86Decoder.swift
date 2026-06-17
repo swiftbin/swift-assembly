@@ -380,6 +380,10 @@ internal enum X86InstructionDecoder {
             return try decodeXaddCmpxchg(opcode2: opcode2, isCmpxchg: false, prefixes: prefixes, cursor: &cursor)
         case 0xC2:
             return try decodeSSECompare(prefixes: prefixes, cursor: &cursor)
+        case 0xC4:
+            return try decodePinsrw(prefixes: prefixes, cursor: &cursor)
+        case 0xC5:
+            return try decodePextrwRegister(prefixes: prefixes, cursor: &cursor)
         case 0xC7:
             return try decodeCmpxchgWide(prefixes: prefixes, cursor: &cursor)
         case 0xC8...0xCF:
@@ -555,6 +559,9 @@ internal enum X86InstructionDecoder {
             }
             return Decoded(instruction: .movntdqa(destination: dst, memory: mem), length: cursor.consumed)
         }
+        if let kind = X86.SSEBlendvKind.decode(opcode3: opcode3) {
+            return Decoded(instruction: .sseBlendv(kind, destination: dst, source: source), length: cursor.consumed)
+        }
         if let kind = X86.SSE41PackedKind.decode(opcode3: opcode3) {
             return Decoded(instruction: .sse41Packed(kind, destination: dst, source: source), length: cursor.consumed)
         }
@@ -566,6 +573,15 @@ internal enum X86InstructionDecoder {
             throw AssemblerError.unknownEncoding(0x3A)
         }
         let opcode3 = try cursor.takeByte()
+        // PINSR / PEXTR / INSERTPS / EXTRACTPS need GPR-aware decoding.
+        switch opcode3 {
+        case 0x14, 0x15, 0x16, 0x17:
+            return try decodeSSEExtractLaneOrExtractps(opcode3: opcode3, prefixes: prefixes, cursor: &cursor)
+        case 0x20, 0x22:
+            return try decodeSSEInsertLane(opcode3: opcode3, prefixes: prefixes, cursor: &cursor)
+        default:
+            break
+        }
         let modrm = try cursor.takeByte()
         let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let dst = X86.XMMRegister(number: regNum)
@@ -581,10 +597,111 @@ internal enum X86InstructionDecoder {
         if opcode3 == 0x0F {
             return Decoded(instruction: .palignr(destination: dst, source: source, immediate: imm), length: cursor.consumed)
         }
+        if opcode3 == 0x21 {
+            return Decoded(instruction: .insertps(destination: dst, source: source, immediate: imm), length: cursor.consumed)
+        }
         if let kind = X86.SSE41ImmediateKind.decode(opcode3: opcode3) {
             return Decoded(instruction: .sse41Imm(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
         }
         throw AssemblerError.unknownEncoding(UInt32(opcode3))
+    }
+
+    private static func decodeSSEInsertLane(opcode3: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        // 0x20 = PINSRB, 0x22 = PINSRD/Q (REX.W picks).
+        let kind: X86.SSEInsertLaneKind
+        switch opcode3 {
+        case 0x20: kind = .pinsrb
+        case 0x22: kind = prefixes.rexW == 1 ? .pinsrq : .pinsrd
+        default:   throw AssemblerError.unknownEncoding(UInt32(opcode3))
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(makeRegister(number: rmNum, width: kind.gprWidth, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem, width: kind.memoryWidth)
+        }
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .sseInsertLane(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
+    }
+
+    private static func decodeSSEExtractLaneOrExtractps(opcode3: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        // 0x14 = PEXTRB, 0x15 = PEXTRW (SSE4.1), 0x16 = PEXTRD/Q,
+        // 0x17 = EXTRACTPS.
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let source = X86.XMMRegister(number: regNum)
+        if opcode3 == 0x17 {
+            // EXTRACTPS — dest is GPR or m32.
+            let destination: X86.RegisterOrMemory
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                let width: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+                destination = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+            } else {
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                destination = .memory(mem, width: .dword)
+            }
+            let imm = try cursor.takeByte()
+            return Decoded(instruction: .extractps(destination: destination, source: source, immediate: imm), length: cursor.consumed)
+        }
+        let kind: X86.SSEExtractLaneKind
+        switch opcode3 {
+        case 0x14: kind = .pextrb
+        case 0x15: kind = .pextrw
+        case 0x16: kind = prefixes.rexW == 1 ? .pextrq : .pextrd
+        default:   throw AssemblerError.unknownEncoding(UInt32(opcode3))
+        }
+        let destination: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            destination = .register(makeRegister(number: rmNum, width: kind.gprWidth, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            destination = .memory(mem, width: kind.memoryWidth)
+        }
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .sseExtractLane(kind, destination: destination, source: source, immediate: imm), length: cursor.consumed)
+    }
+
+    private static func decodePinsrw(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard prefixes.operandSize else {
+            throw AssemblerError.unknownEncoding(0xC4)
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(makeRegister(number: rmNum, width: .dword, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem, width: .word)
+        }
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .sseInsertLane(.pinsrw, destination: dst, source: source, immediate: imm), length: cursor.consumed)
+    }
+
+    private static func decodePextrwRegister(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        // SSE2 PEXTRW form (register destination only).
+        guard prefixes.operandSize else {
+            throw AssemblerError.unknownEncoding(0xC5)
+        }
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(0xC5)
+        }
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: .dword, hasREX: prefixes.hasREX)
+        let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+        let source = X86.XMMRegister(number: rmNum)
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .sseExtractLane(.pextrw, destination: .register(destination), source: source, immediate: imm), length: cursor.consumed)
     }
 
     // MARK: - SSE3

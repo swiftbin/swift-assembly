@@ -185,6 +185,16 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMovntdqa(destination: dst, memory: mem), patches: [])
         case .sse41Imm(let kind, let dst, let src, let imm):
             return Encoded(bytes: try encodeSSE41Immediate(kind, destination: dst, source: src, immediate: imm), patches: [])
+        case .sseInsertLane(let kind, let dst, let src, let imm):
+            return Encoded(bytes: try encodeSSEInsertLane(kind, destination: dst, source: src, immediate: imm), patches: [])
+        case .sseExtractLane(let kind, let dst, let src, let imm):
+            return Encoded(bytes: try encodeSSEExtractLane(kind, destination: dst, source: src, immediate: imm), patches: [])
+        case .insertps(let dst, let src, let imm):
+            return Encoded(bytes: try encodeInsertps(destination: dst, source: src, immediate: imm), patches: [])
+        case .extractps(let dst, let src, let imm):
+            return Encoded(bytes: try encodeExtractps(destination: dst, source: src, immediate: imm), patches: [])
+        case .sseBlendv(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEBlendv(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -1457,6 +1467,175 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
         }
         bytes.append(immediate)
+        return bytes
+    }
+
+    // MARK: - SSE4.1 PINSR / PEXTR
+
+    /// Helper that writes the `66 [REX] 0F 3A op /r ib` (or `66 [REX]
+    /// 0F C4 /r ib` for PINSRW) prologue and ModR/M against an XMM
+    /// `reg` field and a GPR-or-memory `rm`.
+    private static func encodeSSEInsertLane(_ kind: X86.SSEInsertLaneKind, destination dst: X86.XMMRegister, source: X86.RegisterOrMemory, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        let rexW: UInt8 = (kind == .pinsrq) ? 1 : 0
+        let opcodeSequence: [UInt8] = {
+            switch kind {
+            case .pinsrw: return [0x0F, 0xC4]
+            case .pinsrb: return [0x0F, 0x3A, 0x20]
+            case .pinsrd, .pinsrq: return [0x0F, 0x3A, 0x22]
+            }
+        }()
+        switch source {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+            guard r.width == kind.gprWidth else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): source GPR width disagrees with mnemonic")
+            }
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, b: r.highBit, forceEmit: needsForcedREX([r])) {
+                bytes.append(rex)
+            }
+            bytes.append(contentsOf: opcodeSequence)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: r.lowBits))
+        case .memory(let mem, let width):
+            guard width == kind.memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(contentsOf: opcodeSequence)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
+        return bytes
+    }
+
+    private static func encodeSSEExtractLane(_ kind: X86.SSEExtractLaneKind, destination: X86.RegisterOrMemory, source src: X86.XMMRegister, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        let rexW: UInt8 = (kind == .pextrq) ? 1 : 0
+        let opcode3: UInt8 = {
+            switch kind {
+            case .pextrb: return 0x14
+            case .pextrw: return 0x15
+            case .pextrd, .pextrq: return 0x16
+            }
+        }()
+        switch destination {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+            guard r.width == kind.gprWidth else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination GPR width disagrees with mnemonic")
+            }
+            if let rex = X86.REX.build(w: rexW, r: src.highBit, b: r.highBit, forceEmit: needsForcedREX([r])) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: src.lowBits, rm: r.lowBits))
+        case .memory(let mem, let width):
+            guard width == kind.memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: src.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: src.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(opcode3)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
+        return bytes
+    }
+
+    // MARK: - INSERTPS / EXTRACTPS
+
+    private static func encodeInsertps(destination dst: X86.XMMRegister, source: X86.XMMOrMemory, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0x21)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0x21)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
+        return bytes
+    }
+
+    private static func encodeExtractps(destination: X86.RegisterOrMemory, source src: X86.XMMRegister, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch destination {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: "extractps")
+            guard r.width == .dword || r.width == .qword else {
+                throw AssemblerError.unsupportedOperand("extractps: destination must be a 32- or 64-bit GPR")
+            }
+            // The SDM allows REX.W and writes the dword to the low 32
+            // bits; emit REX.W only for explicit r64 to match NASM.
+            let rexW: UInt8 = r.width == .qword ? 1 : 0
+            if let rex = X86.REX.build(w: rexW, r: src.highBit, b: r.highBit, forceEmit: needsForcedREX([r])) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0x17)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: src.lowBits, rm: r.lowBits))
+        case .memory(let mem, let width):
+            guard width == .dword else {
+                throw AssemblerError.unsupportedOperand("extractps: memory destination must be 32-bit")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: src.lowBits)
+            if let rex = X86.REX.build(r: src.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0x17)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
+        return bytes
+    }
+
+    // MARK: - BLENDV (implicit XMM0 mask)
+
+    private static func encodeSSEBlendv(_ kind: X86.SSEBlendvKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
         return bytes
     }
 

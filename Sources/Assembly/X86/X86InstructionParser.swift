@@ -84,6 +84,21 @@ internal enum X86Parser {
         if let kind = X86.SSE41ImmediateKind(rawValue: instruction.mnemonic) {
             return try parseSSE41Immediate(kind, instruction)
         }
+        if let kind = X86.SSEInsertLaneKind(rawValue: instruction.mnemonic) {
+            return try parseSSEInsertLane(kind, instruction)
+        }
+        if let kind = X86.SSEExtractLaneKind(rawValue: instruction.mnemonic) {
+            return try parseSSEExtractLane(kind, instruction)
+        }
+        if instruction.mnemonic == "insertps" {
+            return try parseInsertps(instruction)
+        }
+        if instruction.mnemonic == "extractps" {
+            return try parseExtractps(instruction)
+        }
+        if let kind = X86.SSEBlendvKind(rawValue: instruction.mnemonic) {
+            return try parseSSEBlendv(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1017,6 +1032,165 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// PINSR{B,W,D,Q} — `xmm, r/m, imm8`.
+    private static func parseSSEInsertLane(_ kind: X86.SSEInsertLaneKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseGPRMemoryWithWidth(
+            instruction.operands[1],
+            gprWidth: kind.gprWidth,
+            memoryWidth: kind.memoryWidth,
+            mnemonic: kind.rawValue
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .sseInsertLane(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// PEXTR{B,W,D,Q} — `r/m, xmm, imm8`.
+    private static func parseSSEExtractLane(_ kind: X86.SSEExtractLaneKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try parseGPRMemoryWithWidth(
+            instruction.operands[0],
+            gprWidth: kind.gprWidth,
+            memoryWidth: kind.memoryWidth,
+            mnemonic: kind.rawValue
+        )
+        guard let source = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): source must be an XMM register")
+        }
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .sseExtractLane(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// INSERTPS — `xmm, xmm/m32, imm8`.
+    private static func parseInsertps(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "insertps",
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("insertps: destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: .dword,
+            mnemonic: "insertps"
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "insertps", value: imm, range: 0...255)
+        }
+        return .insertps(destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// EXTRACTPS — `r32/r64/m32, xmm, imm8`.
+    private static func parseExtractps(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "extractps",
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try parseExtractpsDestination(instruction.operands[0])
+        guard let source = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("extractps: source must be an XMM register")
+        }
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "extractps", value: imm, range: 0...255)
+        }
+        return .extractps(destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    private static func parseExtractpsDestination(_ text: String) throws -> X86.RegisterOrMemory {
+        if let reg = try? register(text) {
+            return .register(reg)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, body) = stripSizeHint(trimmed) {
+            guard width == .dword else {
+                throw AssemblerError.unsupportedOperand("extractps: memory destination must be 32-bit")
+            }
+            return .memory(try memoryOperand(body), width: width)
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed), width: .dword)
+        }
+        throw AssemblerError.unsupportedOperand("extractps: unrecognized destination")
+    }
+
+    /// BLENDVPS/BLENDVPD/PBLENDVB — `xmm, xmm/m128 [, xmm0]`. The third
+    /// operand is optional; when present it must literally be `xmm0`.
+    private static func parseSSEBlendv(_ kind: X86.SSEBlendvKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 || instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 or 3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: .xmmword,
+            mnemonic: kind.rawValue
+        )
+        if instruction.operands.count == 3 {
+            guard let mask = parseXMMRegister(instruction.operands[2]), mask.number == 0 else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): mask operand must be xmm0")
+            }
+        }
+        return .sseBlendv(kind, destination: destination, source: source)
+    }
+
+    /// Helper for PINSR/PEXTR: accept a GPR of `gprWidth` or memory of
+    /// `memoryWidth`.
+    private static func parseGPRMemoryWithWidth(_ text: String, gprWidth: X86.RegisterWidth, memoryWidth: X86.RegisterWidth, mnemonic: String) throws -> X86.RegisterOrMemory {
+        if let reg = try? register(text) {
+            guard reg.width == gprWidth else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): GPR operand width disagrees with mnemonic")
+            }
+            return .register(reg)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, body) = stripSizeHint(trimmed) {
+            guard width == memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): memory operand width disagrees with mnemonic")
+            }
+            return .memory(try memoryOperand(body), width: width)
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed), width: memoryWidth)
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected a register or memory operand")
     }
 
     /// SSE4.1 imm8 ops (ROUND/BLEND/DPP/MPSADBW etc.).

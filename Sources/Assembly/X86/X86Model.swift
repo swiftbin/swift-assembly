@@ -781,6 +781,21 @@ internal enum X86 {
         /// SSE4.1 imm8 instructions on the 0F 3A escape:
         /// ROUNDPS/PD/SS/SD, BLENDPS/PD, PBLENDW, DPPS/DPPD, MPSADBW.
         case sse41Imm(SSE41ImmediateKind, destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
+        /// PINSR{B,W,D,Q} — insert a GPR or memory lane into an XMM
+        /// register, controlled by an imm8 lane index.
+        case sseInsertLane(SSEInsertLaneKind, destination: XMMRegister, source: RegisterOrMemory, immediate: UInt8)
+        /// PEXTR{B,W,D,Q} — extract a lane from an XMM register into a
+        /// GPR or memory operand, controlled by an imm8 lane index.
+        case sseExtractLane(SSEExtractLaneKind, destination: RegisterOrMemory, source: XMMRegister, immediate: UInt8)
+        /// INSERTPS — insert a single-precision lane (XMM ↔ XMM/m32)
+        /// with an imm8 control byte.
+        case insertps(destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
+        /// EXTRACTPS — extract one single from an XMM into a GPR or
+        /// m32 destination.
+        case extractps(destination: RegisterOrMemory, source: XMMRegister, immediate: UInt8)
+        /// BLENDVPS / BLENDVPD / PBLENDVB — blend two XMM operands
+        /// using the implicit XMM0 mask register.
+        case sseBlendv(SSEBlendvKind, destination: XMMRegister, source: XMMOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1254,6 +1269,83 @@ internal enum X86 {
         }
 
         static func decode(opcode3: UInt8) -> SSE41ImmediateKind? {
+            allCases.first { $0.opcode3 == opcode3 }
+        }
+    }
+
+    /// PINSR family. PINSRW uses the 66 0F C4 two-byte form; the
+    /// others ride 66 0F 3A 20|22 ib. PINSRQ shares opcode 22 with
+    /// PINSRD and is distinguished by REX.W.
+    enum SSEInsertLaneKind: String, Equatable, CaseIterable {
+        case pinsrb         // 66 0F 3A 20 — r32/m8  → byte lane
+        case pinsrw         // 66 0F C4    — r32/m16 → word lane
+        case pinsrd         // 66 0F 3A 22 — r/m32   → dword lane
+        case pinsrq         // 66 REX.W 0F 3A 22 — r/m64 → qword lane
+
+        /// Width of the GPR source. PINSRB/PINSRW take r32 (low bits
+        /// used); PINSRD/PINSRQ take the natural width.
+        var gprWidth: RegisterWidth {
+            switch self {
+            case .pinsrb, .pinsrw, .pinsrd: return .dword
+            case .pinsrq:                   return .qword
+            }
+        }
+
+        /// Width of the memory operand.
+        var memoryWidth: RegisterWidth {
+            switch self {
+            case .pinsrb: return .byte
+            case .pinsrw: return .word
+            case .pinsrd: return .dword
+            case .pinsrq: return .qword
+            }
+        }
+    }
+
+    /// PEXTR family. PEXTRW is encoded here using the SSE4.1 form
+    /// (66 0F 3A 15 /r ib) which accepts either a register or memory
+    /// destination; the SSE2 register-only form (66 0F C5) is not
+    /// emitted, but the decoder accepts it.
+    enum SSEExtractLaneKind: String, Equatable, CaseIterable {
+        case pextrb         // 66 0F 3A 14 — byte  lane → r32/m8
+        case pextrw         // 66 0F 3A 15 — word  lane → r32/m16 (SSE4.1 form)
+        case pextrd         // 66 0F 3A 16 — dword lane → r/m32
+        case pextrq         // 66 REX.W 0F 3A 16 — qword lane → r/m64
+
+        var gprWidth: RegisterWidth {
+            switch self {
+            case .pextrb, .pextrw, .pextrd: return .dword
+            case .pextrq:                   return .qword
+            }
+        }
+
+        var memoryWidth: RegisterWidth {
+            switch self {
+            case .pextrb: return .byte
+            case .pextrw: return .word
+            case .pextrd: return .dword
+            case .pextrq: return .qword
+            }
+        }
+    }
+
+    /// BLENDV* — implicit XMM0 mask. The two-operand mnemonic in
+    /// the source still expects three operands at the assembler level
+    /// (the third must be `xmm0`); the encoding doesn't carry it.
+    enum SSEBlendvKind: String, Equatable, CaseIterable {
+        case blendvps       // 66 0F 38 14
+        case blendvpd       // 66 0F 38 15
+        case pblendvb       // 66 0F 38 10
+
+        var opcode3: UInt8 {
+            switch self {
+            case .blendvps: return 0x14
+            case .blendvpd: return 0x15
+            case .pblendvb: return 0x10
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> SSEBlendvKind? {
             allCases.first { $0.opcode3 == opcode3 }
         }
     }
