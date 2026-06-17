@@ -283,6 +283,10 @@ internal enum X86InstructionDecoder {
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
             return try decodeMovDQ(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x70:
+            return try decodeSSEShuffle(opcode2: 0x70, prefixes: prefixes, cursor: &cursor)
+        case 0xC6:
+            return try decodeSSEShuffle(opcode2: 0xC6, prefixes: prefixes, cursor: &cursor)
         case 0x71, 0x72, 0x73:
             return try decodeSSEImmediateShift(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
@@ -384,6 +388,32 @@ internal enum X86InstructionDecoder {
         let target = X86.XMMRegister(number: regNum)
         let imm = try cursor.takeByte()
         return Decoded(instruction: .sseShiftImmediate(kind, target: target, immediate: imm), length: cursor.consumed)
+    }
+
+    // MARK: - SSE/SSE2 imm8 shuffles
+
+    private static func decodeSSEShuffle(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8?
+        if prefixes.operandSize       { mandatoryPrefix = 0x66 }
+        else if prefixes.f2Prefix     { mandatoryPrefix = 0xF2 }
+        else if prefixes.f3Prefix     { mandatoryPrefix = 0xF3 }
+        else                          { mandatoryPrefix = nil }
+        guard let kind = X86.SSEShuffleKind.decode(mandatoryPrefix: mandatoryPrefix, opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .sseShuffle(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
     }
 
     // MARK: - SSE2 packed integer ops

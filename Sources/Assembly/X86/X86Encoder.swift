@@ -153,6 +153,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSEPackedInteger(kind, destination: dst, source: src), patches: [])
         case .sseShiftImmediate(let kind, let target, let imm):
             return Encoded(bytes: encodeSSEImmediateShift(kind, target: target, immediate: imm), patches: [])
+        case .sseShuffle(let kind, let dst, let src, let imm):
+            return Encoded(bytes: try encodeSSEShuffle(kind, destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1029,6 +1031,35 @@ internal enum X86InstructionEncoder {
             bytes.append(kind.opcode2)
             bytes.append(contentsOf: addressing)
         }
+        return bytes
+    }
+
+    // MARK: - SSE shuffles (imm8)
+
+    /// `[prefix] 0F 70/C6 /r ib` — three-operand shuffle with imm8.
+    private static func encodeSSEShuffle(_ kind: X86.SSEShuffleKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix {
+            bytes.append(prefix)
+        }
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
         return bytes
     }
 

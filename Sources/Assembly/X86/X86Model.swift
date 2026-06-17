@@ -716,6 +716,12 @@ internal enum X86 {
         /// different: `66 0F 71-73 /n ib`, with the group opcode
         /// selecting the lane width and `/n` selecting the operation.
         case sseShiftImmediate(SSEImmediateShiftKind, target: XMMRegister, immediate: UInt8)
+        /// SSE/SSE2 imm8-controlled lane shuffles. Operand shape is
+        /// `xmm, xmm/m128, imm8`; the kind picks the mandatory prefix
+        /// and second opcode byte. PSHUFD/PSHUFLW/PSHUFHW ride `0F 70`
+        /// (with `66`/`F2`/`F3`); SHUFPS/SHUFPD ride `0F C6` (no prefix
+        /// or `66`).
+        case sseShuffle(SSEShuffleKind, destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -749,6 +755,40 @@ internal enum X86 {
 
         static func decode(opcode2: UInt8, slashDigit: UInt8) -> SSEImmediateShiftKind? {
             allCases.first { $0.opcode2 == opcode2 && $0.slashDigit == slashDigit }
+        }
+    }
+
+    /// SSE/SSE2 imm8-controlled lane shuffles. All ride a two-byte
+    /// opcode after the mandatory prefix; the immediate selects the
+    /// source lane for each destination lane.
+    enum SSEShuffleKind: String, Equatable, CaseIterable {
+        case pshufd         // 66 0F 70 /r ib — shuffle 4 dwords
+        case pshuflw        // F2 0F 70 /r ib — shuffle low 4 words
+        case pshufhw        // F3 0F 70 /r ib — shuffle high 4 words
+        case shufps         //    0F C6 /r ib — interleave 2 dst + 2 src singles
+        case shufpd         // 66 0F C6 /r ib — pick one of 2 doubles per lane
+
+        /// Mandatory prefix preceding `0F`. Returns nil when there is
+        /// none (only SHUFPS).
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .pshufd, .shufpd: return 0x66
+            case .pshuflw:         return 0xF2
+            case .pshufhw:         return 0xF3
+            case .shufps:          return nil
+            }
+        }
+
+        /// The byte that follows `0F`.
+        var opcode2: UInt8 {
+            switch self {
+            case .pshufd, .pshuflw, .pshufhw: return 0x70
+            case .shufps, .shufpd:            return 0xC6
+            }
+        }
+
+        static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSEShuffleKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
         }
     }
 

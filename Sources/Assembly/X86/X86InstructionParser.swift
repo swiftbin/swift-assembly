@@ -39,6 +39,9 @@ internal enum X86Parser {
         if let kind = X86.MovDQKind(rawValue: instruction.mnemonic) {
             return try parseMovDQ(kind, instruction)
         }
+        if let kind = X86.SSEShuffleKind(rawValue: instruction.mnemonic) {
+            return try parseSSEShuffle(kind, instruction)
+        }
         if instruction.mnemonic == "pslldq" || instruction.mnemonic == "psrldq" {
             // These only have an imm8 form — no variable shift partner
             // in SSEPackedIntegerKind.
@@ -942,6 +945,30 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShiftImmediate(kind, target: target, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// PSHUFD/PSHUFLW/PSHUFHW/SHUFPS/SHUFPD — `xmm, xmm/m128, imm8`.
+    private static func parseSSEShuffle(_ kind: X86.SSEShuffleKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: .xmmword,
+            mnemonic: kind.rawValue
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// `MOVD` / `MOVQ` between an XMM register and a GPR or memory
