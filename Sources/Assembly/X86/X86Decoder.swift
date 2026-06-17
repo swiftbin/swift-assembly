@@ -530,11 +530,16 @@ internal enum X86InstructionDecoder {
     // MARK: - 0F 38 / 0F 3A three-byte escapes (SSSE3+)
 
     private static func decodeThreeByte0F38(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let opcode3 = try cursor.takeByte()
+        // CRC32 — F2 prefix routes to the SSE4.2 byte/word/dword/qword
+        // accumulate form, regardless of operand-size prefix.
+        if prefixes.f2Prefix && (opcode3 == 0xF0 || opcode3 == 0xF1) {
+            return try decodeCrc32(opcode3: opcode3, prefixes: prefixes, cursor: &cursor)
+        }
         guard prefixes.operandSize else {
             // MMX forms of these opcodes aren't modelled.
             throw AssemblerError.unknownEncoding(0x38)
         }
-        let opcode3 = try cursor.takeByte()
         let modrm = try cursor.takeByte()
         let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let dst = X86.XMMRegister(number: regNum)
@@ -604,6 +609,32 @@ internal enum X86InstructionDecoder {
             return Decoded(instruction: .sse41Imm(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
         }
         throw AssemblerError.unknownEncoding(UInt32(opcode3))
+    }
+
+    private static func decodeCrc32(opcode3: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let sourceWidth: X86.RegisterWidth
+        let destWidth: X86.RegisterWidth
+        if opcode3 == 0xF0 {
+            sourceWidth = .byte
+            destWidth = prefixes.rexW == 1 ? .qword : .dword
+        } else {
+            // F1: word (with 66), qword (with REX.W), else dword.
+            if prefixes.operandSize { sourceWidth = .word; destWidth = .dword }
+            else if prefixes.rexW == 1 { sourceWidth = .qword; destWidth = .qword }
+            else { sourceWidth = .dword; destWidth = .dword }
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let destination = makeRegister(number: regNum, width: destWidth, hasREX: prefixes.hasREX)
+        let source: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(makeRegister(number: rmNum, width: sourceWidth, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem, width: sourceWidth)
+        }
+        return Decoded(instruction: .crc32(destination: destination, source: source), length: cursor.consumed)
     }
 
     private static func decodeSSEInsertLane(opcode3: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {

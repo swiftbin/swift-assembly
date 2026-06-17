@@ -195,6 +195,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeExtractps(destination: dst, source: src, immediate: imm), patches: [])
         case .sseBlendv(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEBlendv(kind, destination: dst, source: src), patches: [])
+        case .crc32(let dst, let src):
+            return Encoded(bytes: try encodeCrc32(destination: dst, source: src), patches: [])
         }
     }
 
@@ -1634,6 +1636,63 @@ internal enum X86InstructionEncoder {
             bytes.append(0x0F)
             bytes.append(0x38)
             bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    // MARK: - CRC32
+
+    /// `F2 [66] [REX] 0F 38 F0|F1 /r`. The source operand width picks
+    /// the encoding: byte → F0; word/dword/qword → F1 (with 0x66 for
+    /// word, REX.W for qword). The destination is r32 unless the
+    /// source is qword (where it's r64).
+    private static func encodeCrc32(destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        let sourceWidth: X86.RegisterWidth
+        switch source {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: "crc32")
+            sourceWidth = r.width
+        case .memory(_, let width):
+            sourceWidth = width
+        }
+        // Destination must be r32 for byte/word/dword sources and r64
+        // only for qword sources.
+        switch sourceWidth {
+        case .byte, .word, .dword:
+            guard dst.width == .dword else {
+                throw AssemblerError.unsupportedOperand("crc32: destination must be r32 when the source is byte/word/dword")
+            }
+        case .qword:
+            guard dst.width == .qword else {
+                throw AssemblerError.unsupportedOperand("crc32: destination must be r64 when the source is qword")
+            }
+        default:
+            throw AssemblerError.unsupportedOperand("crc32: source must be byte/word/dword/qword")
+        }
+        var bytes: [UInt8] = [0xF2]
+        if sourceWidth == .word {
+            bytes.append(0x66)
+        }
+        let rexW: UInt8 = sourceWidth == .qword ? 1 : 0
+        let opcode3: UInt8 = sourceWidth == .byte ? 0xF0 : 0xF1
+        switch source {
+        case .register(let r):
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, b: r.highBit, forceEmit: needsForcedREX([r])) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: r.lowBits))
+        case .memory(let mem, _):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(w: rexW, r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(opcode3)
             bytes.append(contentsOf: addressing)
         }
         return bytes

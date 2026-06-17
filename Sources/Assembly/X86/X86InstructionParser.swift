@@ -99,6 +99,9 @@ internal enum X86Parser {
         if let kind = X86.SSEBlendvKind(rawValue: instruction.mnemonic) {
             return try parseSSEBlendv(kind, instruction)
         }
+        if instruction.mnemonic == "crc32" {
+            return try parseCrc32(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1032,6 +1035,39 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// CRC32 — `r32_or_r64, r/m{8|16|32|64}`. The destination width is
+    /// dictated by the source: r32 for byte/word/dword sources, r64
+    /// for qword sources.
+    private static func parseCrc32(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "crc32",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try register(instruction.operands[0])
+        guard destination.width == .dword || destination.width == .qword else {
+            throw AssemblerError.unsupportedOperand("crc32: destination must be a 32- or 64-bit GPR")
+        }
+        let source = try parseCrc32Source(instruction.operands[1])
+        return .crc32(destination: destination, source: source)
+    }
+
+    private static func parseCrc32Source(_ text: String) throws -> X86.RegisterOrMemory {
+        if let reg = try? register(text) {
+            return .register(reg)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, body) = stripSizeHint(trimmed) {
+            return .memory(try memoryOperand(body), width: width)
+        }
+        if trimmed.hasPrefix("[") {
+            throw AssemblerError.unsupportedOperand("crc32: memory source requires an explicit size hint")
+        }
+        throw AssemblerError.unsupportedOperand("crc32: unrecognized source")
     }
 
     /// PINSR{B,W,D,Q} — `xmm, r/m, imm8`.

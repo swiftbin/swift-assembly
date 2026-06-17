@@ -3515,4 +3515,50 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 16e SSE4.2
+
+    private static let sse42Cases: [(String, [UInt8])] = [
+        // PCMPESTRI/M, PCMPISTRI/M
+        ("pcmpestrm xmm0, xmm1, 12",                    [0x66, 0x0F, 0x3A, 0x60, 0xC1, 0x0C]),
+        ("pcmpestri xmm0, xmm1, 13",                    [0x66, 0x0F, 0x3A, 0x61, 0xC1, 0x0D]),
+        ("pcmpistrm xmm0, xmm1, 14",                    [0x66, 0x0F, 0x3A, 0x62, 0xC1, 0x0E]),
+        ("pcmpistri xmm0, xmm1, 15",                    [0x66, 0x0F, 0x3A, 0x63, 0xC1, 0x0F]),
+        // PCMPGTQ
+        ("pcmpgtq xmm0, xmm1",                          [0x66, 0x0F, 0x38, 0x37, 0xC1]),
+        // CRC32 widths
+        ("crc32 eax, bl",                               [0xF2, 0x0F, 0x38, 0xF0, 0xC3]),
+        ("crc32 eax, byte ptr [rdi]",                   [0xF2, 0x0F, 0x38, 0xF0, 0x07]),
+        ("crc32 eax, cx",                               [0xF2, 0x66, 0x0F, 0x38, 0xF1, 0xC1]),
+        ("crc32 eax, word ptr [rdi]",                   [0xF2, 0x66, 0x0F, 0x38, 0xF1, 0x07]),
+        ("crc32 eax, ecx",                              [0xF2, 0x0F, 0x38, 0xF1, 0xC1]),
+        ("crc32 rax, rcx",                              [0xF2, 0x48, 0x0F, 0x38, 0xF1, 0xC1]),
+        ("crc32 rax, qword ptr [rdi]",                  [0xF2, 0x48, 0x0F, 0x38, 0xF1, 0x07]),
+        // Extended GPR / XMM
+        ("crc32 r15d, eax",                             [0xF2, 0x44, 0x0F, 0x38, 0xF1, 0xF8]),
+    ]
+
+    func testSSE42Assembles() throws {
+        for (source, expected) in Self.sse42Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSE42Disassembles() throws {
+        for (source, bytes) in Self.sse42Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testCrc32WidthMismatchRejected() {
+        XCTAssertThrowsError(try X86Assembler.assemble("crc32 rax, eax")) { _ in }
+    }
+
+    func testSSE42StreamRoundTrip() throws {
+        let source = Self.sse42Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.sse42Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

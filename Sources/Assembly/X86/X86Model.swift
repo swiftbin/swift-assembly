@@ -796,6 +796,11 @@ internal enum X86 {
         /// BLENDVPS / BLENDVPD / PBLENDVB — blend two XMM operands
         /// using the implicit XMM0 mask register.
         case sseBlendv(SSEBlendvKind, destination: XMMRegister, source: XMMOrMemory)
+        /// SSE4.2 CRC32 — accumulate a CRC32 (polynomial 11EDC6F41h) on
+        /// a byte/word/dword/qword source into a 32- or 64-bit GPR.
+        /// Encoded as `F2 [66] [REX] 0F 38 F0|F1 /r`: F0 with a byte
+        /// source, F1 otherwise; 0x66 narrows the source to word.
+        case crc32(destination: Register, source: RegisterOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1206,6 +1211,7 @@ internal enum X86 {
         case pmaxud         // 66 0F 38 3F
         case pmulld         // 66 0F 38 40 — packed mul low dword
         case phminposuw     // 66 0F 38 41 — packed horizontal min unsigned word
+        case pcmpgtq        // 66 0F 38 37 — SSE4.2 packed compare gt qword
 
         var opcode3: UInt8 {
             switch self {
@@ -1213,6 +1219,7 @@ internal enum X86 {
             case .pmuldq:      return 0x28
             case .pcmpeqq:     return 0x29
             case .packusdw:    return 0x2B
+            case .pcmpgtq:     return 0x37
             case .pminsb:      return 0x38
             case .pminsd:      return 0x39
             case .pminuw:      return 0x3A
@@ -1244,6 +1251,11 @@ internal enum X86 {
         case dpps           // 66 0F 3A 40 — dot product singles
         case dppd           // 66 0F 3A 41 — dot product doubles
         case mpsadbw        // 66 0F 3A 42 — multiple packed SAD bytes
+        // SSE4.2 string comparison family — same shape, distinct opcodes.
+        case pcmpestrm      // 66 0F 3A 60 — explicit length, mask result
+        case pcmpestri      // 66 0F 3A 61 — explicit length, index result
+        case pcmpistrm      // 66 0F 3A 62 — implicit length, mask result
+        case pcmpistri      // 66 0F 3A 63 — implicit length, index result
 
         var opcode3: UInt8 {
             switch self {
@@ -1257,6 +1269,10 @@ internal enum X86 {
             case .dpps:    return 0x40
             case .dppd:    return 0x41
             case .mpsadbw: return 0x42
+            case .pcmpestrm: return 0x60
+            case .pcmpestri: return 0x61
+            case .pcmpistrm: return 0x62
+            case .pcmpistri: return 0x63
             }
         }
 

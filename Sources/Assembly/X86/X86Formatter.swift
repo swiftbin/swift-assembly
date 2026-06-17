@@ -189,6 +189,13 @@ internal enum X86InstructionFormatter {
             return "extractps \(dstStr), xmm\(src.number), \(imm)"
         case .sseBlendv(let kind, let dst, let src):
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: .xmmword)), xmm0"
+        case .crc32(let dst, let src):
+            let srcStr: String
+            switch src {
+            case .register(let r): srcStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w): srcStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "crc32 \(X86.RegisterTable.canonicalName(for: dst)), \(srcStr)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
