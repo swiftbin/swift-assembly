@@ -283,6 +283,8 @@ internal enum X86InstructionDecoder {
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
             return try decodeMovDQ(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x71, 0x72, 0x73:
+            return try decodeSSEImmediateShift(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x60, 0x61, 0x62, 0x63, 0x64, 0x65, 0x66, 0x67,
              0x68, 0x69, 0x6A, 0x6B, 0x6C, 0x6D,
              0x74, 0x75, 0x76,
@@ -361,6 +363,27 @@ internal enum X86InstructionDecoder {
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode2))
         }
+    }
+
+    // MARK: - SSE2 imm8 SIMD shifts
+
+    private static func decodeSSEImmediateShift(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard prefixes.operandSize else {
+            // Without 0x66 these are MMX (deferred).
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.SSEImmediateShiftKind.decode(opcode2: opcode2, slashDigit: nField) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let regNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+        let target = X86.XMMRegister(number: regNum)
+        let imm = try cursor.takeByte()
+        return Decoded(instruction: .sseShiftImmediate(kind, target: target, immediate: imm), length: cursor.consumed)
     }
 
     // MARK: - SSE2 packed integer ops

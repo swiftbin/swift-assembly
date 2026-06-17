@@ -39,6 +39,12 @@ internal enum X86Parser {
         if let kind = X86.MovDQKind(rawValue: instruction.mnemonic) {
             return try parseMovDQ(kind, instruction)
         }
+        if instruction.mnemonic == "pslldq" || instruction.mnemonic == "psrldq" {
+            // These only have an imm8 form — no variable shift partner
+            // in SSEPackedIntegerKind.
+            let kind = X86.SSEImmediateShiftKind(rawValue: instruction.mnemonic)!
+            return try parseSSEImmediateShift(kind, instruction)
+        }
         if let kind = X86.SSEPackedIntegerKind(rawValue: instruction.mnemonic) {
             return try parseSSEPackedInteger(kind, instruction)
         }
@@ -898,6 +904,13 @@ internal enum X86Parser {
                 actual: instruction.operands.count
             )
         }
+        // The shift mnemonics overlap between the variable form and the
+        // imm8 form. If the second operand is an immediate and this
+        // kind has an imm8 partner, route there instead.
+        if let immKind = X86.SSEImmediateShiftKind(rawValue: kind.rawValue),
+           let immValue = try? immediateAny(instruction.operands[1]) {
+            return try makeImmediateShift(kind: immKind, register: instruction.operands[0], imm: immValue)
+        }
         guard let destination = parseXMMRegister(instruction.operands[0]) else {
             throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
         }
@@ -907,6 +920,28 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .ssePackedInteger(kind, destination: destination, source: source)
+    }
+
+    private static func parseSSEImmediateShift(_ kind: X86.SSEImmediateShiftKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let imm = try immediateAny(instruction.operands[1])
+        return try makeImmediateShift(kind: kind, register: instruction.operands[0], imm: imm)
+    }
+
+    private static func makeImmediateShift(kind: X86.SSEImmediateShiftKind, register text: String, imm: Int64) throws -> X86.Instruction {
+        guard let target = parseXMMRegister(text) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): target must be an XMM register")
+        }
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .sseShiftImmediate(kind, target: target, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// `MOVD` / `MOVQ` between an XMM register and a GPR or memory

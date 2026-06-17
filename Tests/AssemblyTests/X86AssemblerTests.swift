@@ -2901,4 +2901,55 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14l imm8 SIMD shifts
+
+    private static let sseImmediateShiftCases: [(String, [UInt8])] = [
+        // PSRL imm (word/dword/qword)
+        ("psrlw xmm0, 1",                   [0x66, 0x0F, 0x71, 0xD0, 0x01]),
+        ("psrld xmm0, 4",                   [0x66, 0x0F, 0x72, 0xD0, 0x04]),
+        ("psrlq xmm0, 7",                   [0x66, 0x0F, 0x73, 0xD0, 0x07]),
+        // PSLL imm
+        ("psllw xmm0, 1",                   [0x66, 0x0F, 0x71, 0xF0, 0x01]),
+        ("pslld xmm0, 4",                   [0x66, 0x0F, 0x72, 0xF0, 0x04]),
+        ("psllq xmm0, 7",                   [0x66, 0x0F, 0x73, 0xF0, 0x07]),
+        // Arithmetic right shift (no qword form exists)
+        ("psraw xmm0, 1",                   [0x66, 0x0F, 0x71, 0xE0, 0x01]),
+        ("psrad xmm0, 31",                  [0x66, 0x0F, 0x72, 0xE0, 0x1F]),
+        // 128-bit byte shifts
+        ("pslldq xmm0, 4",                  [0x66, 0x0F, 0x73, 0xF8, 0x04]),
+        ("psrldq xmm0, 8",                  [0x66, 0x0F, 0x73, 0xD8, 0x08]),
+        // Extended XMM
+        ("psllq xmm15, 1",                  [0x66, 0x41, 0x0F, 0x73, 0xF7, 0x01]),
+        ("pslldq xmm8, 12",                 [0x66, 0x41, 0x0F, 0x73, 0xF8, 0x0C]),
+    ]
+
+    func testSSEImmediateShiftAssembles() throws {
+        for (source, expected) in Self.sseImmediateShiftCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEImmediateShiftDisassembles() throws {
+        for (source, bytes) in Self.sseImmediateShiftCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// The shift mnemonics overlap variable and imm8 forms; the parser
+    /// dispatches on the second operand's type.
+    func testSSEShiftMnemonicDisambiguation() throws {
+        // Variable form: xmm source
+        XCTAssertEqual(try X86Assembler.assemble("psllw xmm0, xmm1"), [0x66, 0x0F, 0xF1, 0xC1])
+        // imm8 form
+        XCTAssertEqual(try X86Assembler.assemble("psllw xmm0, 4"),    [0x66, 0x0F, 0x71, 0xF0, 0x04])
+    }
+
+    func testSSEImmediateShiftStreamRoundTrip() throws {
+        let source = Self.sseImmediateShiftCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseImmediateShiftCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

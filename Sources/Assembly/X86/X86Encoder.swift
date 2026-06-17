@@ -151,6 +151,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMovDQ(kind, direction: direction, xmm: xmm, gpr: gpr), patches: [])
         case .ssePackedInteger(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEPackedInteger(kind, destination: dst, source: src), patches: [])
+        case .sseShiftImmediate(let kind, let target, let imm):
+            return Encoded(bytes: encodeSSEImmediateShift(kind, target: target, immediate: imm), patches: [])
         }
     }
 
@@ -982,6 +984,24 @@ internal enum X86InstructionEncoder {
             bytes.append(kind.opcode2)
             bytes.append(contentsOf: addressing)
         }
+        return bytes
+    }
+
+    // MARK: - SSE2 imm8 SIMD shifts
+
+    /// `66 [REX] 0F 71/72/73 /n ib` with `mod == 11` — the shift count
+    /// is the imm8 byte and the target is the XMM register named by
+    /// `r/m` (REX.B extends it). REX.R is unused because the `reg`
+    /// field is a slash-digit selector.
+    private static func encodeSSEImmediateShift(_ kind: X86.SSEImmediateShiftKind, target: X86.XMMRegister, immediate: UInt8) -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        if let rex = X86.REX.build(b: target.highBit) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(kind.opcode2)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: kind.slashDigit, rm: target.lowBits))
+        bytes.append(immediate)
         return bytes
     }
 

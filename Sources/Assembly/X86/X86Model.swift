@@ -711,6 +711,45 @@ internal enum X86 {
         /// Operand shape is `xmm, xmm/m128`; all ride `66 0F xx /r`
         /// with the opcode picking the operation.
         case ssePackedInteger(SSEPackedIntegerKind, destination: XMMRegister, source: XMMOrMemory)
+        /// SSE2 imm8-controlled shifts. The mnemonic overlaps with the
+        /// variable-shift forms (PSLLW/PSRLW/...) but the encoding is
+        /// different: `66 0F 71-73 /n ib`, with the group opcode
+        /// selecting the lane width and `/n` selecting the operation.
+        case sseShiftImmediate(SSEImmediateShiftKind, target: XMMRegister, immediate: UInt8)
+    }
+
+    enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
+        // Word / dword / qword logical shifts
+        case psrlw, psrld, psrlq
+        case psllw, pslld, psllq
+        // Word / dword arithmetic shifts (no PSRAQ)
+        case psraw, psrad
+        // Byte-shift the entire 128-bit register
+        case psrldq, pslldq
+
+        /// `66 0F 71/72/73 /n ib` — the opcode picks the element width.
+        var opcode2: UInt8 {
+            switch self {
+            case .psrlw, .psraw, .psllw:                     return 0x71  // word lanes
+            case .psrld, .psrad, .pslld:                     return 0x72  // dword lanes
+            case .psrlq, .psllq, .psrldq, .pslldq:           return 0x73  // qword + 128-bit byte-shift
+            }
+        }
+
+        /// `/n` slash-digit in ModR/M.reg.
+        var slashDigit: UInt8 {
+            switch self {
+            case .psrlw, .psrld, .psrlq: return 2
+            case .psrldq:                return 3
+            case .psraw, .psrad:         return 4
+            case .psllw, .pslld, .psllq: return 6
+            case .pslldq:                return 7
+            }
+        }
+
+        static func decode(opcode2: UInt8, slashDigit: UInt8) -> SSEImmediateShiftKind? {
+            allCases.first { $0.opcode2 == opcode2 && $0.slashDigit == slashDigit }
+        }
     }
 
     /// SSE2 packed integer operations on 128-bit XMM operands.
