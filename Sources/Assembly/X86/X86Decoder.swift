@@ -277,6 +277,10 @@ internal enum X86InstructionDecoder {
             return try decodeOpcode0F00(prefixes: prefixes, cursor: &cursor)
         case 0x01:
             return try decodeOpcode0F01(prefixes: prefixes, cursor: &cursor)
+        case 0x38:
+            return try decodeThreeByte0F38(prefixes: prefixes, cursor: &cursor)
+        case 0x3A:
+            return try decodeThreeByte0F3A(prefixes: prefixes, cursor: &cursor)
         case 0x02, 0x03:
             return try decodeLarLsl(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x10, 0x11, 0x28, 0x29, 0x6F, 0x7F:
@@ -517,6 +521,56 @@ internal enum X86InstructionDecoder {
         let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
         return Decoded(instruction: .maskMovDqu(source: X86.XMMRegister(number: regNum), mask: X86.XMMRegister(number: rmNum)), length: cursor.consumed)
+    }
+
+    // MARK: - 0F 38 / 0F 3A three-byte escapes (SSSE3+)
+
+    private static func decodeThreeByte0F38(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard prefixes.operandSize else {
+            // MMX forms of these opcodes aren't modelled.
+            throw AssemblerError.unknownEncoding(0x38)
+        }
+        let opcode3 = try cursor.takeByte()
+        guard let kind = X86.SSSE3Kind.decode(opcode3: opcode3) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode3))
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        return Decoded(instruction: .ssse3(kind, destination: dst, source: source), length: cursor.consumed)
+    }
+
+    private static func decodeThreeByte0F3A(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard prefixes.operandSize else {
+            throw AssemblerError.unknownEncoding(0x3A)
+        }
+        let opcode3 = try cursor.takeByte()
+        switch opcode3 {
+        case 0x0F:
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = X86.XMMRegister(number: regNum)
+            let source: X86.XMMOrMemory
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                source = .register(X86.XMMRegister(number: rmNum))
+            } else {
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                source = .memory(mem)
+            }
+            let imm = try cursor.takeByte()
+            return Decoded(instruction: .palignr(destination: dst, source: source, immediate: imm), length: cursor.consumed)
+        default:
+            throw AssemblerError.unknownEncoding(UInt32(opcode3))
+        }
     }
 
     // MARK: - SSE3

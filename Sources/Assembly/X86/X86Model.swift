@@ -760,6 +760,14 @@ internal enum X86 {
         /// `xmm, xmm/m128` (or `xmm/m64` for MOVDDUP). The mandatory
         /// prefix (66/F2/F3) and opcode2 together pick the operation.
         case sse3(SSE3Kind, destination: XMMRegister, source: XMMOrMemory)
+        /// SSSE3 `xmm, xmm/m128` operations. All ride `66 0F 38 xx /r`
+        /// with the opcode picking the operation. PALIGNR has its own
+        /// case because it adds an imm8 lane shift.
+        case ssse3(SSSE3Kind, destination: XMMRegister, source: XMMOrMemory)
+        /// PALIGNR — `66 0F 3A 0F /r ib`. Concatenates the destination
+        /// and source and shifts the result right by the imm8 byte
+        /// count, taking the low 16 bytes as the new destination.
+        case palignr(destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1049,6 +1057,54 @@ internal enum X86 {
 
         static func decode(mandatoryPrefix: UInt8, opcode2: UInt8) -> SSE3Kind? {
             allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
+    }
+
+    /// SSSE3 `xmm, xmm/m128` instructions. All ride `66 0F 38 xx /r`.
+    enum SSSE3Kind: String, Equatable, CaseIterable {
+        // Byte-shuffle controlled by a byte mask in the source
+        case pshufb         // 66 0F 38 00 — shuffle bytes
+        // Horizontal add/sub
+        case phaddw         // 66 0F 38 01
+        case phaddd         // 66 0F 38 02
+        case phaddsw        // 66 0F 38 03 — saturating
+        case pmaddubsw      // 66 0F 38 04 — unsigned×signed, saturating
+        case phsubw         // 66 0F 38 05
+        case phsubd         // 66 0F 38 06
+        case phsubsw        // 66 0F 38 07
+        // Conditional sign-flip
+        case psignb         // 66 0F 38 08
+        case psignw         // 66 0F 38 09
+        case psignd         // 66 0F 38 0A
+        // Multiply high with rounding and scaling
+        case pmulhrsw       // 66 0F 38 0B
+        // Absolute value
+        case pabsb          // 66 0F 38 1C
+        case pabsw          // 66 0F 38 1D
+        case pabsd          // 66 0F 38 1E
+
+        var opcode3: UInt8 {
+            switch self {
+            case .pshufb:     return 0x00
+            case .phaddw:     return 0x01
+            case .phaddd:     return 0x02
+            case .phaddsw:    return 0x03
+            case .pmaddubsw:  return 0x04
+            case .phsubw:     return 0x05
+            case .phsubd:     return 0x06
+            case .phsubsw:    return 0x07
+            case .psignb:     return 0x08
+            case .psignw:     return 0x09
+            case .psignd:     return 0x0A
+            case .pmulhrsw:   return 0x0B
+            case .pabsb:      return 0x1C
+            case .pabsw:      return 0x1D
+            case .pabsd:      return 0x1E
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> SSSE3Kind? {
+            allCases.first { $0.opcode3 == opcode3 }
         }
     }
 

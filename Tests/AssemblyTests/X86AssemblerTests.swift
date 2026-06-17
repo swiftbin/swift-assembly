@@ -3258,4 +3258,57 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 15 SSSE3
+
+    private static let ssse3Cases: [(String, [UInt8])] = [
+        // Byte shuffle
+        ("pshufb xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x00, 0xC1]),
+        // Horizontal add / sub family
+        ("phaddw xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x01, 0xC1]),
+        ("phaddd xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x02, 0xC1]),
+        ("phaddsw xmm0, xmm1",                      [0x66, 0x0F, 0x38, 0x03, 0xC1]),
+        ("pmaddubsw xmm0, xmm1",                    [0x66, 0x0F, 0x38, 0x04, 0xC1]),
+        ("phsubw xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x05, 0xC1]),
+        ("phsubd xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x06, 0xC1]),
+        ("phsubsw xmm0, xmm1",                      [0x66, 0x0F, 0x38, 0x07, 0xC1]),
+        // Sign-controlled negate
+        ("psignb xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x08, 0xC1]),
+        ("psignw xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x09, 0xC1]),
+        ("psignd xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x0A, 0xC1]),
+        // Multiply high with rounding
+        ("pmulhrsw xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x0B, 0xC1]),
+        // Absolute value
+        ("pabsb xmm0, xmm1",                        [0x66, 0x0F, 0x38, 0x1C, 0xC1]),
+        ("pabsw xmm0, xmm1",                        [0x66, 0x0F, 0x38, 0x1D, 0xC1]),
+        ("pabsd xmm0, xmm1",                        [0x66, 0x0F, 0x38, 0x1E, 0xC1]),
+        // PALIGNR (0F 3A)
+        ("palignr xmm0, xmm1, 3",                   [0x66, 0x0F, 0x3A, 0x0F, 0xC1, 0x03]),
+        // Extended XMM
+        ("pshufb xmm15, xmm0",                      [0x66, 0x44, 0x0F, 0x38, 0x00, 0xF8]),
+        ("pabsd xmm0, xmm15",                       [0x66, 0x41, 0x0F, 0x38, 0x1E, 0xC7]),
+        // Memory source
+        ("pshufb xmm0, xmmword ptr [rdi]",          [0x66, 0x0F, 0x38, 0x00, 0x07]),
+        ("palignr xmm0, xmmword ptr [rsi], 7",      [0x66, 0x0F, 0x3A, 0x0F, 0x06, 0x07]),
+    ]
+
+    func testSSSE3Assembles() throws {
+        for (source, expected) in Self.ssse3Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSSE3Disassembles() throws {
+        for (source, bytes) in Self.ssse3Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSSE3StreamRoundTrip() throws {
+        let source = Self.ssse3Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.ssse3Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

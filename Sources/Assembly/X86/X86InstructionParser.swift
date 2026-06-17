@@ -66,6 +66,12 @@ internal enum X86Parser {
         if let kind = X86.SSE3Kind(rawValue: instruction.mnemonic) {
             return try parseSSE3(kind, instruction)
         }
+        if let kind = X86.SSSE3Kind(rawValue: instruction.mnemonic) {
+            return try parseSSSE3(kind, instruction)
+        }
+        if instruction.mnemonic == "palignr" {
+            return try parsePalignr(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -999,6 +1005,50 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// SSSE3 `xmm, xmm/m128`.
+    private static func parseSSSE3(_ kind: X86.SSSE3Kind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: .xmmword,
+            mnemonic: kind.rawValue
+        )
+        return .ssse3(kind, destination: destination, source: source)
+    }
+
+    /// PALIGNR — `xmm, xmm/m128, imm8`.
+    private static func parsePalignr(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "palignr",
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("palignr: destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: .xmmword,
+            mnemonic: "palignr"
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "palignr", value: imm, range: 0...255)
+        }
+        return .palignr(destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// SSE3 `xmm, xmm/m128` (MOVDDUP uses m64).

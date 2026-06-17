@@ -173,6 +173,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodePrefetch(kind, memory: memory), patches: [])
         case .sse3(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSE3(kind, destination: dst, source: src), patches: [])
+        case .ssse3(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSSE3(kind, destination: dst, source: src), patches: [])
+        case .palignr(let dst, let src, let imm):
+            return Encoded(bytes: try encodePalignr(destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1292,6 +1296,62 @@ internal enum X86InstructionEncoder {
             bytes.append(kind.opcode2)
             bytes.append(contentsOf: addressing)
         }
+        return bytes
+    }
+
+    // MARK: - SSSE3
+
+    /// `66 0F 38 xx /r` — shape `xmm, xmm/m128`. The third opcode byte
+    /// picks the operation. REX, when present, sits between the 0x66
+    /// prefix and the 0F escape (same ordering as the other SSE2
+    /// integer ops).
+    private static func encodeSSSE3(_ kind: X86.SSSE3Kind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    /// `66 0F 3A 0F /r ib`.
+    private static func encodePalignr(destination dst: X86.XMMRegister, source: X86.XMMOrMemory, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0x0F)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0x0F)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
         return bytes
     }
 
