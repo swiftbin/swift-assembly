@@ -752,6 +752,10 @@ internal enum X86 {
         /// `0F C3 /r` with the destination memory in `rm` and the
         /// source register in `reg`.
         case movnti(memory: MemoryOperand, source: Register)
+        /// PREFETCH hints — single byte-pointer memory operand. All
+        /// SSE-era variants ride `0F 18 /n`; PREFETCHW (3DNow!/PRFCHW
+        /// extension) rides `0F 0D /1`.
+        case prefetch(PrefetchKind, memory: MemoryOperand)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -964,6 +968,38 @@ internal enum X86 {
 
         static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSENonTemporalKind? {
             allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
+    }
+
+    /// PREFETCH hint variants. All take a single byte-pointer memory
+    /// operand. The first four ride `0F 18 /n`; PREFETCHW rides
+    /// `0F 0D /1`.
+    enum PrefetchKind: String, Equatable, CaseIterable {
+        case prefetchnta    // 0F 18 /0
+        case prefetcht0     // 0F 18 /1
+        case prefetcht1     // 0F 18 /2
+        case prefetcht2     // 0F 18 /3
+        case prefetchw      // 0F 0D /1
+
+        var opcode2: UInt8 {
+            switch self {
+            case .prefetchw: return 0x0D
+            default:         return 0x18
+            }
+        }
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .prefetchnta: return 0
+            case .prefetcht0:  return 1
+            case .prefetcht1:  return 2
+            case .prefetcht2:  return 3
+            case .prefetchw:   return 1
+            }
+        }
+
+        static func decode(opcode2: UInt8, slashDigit: UInt8) -> PrefetchKind? {
+            allCases.first { $0.opcode2 == opcode2 && $0.slashDigit == slashDigit }
         }
     }
 

@@ -289,6 +289,8 @@ internal enum X86InstructionDecoder {
             return try decodeMaskMovDqu(prefixes: prefixes, cursor: &cursor)
         case 0x2B, 0xE7:
             return try decodeSSENonTemporalStore(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x18, 0x0D:
+            return try decodePrefetch(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0xC3:
             return try decodeMovnti(prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
@@ -507,6 +509,21 @@ internal enum X86InstructionDecoder {
         let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
         return Decoded(instruction: .maskMovDqu(source: X86.XMMRegister(number: regNum), mask: X86.XMMRegister(number: rmNum)), length: cursor.consumed)
+    }
+
+    // MARK: - PREFETCH
+
+    private static func decodePrefetch(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let nField = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.PrefetchKind.decode(opcode2: opcode2, slashDigit: nField) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+        return Decoded(instruction: .prefetch(kind, memory: memory), length: cursor.consumed)
     }
 
     // MARK: - Non-temporal stores

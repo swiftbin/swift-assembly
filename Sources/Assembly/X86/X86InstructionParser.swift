@@ -60,6 +60,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "movnti" {
             return try parseMovnti(instruction)
         }
+        if let kind = X86.PrefetchKind(rawValue: instruction.mnemonic) {
+            return try parsePrefetch(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -993,6 +996,19 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// PREFETCH* — single byte-pointer memory operand.
+    private static func parsePrefetch(_ kind: X86.PrefetchKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let memory = try parseSizedMemory(instruction.operands[0], expected: .byte, mnemonic: kind.rawValue)
+        return .prefetch(kind, memory: memory)
     }
 
     /// LDMXCSR / STMXCSR — single memory operand (m32).

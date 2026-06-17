@@ -3175,4 +3175,38 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14r PREFETCH family
+
+    private static let prefetchCases: [(String, [UInt8])] = [
+        ("prefetchnta byte ptr [rdi]",          [0x0F, 0x18, 0x07]),
+        ("prefetcht0 byte ptr [rdi]",           [0x0F, 0x18, 0x0F]),
+        ("prefetcht1 byte ptr [rdi]",           [0x0F, 0x18, 0x17]),
+        ("prefetcht2 byte ptr [rdi]",           [0x0F, 0x18, 0x1F]),
+        ("prefetchw byte ptr [rdi]",            [0x0F, 0x0D, 0x0F]),
+        // Extended base register
+        ("prefetcht0 byte ptr [r9]",            [0x41, 0x0F, 0x18, 0x09]),
+        // RIP-relative
+        ("prefetcht0 byte ptr [rip + 16]",      [0x0F, 0x18, 0x0D, 0x10, 0x00, 0x00, 0x00]),
+    ]
+
+    func testPrefetchAssembles() throws {
+        for (source, expected) in Self.prefetchCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testPrefetchDisassembles() throws {
+        for (source, bytes) in Self.prefetchCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testPrefetchStreamRoundTrip() throws {
+        let source = Self.prefetchCases.map(\.0).joined(separator: "\n")
+        let expected = Self.prefetchCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

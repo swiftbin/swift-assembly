@@ -169,6 +169,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSENonTemporalStore(kind, memory: memory, source: source), patches: [])
         case .movnti(let memory, let source):
             return Encoded(bytes: try encodeMovnti(memory: memory, source: source), patches: [])
+        case .prefetch(let kind, let memory):
+            return Encoded(bytes: try encodePrefetch(kind, memory: memory), patches: [])
         }
     }
 
@@ -1241,6 +1243,22 @@ internal enum X86InstructionEncoder {
         }
         bytes.append(0x0F)
         bytes.append(0xC3)
+        bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    // MARK: - PREFETCH family
+
+    /// `0F 18 /n` or `0F 0D /1` — single byte-pointer memory operand,
+    /// hint encoded in ModR/M.reg.
+    private static func encodePrefetch(_ kind: X86.PrefetchKind, memory: X86.MemoryOperand) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: kind.slashDigit)
+        if let rex = X86.REX.build(x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(kind.opcode2)
         bytes.append(contentsOf: addressing)
         return bytes
     }
