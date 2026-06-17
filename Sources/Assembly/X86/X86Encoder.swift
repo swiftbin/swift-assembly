@@ -159,6 +159,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSECompare(kind, destination: dst, source: src, predicate: pred), patches: [])
         case .sseHalfMove(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEHalfMove(kind, destination: dst, source: src), patches: [])
+        case .sseMaskExtract(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEMaskExtract(kind, destination: dst, source: src), patches: [])
+        case .maskMovDqu(let source, let mask):
+            return Encoded(bytes: encodeMaskMovDqu(source: source, mask: mask), patches: [])
         }
     }
 
@@ -1144,6 +1148,43 @@ internal enum X86InstructionEncoder {
         case (.memory, .memory):
             throw AssemblerError.unsupportedOperand("\(kind.rawValue): cannot have two memory operands")
         }
+        return bytes
+    }
+
+    // MARK: - SSE mask extract (PMOVMSKB / MOVMSKPS / MOVMSKPD)
+
+    /// `[66] 0F D7|50 /r` — `reg` is the destination GPR, `rm` is the
+    /// source XMM. REX.W picks r64 over r32.
+    private static func encodeSSEMaskExtract(_ kind: X86.SSEMaskExtractKind, destination dst: X86.Register, source src: X86.XMMRegister) throws -> [UInt8] {
+        guard dst.width == .dword || dst.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a 32- or 64-bit GPR")
+        }
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix {
+            bytes.append(prefix)
+        }
+        let rexW: UInt8 = dst.width == .qword ? 1 : 0
+        if let rex = X86.REX.build(w: rexW, r: dst.highBit, b: src.highBit) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(kind.opcode2)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: src.lowBits))
+        return bytes
+    }
+
+    // MARK: - MASKMOVDQU
+
+    /// `66 0F F7 /r` — `reg` is the source XMM (bytes to store at
+    /// `[RDI]`), `rm` is the mask XMM whose per-byte sign bits select.
+    private static func encodeMaskMovDqu(source: X86.XMMRegister, mask: X86.XMMRegister) -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        if let rex = X86.REX.build(r: source.highBit, b: mask.highBit) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xF7)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: source.lowBits, rm: mask.lowBits))
         return bytes
     }
 

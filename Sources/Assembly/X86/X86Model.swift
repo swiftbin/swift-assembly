@@ -732,6 +732,14 @@ internal enum X86 {
         /// opcode (0F 12 or 0F 16) covers a memory pair and its
         /// register-only sibling, disambiguated by ModR/M.mod.
         case sseHalfMove(SSEHalfMoveKind, destination: XMMOrMemory, source: XMMOrMemory)
+        /// PMOVMSKB / MOVMSKPS / MOVMSKPD — extract a per-lane sign-bit
+        /// mask from an XMM register into a GPR. Encoded as
+        /// `[66] 0F D7/50 /r` with `reg` = GPR and `rm` = XMM.
+        case sseMaskExtract(SSEMaskExtractKind, destination: Register, source: XMMRegister)
+        /// MASKMOVDQU — selectively store bytes from `source` to memory
+        /// at `[RDI]` using the per-byte sign-bit mask from `mask`.
+        /// `66 0F F7 /r` with `reg` = source and `rm` = mask.
+        case maskMovDqu(source: XMMRegister, mask: XMMRegister)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -875,6 +883,32 @@ internal enum X86 {
 
         /// The partner operand is a 64-bit lane.
         var partnerWidth: RegisterWidth { .qword }
+    }
+
+    /// Extract a per-lane sign-bit mask from an XMM register into a
+    /// GPR. The width (PD/PS/byte) selects how many bits are written.
+    enum SSEMaskExtractKind: String, Equatable, CaseIterable {
+        case pmovmskb       // 66 0F D7 — 16 byte-mask bits
+        case movmskps       //    0F 50 — 4 single-mask bits
+        case movmskpd       // 66 0F 50 — 2 double-mask bits
+
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .pmovmskb, .movmskpd: return 0x66
+            case .movmskps:            return nil
+            }
+        }
+
+        var opcode2: UInt8 {
+            switch self {
+            case .pmovmskb:           return 0xD7
+            case .movmskps, .movmskpd: return 0x50
+            }
+        }
+
+        static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSEMaskExtractKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
     }
 
     /// SSE2 packed integer operations on 128-bit XMM operands.

@@ -45,6 +45,12 @@ internal enum X86Parser {
         if let kind = X86.SSEHalfMoveKind(rawValue: instruction.mnemonic) {
             return try parseSSEHalfMove(kind, instruction)
         }
+        if let kind = X86.SSEMaskExtractKind(rawValue: instruction.mnemonic) {
+            return try parseSSEMaskExtract(kind, instruction)
+        }
+        if instruction.mnemonic == "maskmovdqu" {
+            return try parseMaskMovDqu(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -978,6 +984,44 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// PMOVMSKB/MOVMSKPS/MOVMSKPD — `r32_or_r64, xmm`.
+    private static func parseSSEMaskExtract(_ kind: X86.SSEMaskExtractKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try register(instruction.operands[0])
+        guard destination.width == .dword || destination.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a 32- or 64-bit GPR")
+        }
+        guard let source = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): source must be an XMM register")
+        }
+        return .sseMaskExtract(kind, destination: destination, source: source)
+    }
+
+    /// MASKMOVDQU — `xmm_source, xmm_mask`. Destination is the
+    /// implicit `[RDI]`.
+    private static func parseMaskMovDqu(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "maskmovdqu",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let source = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("maskmovdqu: source must be an XMM register")
+        }
+        guard let mask = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("maskmovdqu: mask must be an XMM register")
+        }
+        return .maskMovDqu(source: source, mask: mask)
     }
 
     /// MOVLPS/MOVHPS/MOVLPD/MOVHPD/MOVHLPS/MOVLHPS — two operands of

@@ -283,6 +283,10 @@ internal enum X86InstructionDecoder {
             return try decodeSSEMov(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x12, 0x13, 0x16, 0x17:
             return try decodeSSEHalfMove(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x50, 0xD7:
+            return try decodeSSEMaskExtract(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0xF7:
+            return try decodeMaskMovDqu(prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
             return try decodeMovDQ(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x70:
@@ -465,6 +469,40 @@ internal enum X86InstructionDecoder {
             src = partner
         }
         return Decoded(instruction: .sseHalfMove(kind, destination: dst, source: src), length: cursor.consumed)
+    }
+
+    // MARK: - SSE mask extract / MASKMOVDQU
+
+    private static func decodeSSEMaskExtract(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8? = prefixes.operandSize ? 0x66 : nil
+        guard let kind = X86.SSEMaskExtractKind.decode(mandatoryPrefix: mandatoryPrefix, opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+            // mod != 11 is reserved for these opcodes.
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let width: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+        let destination = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+        let source = X86.XMMRegister(number: rmNum)
+        return Decoded(instruction: .sseMaskExtract(kind, destination: destination, source: source), length: cursor.consumed)
+    }
+
+    private static func decodeMaskMovDqu(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        guard prefixes.operandSize else {
+            // Without 66 this is MMX MASKMOVQ (deferred).
+            throw AssemblerError.unknownEncoding(0xF7)
+        }
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(0xF7)
+        }
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+        return Decoded(instruction: .maskMovDqu(source: X86.XMMRegister(number: regNum), mask: X86.XMMRegister(number: rmNum)), length: cursor.consumed)
     }
 
     // MARK: - SSE compares (imm8 predicate)

@@ -3092,4 +3092,44 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14p mask extract / MASKMOVDQU
+
+    private static let sseMaskExtractCases: [(String, [UInt8])] = [
+        // MOVMSKPS — no prefix
+        ("movmskps eax, xmm1",              [0x0F, 0x50, 0xC1]),
+        ("movmskps rax, xmm1",              [0x48, 0x0F, 0x50, 0xC1]),
+        // MOVMSKPD — 66
+        ("movmskpd ecx, xmm2",              [0x66, 0x0F, 0x50, 0xCA]),
+        // PMOVMSKB — 66 0F D7
+        ("pmovmskb edx, xmm3",              [0x66, 0x0F, 0xD7, 0xD3]),
+        ("pmovmskb r10, xmm15",             [0x66, 0x4D, 0x0F, 0xD7, 0xD7]),
+        // MASKMOVDQU — 66 0F F7
+        ("maskmovdqu xmm0, xmm1",           [0x66, 0x0F, 0xF7, 0xC1]),
+        ("maskmovdqu xmm15, xmm8",          [0x66, 0x45, 0x0F, 0xF7, 0xF8]),
+    ]
+
+    func testSSEMaskExtractAssembles() throws {
+        for (source, expected) in Self.sseMaskExtractCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEMaskExtractDisassembles() throws {
+        for (source, bytes) in Self.sseMaskExtractCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testMaskExtractRejectsByteRegister() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movmskps al, xmm0")) { _ in }
+    }
+
+    func testSSEMaskExtractStreamRoundTrip() throws {
+        let source = Self.sseMaskExtractCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sseMaskExtractCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

@@ -138,6 +138,10 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: kind.sourceWidth)), \(pred)"
         case .sseHalfMove(let kind, let dst, let src):
             return "\(kind.rawValue) \(formatXMMOrMemory(dst, width: kind.partnerWidth)), \(formatXMMOrMemory(src, width: kind.partnerWidth))"
+        case .sseMaskExtract(let kind, let dst, let src):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), xmm\(src.number)"
+        case .maskMovDqu(let source, let mask):
+            return "maskmovdqu xmm\(source.number), xmm\(mask.number)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
