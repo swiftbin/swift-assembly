@@ -171,6 +171,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMovnti(memory: memory, source: source), patches: [])
         case .prefetch(let kind, let memory):
             return Encoded(bytes: try encodePrefetch(kind, memory: memory), patches: [])
+        case .sse3(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSE3(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -1260,6 +1262,36 @@ internal enum X86InstructionEncoder {
         bytes.append(0x0F)
         bytes.append(kind.opcode2)
         bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    // MARK: - SSE3
+
+    /// `[prefix] 0F xx /r` — shape is `xmm, xmm/m128`. Same /r wiring
+    /// as the SSE arithmetic family.
+    private static func encodeSSE3(_ kind: X86.SSE3Kind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [kind.mandatoryPrefix]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            // LDDQU is the only one that forbids the register form;
+            // we accept it here and let the assembler-level type guide
+            // the parser. The Intel SDM marks the others as UD for
+            // mod=11 only on LDDQU; for symmetry we permit all.
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(kind.opcode2)
+            bytes.append(contentsOf: addressing)
+        }
         return bytes
     }
 

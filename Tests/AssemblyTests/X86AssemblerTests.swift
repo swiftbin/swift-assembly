@@ -3209,4 +3209,53 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14s SSE3
+
+    private static let sse3Cases: [(String, [UInt8])] = [
+        // ADDSUB
+        ("addsubps xmm0, xmm1",                     [0xF2, 0x0F, 0xD0, 0xC1]),
+        ("addsubpd xmm0, xmm1",                     [0x66, 0x0F, 0xD0, 0xC1]),
+        // HADD / HSUB
+        ("haddps xmm2, xmm3",                       [0xF2, 0x0F, 0x7C, 0xD3]),
+        ("haddpd xmm2, xmm3",                       [0x66, 0x0F, 0x7C, 0xD3]),
+        ("hsubps xmm4, xmm5",                       [0xF2, 0x0F, 0x7D, 0xE5]),
+        ("hsubpd xmm4, xmm5",                       [0x66, 0x0F, 0x7D, 0xE5]),
+        // MOV*DUP
+        ("movshdup xmm0, xmm1",                     [0xF3, 0x0F, 0x16, 0xC1]),
+        ("movsldup xmm0, xmm1",                     [0xF3, 0x0F, 0x12, 0xC1]),
+        ("movddup xmm0, xmm1",                      [0xF2, 0x0F, 0x12, 0xC1]),
+        ("movddup xmm0, qword ptr [rdi]",           [0xF2, 0x0F, 0x12, 0x07]),
+        // LDDQU
+        ("lddqu xmm6, xmmword ptr [rdi]",           [0xF2, 0x0F, 0xF0, 0x37]),
+        // Extended XMM
+        ("addsubps xmm15, xmm0",                    [0xF2, 0x44, 0x0F, 0xD0, 0xF8]),
+        ("haddpd xmm0, xmm15",                      [0x66, 0x41, 0x0F, 0x7C, 0xC7]),
+        // Memory source
+        ("addsubps xmm0, xmmword ptr [rdi]",        [0xF2, 0x0F, 0xD0, 0x07]),
+    ]
+
+    func testSSE3Assembles() throws {
+        for (source, expected) in Self.sse3Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSE3Disassembles() throws {
+        for (source, bytes) in Self.sse3Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testLddquRejectsRegisterSource() {
+        XCTAssertThrowsError(try X86Assembler.assemble("lddqu xmm0, xmm1")) { _ in }
+    }
+
+    func testSSE3StreamRoundTrip() throws {
+        let source = Self.sse3Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.sse3Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

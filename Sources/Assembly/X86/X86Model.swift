@@ -756,6 +756,10 @@ internal enum X86 {
         /// SSE-era variants ride `0F 18 /n`; PREFETCHW (3DNow!/PRFCHW
         /// extension) rides `0F 0D /1`.
         case prefetch(PrefetchKind, memory: MemoryOperand)
+        /// SSE3 packed/scalar instructions sharing a single shape:
+        /// `xmm, xmm/m128` (or `xmm/m64` for MOVDDUP). The mandatory
+        /// prefix (66/F2/F3) and opcode2 together pick the operation.
+        case sse3(SSE3Kind, destination: XMMRegister, source: XMMOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1000,6 +1004,51 @@ internal enum X86 {
 
         static func decode(opcode2: UInt8, slashDigit: UInt8) -> PrefetchKind? {
             allCases.first { $0.opcode2 == opcode2 && $0.slashDigit == slashDigit }
+        }
+    }
+
+    /// SSE3 `xmm, xmm/m128` instructions. MOVDDUP's source is m64 in
+    /// the memory form, which only affects the formatter — the
+    /// underlying `/r` encoding is identical.
+    enum SSE3Kind: String, Equatable, CaseIterable {
+        case addsubps       // F2 0F D0
+        case addsubpd       // 66 0F D0
+        case haddps         // F2 0F 7C
+        case haddpd         // 66 0F 7C
+        case hsubps         // F2 0F 7D
+        case hsubpd         // 66 0F 7D
+        case movshdup       // F3 0F 16 — duplicate odd-indexed singles
+        case movsldup       // F3 0F 12 — duplicate even-indexed singles
+        case movddup        // F2 0F 12 — duplicate one double into both lanes
+        case lddqu          // F2 0F F0 — unaligned dqword load
+
+        var mandatoryPrefix: UInt8 {
+            switch self {
+            case .addsubpd, .haddpd, .hsubpd:           return 0x66
+            case .addsubps, .haddps, .hsubps,
+                 .movddup, .lddqu:                       return 0xF2
+            case .movshdup, .movsldup:                  return 0xF3
+            }
+        }
+
+        var opcode2: UInt8 {
+            switch self {
+            case .addsubps, .addsubpd: return 0xD0
+            case .haddps, .haddpd:     return 0x7C
+            case .hsubps, .hsubpd:     return 0x7D
+            case .movshdup:            return 0x16
+            case .movsldup, .movddup:  return 0x12
+            case .lddqu:               return 0xF0
+            }
+        }
+
+        /// MOVDDUP's memory form is m64; the rest are m128.
+        var sourceWidth: RegisterWidth {
+            self == .movddup ? .qword : .xmmword
+        }
+
+        static func decode(mandatoryPrefix: UInt8, opcode2: UInt8) -> SSE3Kind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
         }
     }
 

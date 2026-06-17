@@ -150,6 +150,8 @@ internal enum X86InstructionFormatter {
             return "movnti \(formatSizedMemory(memory, width: source.width)), \(X86.RegisterTable.canonicalName(for: source))"
         case .prefetch(let kind, let memory):
             return "\(kind.rawValue) \(formatSizedMemory(memory, width: .byte))"
+        case .sse3(let kind, let dst, let src):
+            return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: kind.sourceWidth))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

@@ -291,6 +291,8 @@ internal enum X86InstructionDecoder {
             return try decodeSSENonTemporalStore(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x18, 0x0D:
             return try decodePrefetch(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0xD0, 0x7C, 0x7D, 0xF0:
+            return try decodeSSE3(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0xC3:
             return try decodeMovnti(prefixes: prefixes, cursor: &cursor)
         case 0x6E, 0x7E:
@@ -433,6 +435,12 @@ internal enum X86InstructionDecoder {
     // MARK: - SSE half-vector moves
 
     private static func decodeSSEHalfMove(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        // SSE3 reuses 0F 12 / 0F 16 with F2/F3 prefixes for the
+        // MOV*DUP family. Route those before falling through to the
+        // half-vector moves.
+        if (opcode2 == 0x12 || opcode2 == 0x16) && (prefixes.f2Prefix || prefixes.f3Prefix) {
+            return try decodeSSE3(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        }
         let mandatoryPrefix: UInt8? = prefixes.operandSize ? 0x66 : nil
         let modrm = try cursor.takeByte()
         let isRegisterForm = X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister
@@ -509,6 +517,35 @@ internal enum X86InstructionDecoder {
         let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
         return Decoded(instruction: .maskMovDqu(source: X86.XMMRegister(number: regNum), mask: X86.XMMRegister(number: rmNum)), length: cursor.consumed)
+    }
+
+    // MARK: - SSE3
+
+    private static func decodeSSE3(opcode2: UInt8, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8
+        if prefixes.operandSize    { mandatoryPrefix = 0x66 }
+        else if prefixes.f2Prefix  { mandatoryPrefix = 0xF2 }
+        else if prefixes.f3Prefix  { mandatoryPrefix = 0xF3 }
+        else                       { throw AssemblerError.unknownEncoding(UInt32(opcode2)) }
+        guard let kind = X86.SSE3Kind.decode(mandatoryPrefix: mandatoryPrefix, opcode2: opcode2) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode2))
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            if kind == .lddqu {
+                // LDDQU requires a memory operand.
+                throw AssemblerError.unknownEncoding(UInt32(opcode2))
+            }
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        return Decoded(instruction: .sse3(kind, destination: dst, source: source), length: cursor.consumed)
     }
 
     // MARK: - PREFETCH

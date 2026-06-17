@@ -63,6 +63,9 @@ internal enum X86Parser {
         if let kind = X86.PrefetchKind(rawValue: instruction.mnemonic) {
             return try parsePrefetch(kind, instruction)
         }
+        if let kind = X86.SSE3Kind(rawValue: instruction.mnemonic) {
+            return try parseSSE3(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -996,6 +999,29 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// SSE3 `xmm, xmm/m128` (MOVDDUP uses m64).
+    private static func parseSSE3(_ kind: X86.SSE3Kind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: kind.sourceWidth,
+            mnemonic: kind.rawValue
+        )
+        if kind == .lddqu, case .register = source {
+            throw AssemblerError.unsupportedOperand("lddqu: source must be a memory operand")
+        }
+        return .sse3(kind, destination: destination, source: source)
     }
 
     /// PREFETCH* — single byte-pointer memory operand.
