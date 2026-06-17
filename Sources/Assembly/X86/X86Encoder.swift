@@ -179,6 +179,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodePalignr(destination: dst, source: src, immediate: imm), patches: [])
         case .ssePackExtend(let kind, let dst, let src):
             return Encoded(bytes: try encodeSSEPackExtend(kind, destination: dst, source: src), patches: [])
+        case .sse41Packed(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSE41Packed(kind, destination: dst, source: src), patches: [])
+        case .movntdqa(let dst, let mem):
+            return Encoded(bytes: try encodeMovntdqa(destination: dst, memory: mem), patches: [])
         }
     }
 
@@ -1382,6 +1386,48 @@ internal enum X86InstructionEncoder {
             bytes.append(kind.opcode3)
             bytes.append(contentsOf: addressing)
         }
+        return bytes
+    }
+
+    // MARK: - SSE4.1 packed-integer ops
+
+    private static func encodeSSE41Packed(_ kind: X86.SSE41PackedKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    // MARK: - MOVNTDQA
+
+    /// `66 0F 38 2A /r` — `xmm, m128`. Register source is reserved.
+    private static func encodeMovntdqa(destination dst: X86.XMMRegister, memory: X86.MemoryOperand) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: dst.lowBits)
+        if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0x38)
+        bytes.append(0x2A)
+        bytes.append(contentsOf: addressing)
         return bytes
     }
 

@@ -548,6 +548,16 @@ internal enum X86InstructionDecoder {
         if let kind = X86.SSEPackExtendKind.decode(opcode3: opcode3) {
             return Decoded(instruction: .ssePackExtend(kind, destination: dst, source: source), length: cursor.consumed)
         }
+        if opcode3 == 0x2A {
+            // MOVNTDQA — register form is reserved.
+            guard case .memory(let mem) = source else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode3))
+            }
+            return Decoded(instruction: .movntdqa(destination: dst, memory: mem), length: cursor.consumed)
+        }
+        if let kind = X86.SSE41PackedKind.decode(opcode3: opcode3) {
+            return Decoded(instruction: .sse41Packed(kind, destination: dst, source: source), length: cursor.consumed)
+        }
         throw AssemblerError.unknownEncoding(UInt32(opcode3))
     }
 

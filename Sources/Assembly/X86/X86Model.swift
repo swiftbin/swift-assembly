@@ -772,6 +772,12 @@ internal enum X86 {
         /// vector by widening each lane. Encoded as `66 0F 38 2x|3x /r`
         /// with the source operand width determined by the kind.
         case ssePackExtend(SSEPackExtendKind, destination: XMMRegister, source: XMMOrMemory)
+        /// SSE4.1 `xmm, xmm/m128` operations on the 0F 38 escape:
+        /// PMUL/PMIN/PMAX/PACKUSDW/PCMPEQQ/PHMINPOSUW/PTEST.
+        case sse41Packed(SSE41PackedKind, destination: XMMRegister, source: XMMOrMemory)
+        /// MOVNTDQA — non-temporal aligned dqword load from memory.
+        /// `66 0F 38 2A /r` with memory-only `rm` operand.
+        case movntdqa(destination: XMMRegister, memory: MemoryOperand)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1161,6 +1167,48 @@ internal enum X86 {
         }
 
         static func decode(opcode3: UInt8) -> SSEPackExtendKind? {
+            allCases.first { $0.opcode3 == opcode3 }
+        }
+    }
+
+    /// SSE4.1 packed-integer operations on the 0F 38 escape that share
+    /// the `xmm, xmm/m128` shape.
+    enum SSE41PackedKind: String, Equatable, CaseIterable {
+        case ptest          // 66 0F 38 17 — set EFLAGS from AND / ANDN
+        case pmuldq         // 66 0F 38 28 — packed signed dword × dword → qword
+        case pcmpeqq        // 66 0F 38 29 — packed compare equal qword
+        case packusdw       // 66 0F 38 2B — pack with unsigned saturation (d→w)
+        case pminsb         // 66 0F 38 38
+        case pminsd         // 66 0F 38 39
+        case pminuw         // 66 0F 38 3A
+        case pminud         // 66 0F 38 3B
+        case pmaxsb         // 66 0F 38 3C
+        case pmaxsd         // 66 0F 38 3D
+        case pmaxuw         // 66 0F 38 3E
+        case pmaxud         // 66 0F 38 3F
+        case pmulld         // 66 0F 38 40 — packed mul low dword
+        case phminposuw     // 66 0F 38 41 — packed horizontal min unsigned word
+
+        var opcode3: UInt8 {
+            switch self {
+            case .ptest:       return 0x17
+            case .pmuldq:      return 0x28
+            case .pcmpeqq:     return 0x29
+            case .packusdw:    return 0x2B
+            case .pminsb:      return 0x38
+            case .pminsd:      return 0x39
+            case .pminuw:      return 0x3A
+            case .pminud:      return 0x3B
+            case .pmaxsb:      return 0x3C
+            case .pmaxsd:      return 0x3D
+            case .pmaxuw:      return 0x3E
+            case .pmaxud:      return 0x3F
+            case .pmulld:      return 0x40
+            case .phminposuw:  return 0x41
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> SSE41PackedKind? {
             allCases.first { $0.opcode3 == opcode3 }
         }
     }

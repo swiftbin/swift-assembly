@@ -3361,4 +3361,53 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 16b SSE4.1 PMUL/PMIN/PMAX/PACK + PTEST + MOVNTDQA
+
+    private static let sse41PackedCases: [(String, [UInt8])] = [
+        ("ptest xmm0, xmm1",                        [0x66, 0x0F, 0x38, 0x17, 0xC1]),
+        ("pmuldq xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x28, 0xC1]),
+        ("pcmpeqq xmm0, xmm1",                      [0x66, 0x0F, 0x38, 0x29, 0xC1]),
+        ("packusdw xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x2B, 0xC1]),
+        ("pminsb xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x38, 0xC1]),
+        ("pminsd xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x39, 0xC1]),
+        ("pminuw xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x3A, 0xC1]),
+        ("pminud xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x3B, 0xC1]),
+        ("pmaxsb xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x3C, 0xC1]),
+        ("pmaxsd xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x3D, 0xC1]),
+        ("pmaxuw xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x3E, 0xC1]),
+        ("pmaxud xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x3F, 0xC1]),
+        ("pmulld xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0x40, 0xC1]),
+        ("phminposuw xmm0, xmm1",                   [0x66, 0x0F, 0x38, 0x41, 0xC1]),
+        // MOVNTDQA — memory only
+        ("movntdqa xmm0, xmmword ptr [rdi]",        [0x66, 0x0F, 0x38, 0x2A, 0x07]),
+        // Extended XMM
+        ("pmulld xmm15, xmm0",                      [0x66, 0x44, 0x0F, 0x38, 0x40, 0xF8]),
+        // Memory source
+        ("pminsd xmm0, xmmword ptr [rsi]",          [0x66, 0x0F, 0x38, 0x39, 0x06]),
+    ]
+
+    func testSSE41PackedAssembles() throws {
+        for (source, expected) in Self.sse41PackedCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSE41PackedDisassembles() throws {
+        for (source, bytes) in Self.sse41PackedCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testMovntdqaRejectsRegisterSource() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movntdqa xmm0, xmm1")) { _ in }
+    }
+
+    func testSSE41PackedStreamRoundTrip() throws {
+        let source = Self.sse41PackedCases.map(\.0).joined(separator: "\n")
+        let expected = Self.sse41PackedCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
