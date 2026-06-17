@@ -2994,4 +2994,51 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14n SSE compares (imm8 predicate)
+
+    private static let ssePredicateCompareCases: [(String, [UInt8])] = [
+        // CMPPS — no prefix
+        ("cmpps xmm0, xmm1, 0",                 [0x0F, 0xC2, 0xC1, 0x00]),
+        ("cmpps xmm0, xmm1, 7",                 [0x0F, 0xC2, 0xC1, 0x07]),
+        // CMPPD — 66
+        ("cmppd xmm2, xmm3, 2",                 [0x66, 0x0F, 0xC2, 0xD3, 0x02]),
+        // CMPSS — F3
+        ("cmpss xmm4, xmm5, 1",                 [0xF3, 0x0F, 0xC2, 0xE5, 0x01]),
+        // CMPSD — F2 (SSE form, not the string op)
+        ("cmpsd xmm6, xmm7, 4",                 [0xF2, 0x0F, 0xC2, 0xF7, 0x04]),
+        // Extended XMM
+        ("cmpps xmm15, xmm0, 0",                [0x44, 0x0F, 0xC2, 0xF8, 0x00]),
+        ("cmppd xmm0, xmm15, 1",                [0x66, 0x41, 0x0F, 0xC2, 0xC7, 0x01]),
+        // Memory source
+        ("cmpps xmm0, xmmword ptr [rdi], 3",    [0x0F, 0xC2, 0x07, 0x03]),
+        ("cmpsd xmm1, xmmword ptr [rbx + 4], 5",[0xF2, 0x0F, 0xC2, 0x4B, 0x04, 0x05]),
+    ]
+
+    func testSSEPredicateCompareAssembles() throws {
+        for (source, expected) in Self.ssePredicateCompareCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEPredicateCompareDisassembles() throws {
+        for (source, bytes) in Self.ssePredicateCompareCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    /// CMPSD with no operands is the string instruction; with three it
+    /// is the SSE scalar-double compare. Both forms must coexist.
+    func testCMPSDMnemonicDisambiguation() throws {
+        XCTAssertEqual(try X86Assembler.assemble("cmpsd"),                      [0xA7])
+        XCTAssertEqual(try X86Assembler.assemble("cmpsd xmm0, xmm1, 0"),        [0xF2, 0x0F, 0xC2, 0xC1, 0x00])
+    }
+
+    func testSSEPredicateCompareStreamRoundTrip() throws {
+        let source = Self.ssePredicateCompareCases.map(\.0).joined(separator: "\n")
+        let expected = Self.ssePredicateCompareCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

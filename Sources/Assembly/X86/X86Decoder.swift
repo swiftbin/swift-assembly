@@ -360,6 +360,8 @@ internal enum X86InstructionDecoder {
             return try decodeExtendingMove(kind: .movsx, sourceWidth: .word, prefixes: prefixes, cursor: &cursor)
         case 0xC0, 0xC1:
             return try decodeXaddCmpxchg(opcode2: opcode2, isCmpxchg: false, prefixes: prefixes, cursor: &cursor)
+        case 0xC2:
+            return try decodeSSECompare(prefixes: prefixes, cursor: &cursor)
         case 0xC7:
             return try decodeCmpxchgWide(prefixes: prefixes, cursor: &cursor)
         case 0xC8...0xCF:
@@ -414,6 +416,32 @@ internal enum X86InstructionDecoder {
         }
         let imm = try cursor.takeByte()
         return Decoded(instruction: .sseShuffle(kind, destination: dst, source: source, immediate: imm), length: cursor.consumed)
+    }
+
+    // MARK: - SSE compares (imm8 predicate)
+
+    private static func decodeSSECompare(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let mandatoryPrefix: UInt8?
+        if prefixes.operandSize       { mandatoryPrefix = 0x66 }
+        else if prefixes.f2Prefix     { mandatoryPrefix = 0xF2 }
+        else if prefixes.f3Prefix     { mandatoryPrefix = 0xF3 }
+        else                          { mandatoryPrefix = nil }
+        guard let kind = X86.SSECompareKind.decode(mandatoryPrefix: mandatoryPrefix) else {
+            throw AssemblerError.unknownEncoding(0xC2)
+        }
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = X86.XMMRegister(number: regNum)
+        let source: X86.XMMOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            source = .register(X86.XMMRegister(number: rmNum))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            source = .memory(mem)
+        }
+        let pred = try cursor.takeByte()
+        return Decoded(instruction: .sseCompare(kind, destination: dst, source: source, predicate: pred), length: cursor.consumed)
     }
 
     // MARK: - SSE2 packed integer ops

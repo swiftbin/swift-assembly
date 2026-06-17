@@ -722,6 +722,10 @@ internal enum X86 {
         /// (with `66`/`F2`/`F3`); SHUFPS/SHUFPD ride `0F C6` (no prefix
         /// or `66`).
         case sseShuffle(SSEShuffleKind, destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
+        /// SSE/SSE2 packed/scalar compare with imm8 predicate. Operand
+        /// shape is `xmm, xmm/m128, imm8`; the kind picks the mandatory
+        /// prefix while the opcode is fixed at `0F C2`.
+        case sseCompare(SSECompareKind, destination: XMMRegister, source: XMMOrMemory, predicate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -789,6 +793,35 @@ internal enum X86 {
 
         static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSEShuffleKind? {
             allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
+    }
+
+    /// SSE/SSE2 packed/scalar compare with imm8 predicate
+    /// (CMPPS/CMPPD/CMPSS/CMPSD). All ride `[prefix] 0F C2 /r ib` with
+    /// the mandatory prefix selecting precision (single/double) and
+    /// vector vs scalar.
+    enum SSECompareKind: String, Equatable, CaseIterable {
+        case cmpps          //    0F C2 /r ib — packed single
+        case cmppd          // 66 0F C2 /r ib — packed double
+        case cmpss          // F3 0F C2 /r ib — scalar single
+        case cmpsd          // F2 0F C2 /r ib — scalar double
+
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .cmpps: return nil
+            case .cmppd: return 0x66
+            case .cmpss: return 0xF3
+            case .cmpsd: return 0xF2
+            }
+        }
+
+        /// `xmm/m128` for packed; `xmm/m32` or `xmm/m64` for scalar.
+        /// We model memory width as xmmword everywhere since the parser
+        /// already accepts size-hint-less memory.
+        var sourceWidth: RegisterWidth { .xmmword }
+
+        static func decode(mandatoryPrefix: UInt8?) -> SSECompareKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix }
         }
     }
 

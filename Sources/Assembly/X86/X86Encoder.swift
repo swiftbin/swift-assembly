@@ -155,6 +155,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: encodeSSEImmediateShift(kind, target: target, immediate: imm), patches: [])
         case .sseShuffle(let kind, let dst, let src, let imm):
             return Encoded(bytes: try encodeSSEShuffle(kind, destination: dst, source: src, immediate: imm), patches: [])
+        case .sseCompare(let kind, let dst, let src, let pred):
+            return Encoded(bytes: try encodeSSECompare(kind, destination: dst, source: src, predicate: pred), patches: [])
         }
     }
 
@@ -1060,6 +1062,36 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
         }
         bytes.append(immediate)
+        return bytes
+    }
+
+    // MARK: - SSE compares (imm8 predicate)
+
+    /// `[prefix] 0F C2 /r ib` — same ModR/M wiring as the shuffle
+    /// family, but the opcode is fixed at 0xC2.
+    private static func encodeSSECompare(_ kind: X86.SSECompareKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory, predicate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix {
+            bytes.append(prefix)
+        }
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0xC2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0xC2)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(predicate)
         return bytes
     }
 

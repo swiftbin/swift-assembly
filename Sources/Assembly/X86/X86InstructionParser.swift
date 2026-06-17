@@ -42,6 +42,12 @@ internal enum X86Parser {
         if let kind = X86.SSEShuffleKind(rawValue: instruction.mnemonic) {
             return try parseSSEShuffle(kind, instruction)
         }
+        // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
+        // form only when it carries the SSE shape (3 operands).
+        if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
+           instruction.operands.count == 3 {
+            return try parseSSECompare(kind, instruction)
+        }
         if instruction.mnemonic == "pslldq" || instruction.mnemonic == "psrldq" {
             // These only have an imm8 form — no variable shift partner
             // in SSEPackedIntegerKind.
@@ -969,6 +975,31 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// CMPPS/CMPPD/CMPSS/CMPSD — `xmm, xmm/m128, imm8`. Same shape as
+    /// the shuffle family.
+    private static func parseSSECompare(_ kind: X86.SSECompareKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: kind.sourceWidth,
+            mnemonic: kind.rawValue
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .sseCompare(kind, destination: destination, source: source, predicate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// `MOVD` / `MOVQ` between an XMM register and a GPR or memory
