@@ -51,6 +51,15 @@ internal enum X86Parser {
         if instruction.mnemonic == "maskmovdqu" {
             return try parseMaskMovDqu(instruction)
         }
+        if let kind = X86.MXCSRKind(rawValue: instruction.mnemonic) {
+            return try parseMXCSR(kind, instruction)
+        }
+        if let kind = X86.SSENonTemporalKind(rawValue: instruction.mnemonic) {
+            return try parseSSENonTemporalStore(kind, instruction)
+        }
+        if instruction.mnemonic == "movnti" {
+            return try parseMovnti(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -984,6 +993,69 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// LDMXCSR / STMXCSR — single memory operand (m32).
+    private static func parseMXCSR(_ kind: X86.MXCSRKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let memory = try parseSizedMemory(instruction.operands[0], expected: .dword, mnemonic: kind.rawValue)
+        return .mxcsr(kind, memory: memory)
+    }
+
+    /// MOVNTPS/MOVNTPD/MOVNTDQ — `m128, xmm` (non-temporal store).
+    private static func parseSSENonTemporalStore(_ kind: X86.SSENonTemporalKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let memory = try parseSizedMemory(instruction.operands[0], expected: .xmmword, mnemonic: kind.rawValue)
+        guard let source = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): source must be an XMM register")
+        }
+        return .sseNonTemporalStore(kind, memory: memory, source: source)
+    }
+
+    /// MOVNTI — `m32/m64, r32/r64`. Width must match between operands.
+    private static func parseMovnti(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "movnti",
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let source = try register(instruction.operands[1])
+        guard source.width == .dword || source.width == .qword else {
+            throw AssemblerError.unsupportedOperand("movnti: source must be a 32- or 64-bit GPR")
+        }
+        let memory = try parseSizedMemory(instruction.operands[0], expected: source.width, mnemonic: "movnti")
+        return .movnti(memory: memory, source: source)
+    }
+
+    /// Helper: parse a memory operand requiring the given size hint.
+    /// Accepts a hint-less `[...]` only when it cannot be confused
+    /// with a missing hint (callers force a hint by passing `expected`).
+    private static func parseSizedMemory(_ text: String, expected: X86.RegisterWidth, mnemonic: String) throws -> X86.MemoryOperand {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (width, body) = stripSizeHint(trimmed) {
+            guard width == expected else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): memory operand width disagrees with mnemonic")
+            }
+            return try memoryOperand(body)
+        }
+        if trimmed.hasPrefix("[") {
+            return try memoryOperand(trimmed)
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected a memory operand")
     }
 
     /// PMOVMSKB/MOVMSKPS/MOVMSKPD — `r32_or_r64, xmm`.

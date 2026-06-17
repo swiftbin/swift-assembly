@@ -740,6 +740,18 @@ internal enum X86 {
         /// at `[RDI]` using the per-byte sign-bit mask from `mask`.
         /// `66 0F F7 /r` with `reg` = source and `rm` = mask.
         case maskMovDqu(source: XMMRegister, mask: XMMRegister)
+        /// LDMXCSR / STMXCSR — load or store the SSE MXCSR control
+        /// register against an m32 operand. Encoded as `0F AE /2` and
+        /// `0F AE /3` respectively.
+        case mxcsr(MXCSRKind, memory: MemoryOperand)
+        /// MOVNTPS / MOVNTPD / MOVNTDQ — non-temporal store of an XMM
+        /// register to memory. Encoded as `[66] 0F 2B/E7 /r` with
+        /// `reg` = source XMM, `rm` = m128.
+        case sseNonTemporalStore(SSENonTemporalKind, memory: MemoryOperand, source: XMMRegister)
+        /// MOVNTI — non-temporal store of a GPR to memory. Encoded as
+        /// `0F C3 /r` with the destination memory in `rm` and the
+        /// source register in `reg`.
+        case movnti(memory: MemoryOperand, source: Register)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -907,6 +919,50 @@ internal enum X86 {
         }
 
         static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSEMaskExtractKind? {
+            allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
+    }
+
+    /// LDMXCSR / STMXCSR — both ride `0F AE` with the slash-digit
+    /// selecting the direction.
+    enum MXCSRKind: String, Equatable, CaseIterable {
+        case ldmxcsr        // 0F AE /2 — m32 → MXCSR
+        case stmxcsr        // 0F AE /3 — MXCSR → m32
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .ldmxcsr: return 2
+            case .stmxcsr: return 3
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> MXCSRKind? {
+            allCases.first { $0.slashDigit == slashDigit }
+        }
+    }
+
+    /// Non-temporal stores from an XMM register to a 128-bit memory
+    /// location. All ride a two-byte opcode after the mandatory prefix.
+    enum SSENonTemporalKind: String, Equatable, CaseIterable {
+        case movntps        //    0F 2B — packed single
+        case movntpd        // 66 0F 2B — packed double
+        case movntdq        // 66 0F E7 — packed dqword
+
+        var mandatoryPrefix: UInt8? {
+            switch self {
+            case .movntps: return nil
+            case .movntpd, .movntdq: return 0x66
+            }
+        }
+
+        var opcode2: UInt8 {
+            switch self {
+            case .movntps, .movntpd: return 0x2B
+            case .movntdq:           return 0xE7
+            }
+        }
+
+        static func decode(mandatoryPrefix: UInt8?, opcode2: UInt8) -> SSENonTemporalKind? {
             allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
         }
     }

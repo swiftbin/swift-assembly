@@ -3132,4 +3132,47 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 14q MXCSR + non-temporal stores
+
+    private static let mxcsrNontemporalCases: [(String, [UInt8])] = [
+        // LDMXCSR / STMXCSR
+        ("ldmxcsr dword ptr [rdi]",                 [0x0F, 0xAE, 0x17]),
+        ("stmxcsr dword ptr [rsi]",                 [0x0F, 0xAE, 0x1E]),
+        // MOVNTPS — no prefix
+        ("movntps xmmword ptr [rdi], xmm0",         [0x0F, 0x2B, 0x07]),
+        ("movntps xmmword ptr [r8], xmm15",         [0x45, 0x0F, 0x2B, 0x38]),
+        // MOVNTPD — 66 prefix
+        ("movntpd xmmword ptr [rsi], xmm1",         [0x66, 0x0F, 0x2B, 0x0E]),
+        // MOVNTDQ — 66 0F E7
+        ("movntdq xmmword ptr [rdx], xmm2",         [0x66, 0x0F, 0xE7, 0x12]),
+        // MOVNTI — 32 / 64
+        ("movnti dword ptr [rdi], eax",             [0x0F, 0xC3, 0x07]),
+        ("movnti qword ptr [rdi], rax",             [0x48, 0x0F, 0xC3, 0x07]),
+        ("movnti qword ptr [r9], r10",              [0x4D, 0x0F, 0xC3, 0x11]),
+    ]
+
+    func testMXCSRNontemporalAssembles() throws {
+        for (source, expected) in Self.mxcsrNontemporalCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testMXCSRNontemporalDisassembles() throws {
+        for (source, bytes) in Self.mxcsrNontemporalCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testMovntiWidthMismatchRejected() {
+        XCTAssertThrowsError(try X86Assembler.assemble("movnti qword ptr [rdi], eax")) { _ in }
+    }
+
+    func testMXCSRNontemporalStreamRoundTrip() throws {
+        let source = Self.mxcsrNontemporalCases.map(\.0).joined(separator: "\n")
+        let expected = Self.mxcsrNontemporalCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

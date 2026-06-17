@@ -142,6 +142,12 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), xmm\(src.number)"
         case .maskMovDqu(let source, let mask):
             return "maskmovdqu xmm\(source.number), xmm\(mask.number)"
+        case .mxcsr(let kind, let memory):
+            return "\(kind.rawValue) \(formatSizedMemory(memory, width: .dword))"
+        case .sseNonTemporalStore(let kind, let memory, let source):
+            return "\(kind.rawValue) \(formatSizedMemory(memory, width: .xmmword)), xmm\(source.number)"
+        case .movnti(let memory, let source):
+            return "movnti \(formatSizedMemory(memory, width: source.width)), \(X86.RegisterTable.canonicalName(for: source))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
@@ -157,6 +163,11 @@ internal enum X86InstructionFormatter {
         case .register(let r): return X86.RegisterTable.canonicalName(for: r)
         case .memory(let m, _): return "\(sizeHintPrefix(width)) \(formatMemory(m))"
         }
+    }
+
+    /// Render a memory operand with an explicit size hint.
+    private static func formatSizedMemory(_ memory: X86.MemoryOperand, width: X86.RegisterWidth) -> String {
+        "\(sizeHintPrefix(width)) \(formatMemory(memory))"
     }
 
     /// Render an SSE operand. XMM registers are bare; memory references

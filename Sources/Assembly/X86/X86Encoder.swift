@@ -163,6 +163,12 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSEMaskExtract(kind, destination: dst, source: src), patches: [])
         case .maskMovDqu(let source, let mask):
             return Encoded(bytes: encodeMaskMovDqu(source: source, mask: mask), patches: [])
+        case .mxcsr(let kind, let memory):
+            return Encoded(bytes: try encodeMXCSR(kind, memory: memory), patches: [])
+        case .sseNonTemporalStore(let kind, let memory, let source):
+            return Encoded(bytes: try encodeSSENonTemporalStore(kind, memory: memory, source: source), patches: [])
+        case .movnti(let memory, let source):
+            return Encoded(bytes: try encodeMovnti(memory: memory, source: source), patches: [])
         }
     }
 
@@ -1185,6 +1191,57 @@ internal enum X86InstructionEncoder {
         bytes.append(0x0F)
         bytes.append(0xF7)
         bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: source.lowBits, rm: mask.lowBits))
+        return bytes
+    }
+
+    // MARK: - LDMXCSR / STMXCSR
+
+    /// `0F AE /2` (ldmxcsr) or `/3` (stmxcsr) — single m32 operand.
+    private static func encodeMXCSR(_ kind: X86.MXCSRKind, memory: X86.MemoryOperand) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: kind.slashDigit)
+        if let rex = X86.REX.build(x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xAE)
+        bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    // MARK: - Non-temporal SSE stores (MOVNTPS / MOVNTPD / MOVNTDQ)
+
+    private static func encodeSSENonTemporalStore(_ kind: X86.SSENonTemporalKind, memory: X86.MemoryOperand, source: X86.XMMRegister) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        if let prefix = kind.mandatoryPrefix {
+            bytes.append(prefix)
+        }
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: source.lowBits)
+        if let rex = X86.REX.build(r: source.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(kind.opcode2)
+        bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    // MARK: - MOVNTI
+
+    /// `0F C3 /r` — m32/m64 ← r32/r64. REX.W picks the 64-bit form.
+    private static func encodeMovnti(memory: X86.MemoryOperand, source: X86.Register) throws -> [UInt8] {
+        guard source.width == .dword || source.width == .qword else {
+            throw AssemblerError.unsupportedOperand("movnti: source must be a 32- or 64-bit GPR")
+        }
+        var bytes: [UInt8] = []
+        let rexW: UInt8 = source.width == .qword ? 1 : 0
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: source.lowBits)
+        if let rex = X86.REX.build(w: rexW, r: source.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xC3)
+        bytes.append(contentsOf: addressing)
         return bytes
     }
 
