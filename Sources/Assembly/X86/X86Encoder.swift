@@ -177,6 +177,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSSE3(kind, destination: dst, source: src), patches: [])
         case .palignr(let dst, let src, let imm):
             return Encoded(bytes: try encodePalignr(destination: dst, source: src, immediate: imm), patches: [])
+        case .ssePackExtend(let kind, let dst, let src):
+            return Encoded(bytes: try encodeSSEPackExtend(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -1352,6 +1354,34 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
         }
         bytes.append(immediate)
+        return bytes
+    }
+
+    // MARK: - SSE4.1 widening pack moves
+
+    /// `66 0F 38 2x|3x /r` — `xmm, xmm/m{16|32|64}`. Same ModR/M wiring
+    /// as the rest of the 0F 38 family.
+    private static func encodeSSEPackExtend(_ kind: X86.SSEPackExtendKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = [0x66]
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
         return bytes
     }
 

@@ -3311,4 +3311,54 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 16a SSE4.1 PMOVSX*/PMOVZX*
+
+    private static let ssePackExtendCases: [(String, [UInt8])] = [
+        // Sign-extending forms
+        ("pmovsxbw xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x20, 0xC1]),
+        ("pmovsxbd xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x21, 0xC1]),
+        ("pmovsxbq xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x22, 0xC1]),
+        ("pmovsxwd xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x23, 0xC1]),
+        ("pmovsxwq xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x24, 0xC1]),
+        ("pmovsxdq xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x25, 0xC1]),
+        // Zero-extending forms
+        ("pmovzxbw xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x30, 0xC1]),
+        ("pmovzxbd xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x31, 0xC1]),
+        ("pmovzxbq xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x32, 0xC1]),
+        ("pmovzxwd xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x33, 0xC1]),
+        ("pmovzxwq xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x34, 0xC1]),
+        ("pmovzxdq xmm0, xmm1",                     [0x66, 0x0F, 0x38, 0x35, 0xC1]),
+        // Memory source — widths vary
+        ("pmovsxbw xmm0, qword ptr [rdi]",          [0x66, 0x0F, 0x38, 0x20, 0x07]),
+        ("pmovsxbd xmm0, dword ptr [rdi]",          [0x66, 0x0F, 0x38, 0x21, 0x07]),
+        ("pmovsxbq xmm0, word ptr [rdi]",           [0x66, 0x0F, 0x38, 0x22, 0x07]),
+        ("pmovzxwq xmm0, dword ptr [rdi]",          [0x66, 0x0F, 0x38, 0x34, 0x07]),
+        // Extended XMM
+        ("pmovzxbw xmm15, xmm0",                    [0x66, 0x44, 0x0F, 0x38, 0x30, 0xF8]),
+    ]
+
+    func testSSEPackExtendAssembles() throws {
+        for (source, expected) in Self.ssePackExtendCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testSSEPackExtendDisassembles() throws {
+        for (source, bytes) in Self.ssePackExtendCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testSSEPackExtendWidthMismatchRejected() {
+        XCTAssertThrowsError(try X86Assembler.assemble("pmovsxbw xmm0, dword ptr [rdi]")) { _ in }
+    }
+
+    func testSSEPackExtendStreamRoundTrip() throws {
+        let source = Self.ssePackExtendCases.map(\.0).joined(separator: "\n")
+        let expected = Self.ssePackExtendCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

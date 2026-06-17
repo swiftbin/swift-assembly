@@ -72,6 +72,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "palignr" {
             return try parsePalignr(instruction)
         }
+        if let kind = X86.SSEPackExtendKind(rawValue: instruction.mnemonic) {
+            return try parseSSEPackExtend(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1005,6 +1008,26 @@ internal enum X86Parser {
             throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
         }
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// PMOVSX*/PMOVZX* — `xmm, xmm/m{16|32|64}` widening pack move.
+    private static func parseSSEPackExtend(_ kind: X86.SSEPackExtendKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let destination = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let source = try parseXMMOrMemorySource(
+            instruction.operands[1],
+            width: kind.sourceWidth,
+            mnemonic: kind.rawValue
+        )
+        return .ssePackExtend(kind, destination: destination, source: source)
     }
 
     /// SSSE3 `xmm, xmm/m128`.

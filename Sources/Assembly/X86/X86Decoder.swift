@@ -531,9 +531,6 @@ internal enum X86InstructionDecoder {
             throw AssemblerError.unknownEncoding(0x38)
         }
         let opcode3 = try cursor.takeByte()
-        guard let kind = X86.SSSE3Kind.decode(opcode3: opcode3) else {
-            throw AssemblerError.unknownEncoding(UInt32(opcode3))
-        }
         let modrm = try cursor.takeByte()
         let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let dst = X86.XMMRegister(number: regNum)
@@ -545,7 +542,13 @@ internal enum X86InstructionDecoder {
             let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
             source = .memory(mem)
         }
-        return Decoded(instruction: .ssse3(kind, destination: dst, source: source), length: cursor.consumed)
+        if let kind = X86.SSSE3Kind.decode(opcode3: opcode3) {
+            return Decoded(instruction: .ssse3(kind, destination: dst, source: source), length: cursor.consumed)
+        }
+        if let kind = X86.SSEPackExtendKind.decode(opcode3: opcode3) {
+            return Decoded(instruction: .ssePackExtend(kind, destination: dst, source: source), length: cursor.consumed)
+        }
+        throw AssemblerError.unknownEncoding(UInt32(opcode3))
     }
 
     private static func decodeThreeByte0F3A(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {

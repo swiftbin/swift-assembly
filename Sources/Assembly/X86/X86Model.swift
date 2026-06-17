@@ -768,6 +768,10 @@ internal enum X86 {
         /// and source and shifts the result right by the imm8 byte
         /// count, taking the low 16 bytes as the new destination.
         case palignr(destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
+        /// SSE4.1 PMOVSX* / PMOVZX* — sign- or zero-extend a packed
+        /// vector by widening each lane. Encoded as `66 0F 38 2x|3x /r`
+        /// with the source operand width determined by the kind.
+        case ssePackExtend(SSEPackExtendKind, destination: XMMRegister, source: XMMOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1104,6 +1108,59 @@ internal enum X86 {
         }
 
         static func decode(opcode3: UInt8) -> SSSE3Kind? {
+            allCases.first { $0.opcode3 == opcode3 }
+        }
+    }
+
+    /// SSE4.1 widening pack moves. `66 0F 38 2x` are sign-extending,
+    /// `3x` are zero-extending; the low nibble selects the lane widen.
+    enum SSEPackExtendKind: String, Equatable, CaseIterable {
+        // Sign-extending forms
+        case pmovsxbw       // 66 0F 38 20 — m64 → 8 words
+        case pmovsxbd       // 66 0F 38 21 — m32 → 4 dwords
+        case pmovsxbq       // 66 0F 38 22 — m16 → 2 qwords
+        case pmovsxwd       // 66 0F 38 23 — m64 → 4 dwords
+        case pmovsxwq       // 66 0F 38 24 — m32 → 2 qwords
+        case pmovsxdq       // 66 0F 38 25 — m64 → 2 qwords
+        // Zero-extending forms
+        case pmovzxbw       // 66 0F 38 30
+        case pmovzxbd       // 66 0F 38 31
+        case pmovzxbq       // 66 0F 38 32
+        case pmovzxwd       // 66 0F 38 33
+        case pmovzxwq       // 66 0F 38 34
+        case pmovzxdq       // 66 0F 38 35
+
+        var opcode3: UInt8 {
+            switch self {
+            case .pmovsxbw: return 0x20
+            case .pmovsxbd: return 0x21
+            case .pmovsxbq: return 0x22
+            case .pmovsxwd: return 0x23
+            case .pmovsxwq: return 0x24
+            case .pmovsxdq: return 0x25
+            case .pmovzxbw: return 0x30
+            case .pmovzxbd: return 0x31
+            case .pmovzxbq: return 0x32
+            case .pmovzxwd: return 0x33
+            case .pmovzxwq: return 0x34
+            case .pmovzxdq: return 0x35
+            }
+        }
+
+        /// Source operand width when in memory form. The packed XMM
+        /// register source always provides the full 16 bytes; only the
+        /// low N bytes are read.
+        var sourceWidth: RegisterWidth {
+            switch self {
+            case .pmovsxbw, .pmovsxwd, .pmovsxdq,
+                 .pmovzxbw, .pmovzxwd, .pmovzxdq: return .qword
+            case .pmovsxbd, .pmovsxwq,
+                 .pmovzxbd, .pmovzxwq:            return .dword
+            case .pmovsxbq, .pmovzxbq:            return .word
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> SSEPackExtendKind? {
             allCases.first { $0.opcode3 == opcode3 }
         }
     }
