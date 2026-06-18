@@ -197,6 +197,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeSSEBlendv(kind, destination: dst, source: src), patches: [])
         case .crc32(let dst, let src):
             return Encoded(bytes: try encodeCrc32(destination: dst, source: src), patches: [])
+        case .vexArithmetic(let kind, let size, let dst, let src1, let src2):
+            return Encoded(bytes: try encodeVexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), patches: [])
         }
     }
 
@@ -441,8 +443,8 @@ internal enum X86InstructionEncoder {
                 appendLE64(UInt64(bitPattern: imm), into: &bytes)
                 return bytes
             }
-        case .xmmword:
-            throw AssemblerError.unsupportedOperand("mov: xmmword immediate not supported")
+        case .xmmword, .ymmword:
+            throw AssemblerError.unsupportedOperand("mov: vector immediate not supported")
         }
     }
 
@@ -1698,6 +1700,33 @@ internal enum X86InstructionEncoder {
         return bytes
     }
 
+    // MARK: - AVX VEX arithmetic
+
+    /// VEX-encoded three-operand FP arithmetic. Layout:
+    ///   [VEX prefix] [opcode] [ModR/M] [SIB?] [disp?]
+    /// with `dst` in ModR/M.reg, `src1` in VEX.vvvv (inverted at the
+    /// byte level by VEX.build), and `src2` in ModR/M.rm or memory.
+    private static func encodeVexArithmetic(_ kind: X86.VexArithmeticKind, size: X86.AVXVectorSize, destination dst: UInt8, source1 src1: UInt8, source2: X86.VectorOrMemory) throws -> [UInt8] {
+        let lBit = kind.isScalar ? 0 : size.lBit
+        let dstHigh = (dst >> 3) & 1
+        let dstLow = dst & 0x7
+        switch source2 {
+        case .register(let rm):
+            let rmHigh = (rm >> 3) & 1
+            let rmLow = rm & 0x7
+            var bytes = X86.VEX.build(r: dstHigh, x: 0, b: rmHigh, escape: X86.VEX.escape0F, w: 0, vvvv: src1, l: lBit, pp: kind.ppBits)
+            bytes.append(kind.opcode)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dstLow, rm: rmLow))
+            return bytes
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dstLow)
+            var bytes = X86.VEX.build(r: dstHigh, x: rexX, b: rexB, escape: X86.VEX.escape0F, w: 0, vvvv: src1, l: lBit, pp: kind.ppBits)
+            bytes.append(kind.opcode)
+            bytes.append(contentsOf: addressing)
+            return bytes
+        }
+    }
+
     // MARK: - MOVD / MOVQ (XMM ↔ GPR/memory)
 
     /// `66 [REX.W] 0F 6E/7E /r` — load (6E) or store (7E) the low
@@ -2329,8 +2358,8 @@ internal enum X86InstructionEncoder {
             appendLE16(UInt16(truncatingIfNeeded: imm), into: &bytes)
         case .dword, .qword:
             appendLE32(UInt32(truncatingIfNeeded: imm), into: &bytes)
-        case .xmmword:
-            throw AssemblerError.unsupportedOperand("xmmword immediate not supported")
+        case .xmmword, .ymmword:
+            throw AssemblerError.unsupportedOperand("vector immediate not supported")
         }
     }
 

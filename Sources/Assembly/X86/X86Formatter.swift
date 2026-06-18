@@ -196,6 +196,15 @@ internal enum X86InstructionFormatter {
             case .memory(let m, let w): srcStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
             }
             return "crc32 \(X86.RegisterTable.canonicalName(for: dst)), \(srcStr)"
+        case .vexArithmetic(let kind, let size, let dst, let src1, let src2):
+            let prefix = (kind.isScalar || size == .xmm) ? "xmm" : "ymm"
+            let memWidth = kind.memoryWidth(size: size)
+            let src2Str: String
+            switch src2 {
+            case .register(let n): src2Str = "\(prefix)\(n)"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(memWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(prefix)\(dst), \(prefix)\(src1), \(src2Str)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
@@ -340,6 +349,7 @@ internal enum X86InstructionFormatter {
         case .dword:   return "dword ptr"
         case .qword:   return "qword ptr"
         case .xmmword: return "xmmword ptr"
+        case .ymmword: return "ymmword ptr"
         }
     }
 

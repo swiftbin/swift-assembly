@@ -102,6 +102,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "crc32" {
             return try parseCrc32(instruction)
         }
+        if let kind = X86.VexArithmeticKind(rawValue: instruction.mnemonic) {
+            return try parseVexArithmetic(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1037,6 +1040,77 @@ internal enum X86Parser {
         return .sseShuffle(kind, destination: destination, source: source, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
+    /// AVX V-prefixed three-operand FP arithmetic
+    /// (VADD/VSUB/VMUL/VDIV PS/PD/SS/SD).
+    private static func parseVexArithmetic(_ kind: X86.VexArithmeticKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: kind.isScalar)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: kind.isScalar)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        let src2 = try parseVectorOrMemory(
+            instruction.operands[2],
+            size: size,
+            memoryWidth: kind.memoryWidth(size: size),
+            mnemonic: kind.rawValue
+        )
+        return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    private static func parseVectorRegister(_ text: String, mnemonic: String, scalarOnly: Bool) throws -> (X86.AVXVectorSize, UInt8) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let xmm = parseXMMRegister(trimmed) {
+            return (.xmm, xmm.number)
+        }
+        if let ymm = parseYMMRegister(trimmed) {
+            guard !scalarOnly else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): YMM operands are not allowed for scalar instructions")
+            }
+            return (.ymm, ymm.number)
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected an XMM or YMM register")
+    }
+
+    static func parseYMMRegister(_ text: String) -> X86.YMMRegister? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard trimmed.hasPrefix("ymm") else { return nil }
+        guard let n = UInt8(trimmed.dropFirst(3)), n < 16 else { return nil }
+        return X86.YMMRegister(number: n)
+    }
+
+    private static func parseVectorOrMemory(_ text: String, size: X86.AVXVectorSize, memoryWidth: X86.RegisterWidth, mnemonic: String) throws -> X86.VectorOrMemory {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let xmm = parseXMMRegister(trimmed) {
+            guard size == .xmm else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): expected a YMM register")
+            }
+            return .register(xmm.number)
+        }
+        if let ymm = parseYMMRegister(trimmed) {
+            guard size == .ymm else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): expected an XMM register")
+            }
+            return .register(ymm.number)
+        }
+        if let (width, body) = stripSizeHint(trimmed) {
+            guard width == memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): memory operand width disagrees with mnemonic")
+            }
+            return .memory(try memoryOperand(body))
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed))
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected a vector register or memory operand")
+    }
+
     /// CRC32 — `r32_or_r64, r/m{8|16|32|64}`. The destination width is
     /// dictated by the source: r32 for byte/word/dword sources, r64
     /// for qword sources.
@@ -1930,11 +2004,13 @@ internal enum X86Parser {
     private static func stripSizeHint(_ text: String) -> (width: X86.RegisterWidth, rest: String)? {
         let lower = text.lowercased()
         let hints: [(prefix: String, width: X86.RegisterWidth)] = [
+            ("ymmword ptr", .ymmword),
             ("xmmword ptr", .xmmword),
             ("byte ptr",    .byte),
             ("word ptr",    .word),
             ("dword ptr",   .dword),
             ("qword ptr",   .qword),
+            ("ymmword",     .ymmword),
             ("xmmword",     .xmmword),
             ("byte",        .byte),
             ("word",        .word),
@@ -2026,8 +2102,8 @@ internal enum X86Parser {
             }
         case .qword:
             break
-        case .xmmword:
-            throw AssemblerError.unsupportedOperand("\(mnemonic): immediate with xmmword width not supported")
+        case .xmmword, .ymmword:
+            throw AssemblerError.unsupportedOperand("\(mnemonic): immediate with vector width not supported")
         }
     }
 

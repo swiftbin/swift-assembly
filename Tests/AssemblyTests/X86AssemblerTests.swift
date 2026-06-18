@@ -3600,4 +3600,57 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18a AVX V-arithmetic (VEX foundation)
+
+    private static let vexArithmeticCases: [(String, [UInt8])] = [
+        // VADDPS / VADDPD — packed singles & doubles, XMM and YMM
+        ("vaddps xmm0, xmm1, xmm2",                     [0xC5, 0xF0, 0x58, 0xC2]),
+        ("vaddpd xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0x58, 0xC2]),
+        ("vaddps ymm0, ymm1, ymm2",                     [0xC5, 0xF4, 0x58, 0xC2]),
+        ("vaddpd ymm0, ymm1, ymm2",                     [0xC5, 0xF5, 0x58, 0xC2]),
+        // VADDSS / VADDSD — scalar variants
+        ("vaddss xmm0, xmm1, xmm2",                     [0xC5, 0xF2, 0x58, 0xC2]),
+        ("vaddsd xmm0, xmm1, xmm2",                     [0xC5, 0xF3, 0x58, 0xC2]),
+        // VSUB / VMUL / VDIV cover the rest of the matrix
+        ("vsubps xmm0, xmm1, xmm2",                     [0xC5, 0xF0, 0x5C, 0xC2]),
+        ("vmulps ymm0, ymm1, ymm2",                     [0xC5, 0xF4, 0x59, 0xC2]),
+        ("vdivpd xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0x5E, 0xC2]),
+        ("vdivsd xmm0, xmm1, xmm2",                     [0xC5, 0xF3, 0x5E, 0xC2]),
+        // Extended XMM/YMM force the 3-byte VEX form
+        // xmm15 dst — only R needs flipping; 2-byte VEX still fits.
+        ("vaddps xmm15, xmm1, xmm2",                    [0xC5, 0x70, 0x58, 0xFA]),
+        // xmm15 source forces 3-byte VEX (B must be set).
+        ("vaddps xmm0, xmm1, xmm15",                    [0xC4, 0xC1, 0x70, 0x58, 0xC7]),
+        ("vaddps ymm15, ymm1, ymm2",                    [0xC5, 0x74, 0x58, 0xFA]),
+        // Memory source — packed (m128) and scalar (m32/m64)
+        ("vaddps xmm0, xmm1, xmmword ptr [rdi]",        [0xC5, 0xF0, 0x58, 0x07]),
+        ("vaddpd ymm0, ymm1, ymmword ptr [rdi]",        [0xC5, 0xF5, 0x58, 0x07]),
+        ("vaddss xmm0, xmm1, dword ptr [rdi]",          [0xC5, 0xF2, 0x58, 0x07]),
+        ("vaddsd xmm0, xmm1, qword ptr [rdi]",          [0xC5, 0xF3, 0x58, 0x07]),
+    ]
+
+    func testVexArithmeticAssembles() throws {
+        for (source, expected) in Self.vexArithmeticCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexArithmeticDisassembles() throws {
+        for (source, bytes) in Self.vexArithmeticCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexArithmeticRejectsMixedSizes() {
+        XCTAssertThrowsError(try X86Assembler.assemble("vaddps ymm0, xmm1, ymm2")) { _ in }
+    }
+
+    func testVexArithmeticStreamRoundTrip() throws {
+        let source = Self.vexArithmeticCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexArithmeticCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

@@ -14,6 +14,7 @@ internal enum X86 {
         case dword = 32
         case qword = 64
         case xmmword = 128
+        case ymmword = 256
     }
 
     /// A 128-bit SSE/AVX register (XMM0..XMM15). Distinct from `Register`
@@ -31,6 +32,36 @@ internal enum X86 {
     /// m64 for MOVSD, m128 for the rest).
     enum XMMOrMemory: Equatable {
         case register(XMMRegister)
+        case memory(MemoryOperand)
+    }
+
+    /// A 256-bit YMM register. The number space is identical to XMM
+    /// (0–15) — the vector width is encoded by the VEX.L bit, not the
+    /// register identity.
+    struct YMMRegister: Equatable {
+        var number: UInt8
+
+        var lowBits: UInt8 { number & 0x7 }
+        var highBit: UInt8 { (number >> 3) & 0x1 }
+    }
+
+    /// AVX vector size selector. `xmm` (128-bit, VEX.L=0) and `ymm`
+    /// (256-bit, VEX.L=1) cover the bulk of the AVX/AVX2 surface area.
+    enum AVXVectorSize: Equatable {
+        case xmm        // 128-bit, VEX.L=0
+        case ymm        // 256-bit, VEX.L=1
+
+        var lBit: UInt8 { self == .ymm ? 1 : 0 }
+
+        /// Memory operand width for a `xmm/m128` or `ymm/m256` source.
+        var packedMemoryWidth: RegisterWidth { self == .ymm ? .ymmword : .xmmword }
+    }
+
+    /// AVX vector operand: an XMM/YMM register (encoded as a 4-bit
+    /// register number, vector size dictated by the instruction
+    /// context) or a memory reference.
+    enum VectorOrMemory: Equatable {
+        case register(UInt8)        // 0–15
         case memory(MemoryOperand)
     }
 
@@ -75,6 +106,7 @@ internal enum X86 {
             case .dword:   return "dword"
             case .qword:   return "qword"
             case .xmmword: return "xmmword"
+            case .ymmword: return "ymmword"
             }
         }
     }
@@ -801,6 +833,12 @@ internal enum X86 {
         /// Encoded as `F2 [66] [REX] 0F 38 F0|F1 /r`: F0 with a byte
         /// source, F1 otherwise; 0x66 narrows the source to word.
         case crc32(destination: Register, source: RegisterOrMemory)
+        /// AVX packed/scalar three-operand FP arithmetic: VADD/VSUB/
+        /// VMUL/VDIV PS/PD/SS/SD. The packed forms can be either 128 or
+        /// 256 bits (xmm vs ymm); the scalar forms (SS/SD) are
+        /// 128-bit only. Encoded with a VEX prefix; the kind picks the
+        /// mandatory prefix and 0F-escape, and `size` picks VEX.L.
+        case vexArithmetic(VexArithmeticKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1090,6 +1128,72 @@ internal enum X86 {
 
         static func decode(mandatoryPrefix: UInt8, opcode2: UInt8) -> SSE3Kind? {
             allCases.first { $0.mandatoryPrefix == mandatoryPrefix && $0.opcode2 == opcode2 }
+        }
+    }
+
+    /// AVX VEX-encoded 3-operand FP arithmetic. The kind picks the
+    /// mandatory prefix (in VEX.pp) and the opcode byte; the size
+    /// (xmm/ymm) picks VEX.L.
+    enum VexArithmeticKind: String, Equatable, CaseIterable {
+        case vaddps         // VEX.128/256 0F 58 — packed singles
+        case vaddpd         // VEX.128/256 66 0F 58 — packed doubles
+        case vaddss         // VEX.LIG F3 0F 58 — scalar single
+        case vaddsd         // VEX.LIG F2 0F 58 — scalar double
+        case vsubps         // 0F 5C
+        case vsubpd         // 66 0F 5C
+        case vsubss         // F3 0F 5C
+        case vsubsd         // F2 0F 5C
+        case vmulps         // 0F 59
+        case vmulpd         // 66 0F 59
+        case vmulss         // F3 0F 59
+        case vmulsd         // F2 0F 59
+        case vdivps         // 0F 5E
+        case vdivpd         // 66 0F 5E
+        case vdivss         // F3 0F 5E
+        case vdivsd         // F2 0F 5E
+
+        /// `pp` bits for the VEX prefix: 0=none, 1=66, 2=F3, 3=F2.
+        var ppBits: UInt8 {
+            switch self {
+            case .vaddps, .vsubps, .vmulps, .vdivps: return 0b00
+            case .vaddpd, .vsubpd, .vmulpd, .vdivpd: return 0b01
+            case .vaddss, .vsubss, .vmulss, .vdivss: return 0b10
+            case .vaddsd, .vsubsd, .vmulsd, .vdivsd: return 0b11
+            }
+        }
+
+        /// Single-byte opcode after the VEX prefix.
+        var opcode: UInt8 {
+            switch self {
+            case .vaddps, .vaddpd, .vaddss, .vaddsd: return 0x58
+            case .vsubps, .vsubpd, .vsubss, .vsubsd: return 0x5C
+            case .vmulps, .vmulpd, .vmulss, .vmulsd: return 0x59
+            case .vdivps, .vdivpd, .vdivss, .vdivsd: return 0x5E
+            }
+        }
+
+        /// True when only the 128-bit form is defined (scalar SS/SD
+        /// variants — VEX.L is ignored, but we still emit L=0).
+        var isScalar: Bool {
+            switch self {
+            case .vaddss, .vaddsd, .vsubss, .vsubsd,
+                 .vmulss, .vmulsd, .vdivss, .vdivsd: return true
+            default:                                  return false
+            }
+        }
+
+        /// Memory operand width for the third operand: m128 / m256 for
+        /// packed; m32 for SS; m64 for SD.
+        func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
+            switch self {
+            case .vaddss, .vsubss, .vmulss, .vdivss: return .dword
+            case .vaddsd, .vsubsd, .vmulsd, .vdivsd: return .qword
+            default:                                  return size.packedMemoryWidth
+            }
+        }
+
+        static func decode(ppBits: UInt8, opcode: UInt8) -> VexArithmeticKind? {
+            allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
         }
     }
 

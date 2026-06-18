@@ -132,6 +132,18 @@ internal enum X86InstructionDecoder {
         let prefixes = cursor.consumePrefixes()
         let opcode = try cursor.takeByte()
 
+        // VEX-encoded instructions: the prefix is C5 (2-byte) or C4
+        // (3-byte). We unpack the prefix and dispatch by kind here.
+        if X86.VEX.matches2(opcode) {
+            let byte2 = try cursor.takeByte()
+            return try decodeVex(decoded: X86.VEX.parse2(byte2: byte2), cursor: &cursor)
+        }
+        if X86.VEX.matches3(opcode) {
+            let byte2 = try cursor.takeByte()
+            let byte3 = try cursor.takeByte()
+            return try decodeVex(decoded: X86.VEX.parse3(byte2: byte2, byte3: byte3), cursor: &cursor)
+        }
+
         // Binary ALU MR/RM/I family — 8 op groups of 6 opcodes in 0x00..0x3D.
         if opcode <= 0x3D, (opcode & 0x07) <= 5,
            let kind = X86.BinaryAluKind.decode(opcodeIndex: opcode >> 3) {
@@ -733,6 +745,58 @@ internal enum X86InstructionDecoder {
         let source = X86.XMMRegister(number: rmNum)
         let imm = try cursor.takeByte()
         return Decoded(instruction: .sseExtractLane(.pextrw, destination: .register(destination), source: source, immediate: imm), length: cursor.consumed)
+    }
+
+    // MARK: - VEX-encoded instructions
+
+    /// Synthesize a Prefixes record from the unpacked VEX fields so
+    /// the shared ModR/M decoder can re-use the rex* accessors.
+    private static func prefixesFromVex(_ v: X86.VEX.Decoded) -> Prefixes {
+        let rexByte: UInt8 = 0x40
+            | X86.REX.w.insert(v.w)
+            | X86.REX.r.insert(v.r)
+            | X86.REX.x.insert(v.x)
+            | X86.REX.b.insert(v.b)
+        var prefixes = Prefixes(rex: rexByte)
+        // VEX.pp re-asserts the mandatory prefix; surface it through
+        // the same flags SSE decoders inspect.
+        switch v.pp {
+        case 0b01: prefixes.operandSize = true
+        case 0b10: prefixes.f3Prefix    = true
+        case 0b11: prefixes.f2Prefix    = true
+        default:   break
+        }
+        return prefixes
+    }
+
+    private static func decodeVex(decoded v: X86.VEX.Decoded, cursor: inout Cursor) throws -> Decoded {
+        let prefixes = prefixesFromVex(v)
+        let opcode = try cursor.takeByte()
+        // For Phase 18a only the 0F escape is dispatched; the 0F 38 and
+        // 0F 3A escapes will land here when later AVX phases add cases.
+        guard v.escape == X86.VEX.escape0F else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        if let kind = X86.VexArithmeticKind.decode(ppBits: v.pp, opcode: opcode) {
+            return try decodeVexArithmetic(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
+        }
+        throw AssemblerError.unknownEncoding(UInt32(opcode))
+    }
+
+    private static func decodeVexArithmetic(_ kind: X86.VexArithmeticKind, prefixes: Prefixes, vvvv: UInt8, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let size: X86.AVXVectorSize = (lBit == 1 && !kind.isScalar) ? .ymm : .xmm
+        let modrm = try cursor.takeByte()
+        let dst = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let src1 = vvvv & 0xF
+        let src2: X86.VectorOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rm = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            src2 = .register(rm)
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            src2 = .memory(mem)
+        }
+        return Decoded(instruction: .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
     }
 
     // MARK: - SSE3
@@ -1388,7 +1452,7 @@ internal enum X86InstructionDecoder {
             case .word:  immediate = Int64(try cursor.takeLE16())
             case .dword: immediate = Int64(try cursor.takeLE32())
             case .qword: immediate = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
+            case .byte, .xmmword, .ymmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
             }
         }
         return Decoded(
@@ -1463,7 +1527,7 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-        case .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
+        case .xmmword, .ymmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
         let acc = X86.Register(number: 0, width: width)
         return Decoded(instruction: .test(left: .register(acc), right: .immediate(imm)), length: cursor.consumed)
@@ -1486,7 +1550,7 @@ internal enum X86InstructionDecoder {
             case .word:  imm = Int64(try cursor.takeLE16())
             case .dword: imm = Int64(try cursor.takeLE32())
             case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
+            case .xmmword, .ymmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
             }
             return Decoded(instruction: .test(left: target, right: .immediate(imm)), length: cursor.consumed)
         case 2, 3:
@@ -1594,7 +1658,7 @@ internal enum X86InstructionDecoder {
             case .word:  imm = Int64(try cursor.takeLE16())
             case .dword: imm = Int64(try cursor.takeLE32())
             case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(variant))
+            case .byte, .xmmword, .ymmword: throw AssemblerError.unknownEncoding(UInt32(variant))
             }
             let rax = X86.Register(number: 0, width: width)
             return Decoded(
@@ -1629,7 +1693,7 @@ internal enum X86InstructionDecoder {
             case .word:  imm = Int64(try cursor.takeLE16())
             case .dword: imm = Int64(try cursor.takeLE32())
             case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-            case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
+            case .byte, .xmmword, .ymmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
             }
         default:
             throw AssemblerError.unknownEncoding(UInt32(opcode))
@@ -1768,7 +1832,7 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(bitPattern: try cursor.takeLE64())
-        case .byte, .xmmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
+        case .byte, .xmmword, .ymmword: throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
         return Decoded(instruction: .mov(destination: .register(destination), source: .immediate(imm)), length: cursor.consumed)
     }
@@ -1797,7 +1861,7 @@ internal enum X86InstructionDecoder {
         case .word:  imm = Int64(try cursor.takeLE16())
         case .dword: imm = Int64(try cursor.takeLE32())
         case .qword: imm = Int64(Int32(bitPattern: try cursor.takeLE32()))
-        case .byte, .xmmword: throw AssemblerError.unknownEncoding(0xC7)
+        case .byte, .xmmword, .ymmword: throw AssemblerError.unknownEncoding(0xC7)
         }
         return Decoded(instruction: .mov(destination: destination, source: .immediate(imm)), length: cursor.consumed)
     }

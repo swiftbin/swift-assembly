@@ -39,6 +39,91 @@ extension X86 {
         }
     }
 
+    /// Byte-level descriptors for the AVX VEX prefix. Two layouts:
+    /// `C5 byte2` (2-byte) and `C4 byte2 byte3` (3-byte). Both encode
+    /// REX.R/X/B (inverted), a 4-bit second-source register selector
+    /// (vvvv, also inverted), a vector-length bit (L), the mandatory
+    /// prefix slot (pp), and — for the 3-byte form — REX.W and the
+    /// opcode escape (mmmmm: 1=0F, 2=0F 38, 3=0F 3A).
+    enum VEX {
+        static let twoByteByte: UInt8 = 0xC5
+        static let threeByteByte: UInt8 = 0xC4
+
+        static func matches2(_ byte: UInt8) -> Bool { byte == twoByteByte }
+        static func matches3(_ byte: UInt8) -> Bool { byte == threeByteByte }
+
+        /// Escape-map values for the 3-byte VEX `mmmmm` field.
+        static let escape0F:   UInt8 = 0b00001
+        static let escape0F38: UInt8 = 0b00010
+        static let escape0F3A: UInt8 = 0b00011
+
+        /// Build a 2-byte VEX prefix when all three of REX.X/B and W
+        /// are zero and the escape map is 0F. `r`/`vvvv`/`l`/`pp` are
+        /// passed in their natural (non-inverted) sense; this builder
+        /// flips R and vvvv before packing.
+        static func build2(r: UInt8, vvvv: UInt8, l: UInt8, pp: UInt8) -> [UInt8] {
+            let byte2 = (((~r) & 1) << 7) | ((((~vvvv) & 0xF) & 0xF) << 3) | ((l & 1) << 2) | (pp & 0b11)
+            return [twoByteByte, byte2]
+        }
+
+        /// Build a 3-byte VEX prefix. All inversions (R/X/B/vvvv) are
+        /// handled here; the caller passes natural-sense fields.
+        static func build3(r: UInt8, x: UInt8, b: UInt8, escape: UInt8, w: UInt8, vvvv: UInt8, l: UInt8, pp: UInt8) -> [UInt8] {
+            let byte2 = (((~r) & 1) << 7) | (((~x) & 1) << 6) | (((~b) & 1) << 5) | (escape & 0b11111)
+            let byte3 = ((w & 1) << 7) | ((((~vvvv) & 0xF) & 0xF) << 3) | ((l & 1) << 2) | (pp & 0b11)
+            return [threeByteByte, byte2, byte3]
+        }
+
+        /// Choose the shortest VEX form that fits. Use 2-byte VEX when
+        /// X=B=W=0 and escape=0F; otherwise use the 3-byte form.
+        static func build(r: UInt8, x: UInt8, b: UInt8, escape: UInt8, w: UInt8, vvvv: UInt8, l: UInt8, pp: UInt8) -> [UInt8] {
+            if x == 0 && b == 0 && w == 0 && escape == escape0F {
+                return build2(r: r, vvvv: vvvv, l: l, pp: pp)
+            }
+            return build3(r: r, x: x, b: b, escape: escape, w: w, vvvv: vvvv, l: l, pp: pp)
+        }
+
+        /// Decoded VEX fields, with R/X/B/vvvv already un-inverted.
+        struct Decoded {
+            let r: UInt8
+            let x: UInt8
+            let b: UInt8
+            let w: UInt8
+            let vvvv: UInt8
+            let l: UInt8
+            let pp: UInt8
+            let escape: UInt8
+        }
+
+        /// Parse a 2-byte VEX given its second byte.
+        static func parse2(byte2: UInt8) -> Decoded {
+            Decoded(
+                r: (~(byte2 >> 7)) & 1,
+                x: 0,
+                b: 0,
+                w: 0,
+                vvvv: (~(byte2 >> 3)) & 0xF,
+                l: (byte2 >> 2) & 1,
+                pp: byte2 & 0b11,
+                escape: escape0F
+            )
+        }
+
+        /// Parse a 3-byte VEX given its second and third bytes.
+        static func parse3(byte2: UInt8, byte3: UInt8) -> Decoded {
+            Decoded(
+                r: (~(byte2 >> 7)) & 1,
+                x: (~(byte2 >> 6)) & 1,
+                b: (~(byte2 >> 5)) & 1,
+                w: (byte3 >> 7) & 1,
+                vvvv: (~(byte3 >> 3)) & 0xF,
+                l: (byte3 >> 2) & 1,
+                pp: byte3 & 0b11,
+                escape: byte2 & 0b11111
+            )
+        }
+    }
+
     /// Byte-level descriptor for the ModR/M byte (`mod[7:6] | reg[5:3] | rm[2:0]`).
     enum ModRM {
         static let mod = ByteField(offset: 6, width: 2)
