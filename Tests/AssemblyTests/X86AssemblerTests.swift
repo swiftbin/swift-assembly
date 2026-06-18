@@ -3561,4 +3561,43 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 17 AES-NI + PCLMULQDQ
+
+    private static let aesPclmulCases: [(String, [UInt8])] = [
+        // AES family (0F 38 DB..DF)
+        ("aesimc xmm0, xmm1",                           [0x66, 0x0F, 0x38, 0xDB, 0xC1]),
+        ("aesenc xmm0, xmm1",                           [0x66, 0x0F, 0x38, 0xDC, 0xC1]),
+        ("aesenclast xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0xDD, 0xC1]),
+        ("aesdec xmm0, xmm1",                           [0x66, 0x0F, 0x38, 0xDE, 0xC1]),
+        ("aesdeclast xmm0, xmm1",                       [0x66, 0x0F, 0x38, 0xDF, 0xC1]),
+        // AESKEYGENASSIST + PCLMULQDQ (0F 3A + imm8)
+        ("aeskeygenassist xmm0, xmm1, 16",              [0x66, 0x0F, 0x3A, 0xDF, 0xC1, 0x10]),
+        ("pclmulqdq xmm0, xmm1, 17",                    [0x66, 0x0F, 0x3A, 0x44, 0xC1, 0x11]),
+        // Memory source
+        ("aesenc xmm0, xmmword ptr [rdi]",              [0x66, 0x0F, 0x38, 0xDC, 0x07]),
+        ("pclmulqdq xmm0, xmmword ptr [rdi], 0",        [0x66, 0x0F, 0x3A, 0x44, 0x07, 0x00]),
+        // Extended XMM
+        ("aesenc xmm15, xmm0",                          [0x66, 0x44, 0x0F, 0x38, 0xDC, 0xF8]),
+    ]
+
+    func testAESPclmulAssembles() throws {
+        for (source, expected) in Self.aesPclmulCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testAESPclmulDisassembles() throws {
+        for (source, bytes) in Self.aesPclmulCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testAESPclmulStreamRoundTrip() throws {
+        let source = Self.aesPclmulCases.map(\.0).joined(separator: "\n")
+        let expected = Self.aesPclmulCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

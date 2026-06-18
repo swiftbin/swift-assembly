@@ -1212,6 +1212,12 @@ internal enum X86 {
         case pmulld         // 66 0F 38 40 — packed mul low dword
         case phminposuw     // 66 0F 38 41 — packed horizontal min unsigned word
         case pcmpgtq        // 66 0F 38 37 — SSE4.2 packed compare gt qword
+        // AES-NI 0F 38 family
+        case aesimc         // 66 0F 38 DB — AES inverse mix-columns
+        case aesenc         // 66 0F 38 DC — AES encrypt round
+        case aesenclast     // 66 0F 38 DD — AES encrypt last round
+        case aesdec         // 66 0F 38 DE — AES decrypt round
+        case aesdeclast     // 66 0F 38 DF — AES decrypt last round
 
         var opcode3: UInt8 {
             switch self {
@@ -1230,6 +1236,11 @@ internal enum X86 {
             case .pmaxud:      return 0x3F
             case .pmulld:      return 0x40
             case .phminposuw:  return 0x41
+            case .aesimc:      return 0xDB
+            case .aesenc:      return 0xDC
+            case .aesenclast:  return 0xDD
+            case .aesdec:      return 0xDE
+            case .aesdeclast:  return 0xDF
             }
         }
 
@@ -1256,6 +1267,9 @@ internal enum X86 {
         case pcmpestri      // 66 0F 3A 61 — explicit length, index result
         case pcmpistrm      // 66 0F 3A 62 — implicit length, mask result
         case pcmpistri      // 66 0F 3A 63 — implicit length, index result
+        // PCLMULQDQ + AES-NI key-schedule helper
+        case pclmulqdq          // 66 0F 3A 44
+        case aeskeygenassist    // 66 0F 3A DF
 
         var opcode3: UInt8 {
             switch self {
@@ -1273,6 +1287,8 @@ internal enum X86 {
             case .pcmpestri: return 0x61
             case .pcmpistrm: return 0x62
             case .pcmpistri: return 0x63
+            case .pclmulqdq:       return 0x44
+            case .aeskeygenassist: return 0xDF
             }
         }
 
