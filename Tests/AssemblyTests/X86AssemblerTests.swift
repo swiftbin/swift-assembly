@@ -3653,4 +3653,51 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18b VEX MIN/MAX/AND/ANDN/OR/XOR
+
+    private static let vexArithmeticExtraCases: [(String, [UInt8])] = [
+        // MIN / MAX — packed
+        ("vminps xmm0, xmm1, xmm2",                     [0xC5, 0xF0, 0x5D, 0xC2]),
+        ("vminpd ymm0, ymm1, ymm2",                     [0xC5, 0xF5, 0x5D, 0xC2]),
+        ("vmaxps xmm0, xmm1, xmm2",                     [0xC5, 0xF0, 0x5F, 0xC2]),
+        ("vmaxpd ymm0, ymm1, ymm2",                     [0xC5, 0xF5, 0x5F, 0xC2]),
+        // MIN / MAX — scalar
+        ("vminss xmm0, xmm1, xmm2",                     [0xC5, 0xF2, 0x5D, 0xC2]),
+        ("vminsd xmm0, xmm1, xmm2",                     [0xC5, 0xF3, 0x5D, 0xC2]),
+        ("vmaxss xmm0, xmm1, dword ptr [rdi]",          [0xC5, 0xF2, 0x5F, 0x07]),
+        ("vmaxsd xmm0, xmm1, qword ptr [rdi]",          [0xC5, 0xF3, 0x5F, 0x07]),
+        // AND / ANDN / OR / XOR — packed only
+        ("vandps xmm0, xmm1, xmm2",                     [0xC5, 0xF0, 0x54, 0xC2]),
+        ("vandpd ymm0, ymm1, ymm2",                     [0xC5, 0xF5, 0x54, 0xC2]),
+        ("vandnps xmm0, xmm1, xmm2",                    [0xC5, 0xF0, 0x55, 0xC2]),
+        ("vandnpd ymm0, ymm1, ymm2",                    [0xC5, 0xF5, 0x55, 0xC2]),
+        ("vorps xmm0, xmm1, xmm2",                      [0xC5, 0xF0, 0x56, 0xC2]),
+        ("vorpd ymm0, ymm1, ymm2",                      [0xC5, 0xF5, 0x56, 0xC2]),
+        ("vxorps xmm0, xmm1, xmm2",                     [0xC5, 0xF0, 0x57, 0xC2]),
+        ("vxorpd ymm0, ymm1, ymm2",                     [0xC5, 0xF5, 0x57, 0xC2]),
+        // Memory + extended register
+        ("vxorps ymm15, ymm0, ymmword ptr [rdi]",       [0xC5, 0x7C, 0x57, 0x3F]),
+        ("vmaxpd xmm0, xmm1, xmmword ptr [rsi]",        [0xC5, 0xF1, 0x5F, 0x06]),
+    ]
+
+    func testVexArithmeticExtraAssembles() throws {
+        for (source, expected) in Self.vexArithmeticExtraCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexArithmeticExtraDisassembles() throws {
+        for (source, bytes) in Self.vexArithmeticExtraCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexArithmeticExtraStreamRoundTrip() throws {
+        let source = Self.vexArithmeticExtraCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexArithmeticExtraCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

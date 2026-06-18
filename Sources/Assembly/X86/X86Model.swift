@@ -1151,14 +1151,37 @@ internal enum X86 {
         case vdivpd         // 66 0F 5E
         case vdivss         // F3 0F 5E
         case vdivsd         // F2 0F 5E
+        case vminps         // 0F 5D
+        case vminpd         // 66 0F 5D
+        case vminss         // F3 0F 5D
+        case vminsd         // F2 0F 5D
+        case vmaxps         // 0F 5F
+        case vmaxpd         // 66 0F 5F
+        case vmaxss         // F3 0F 5F
+        case vmaxsd         // F2 0F 5F
+        // Bit-wise logic on packed singles/doubles. No scalar form.
+        case vandps         // 0F 54
+        case vandpd         // 66 0F 54
+        case vandnps        // 0F 55
+        case vandnpd        // 66 0F 55
+        case vorps          // 0F 56
+        case vorpd          // 66 0F 56
+        case vxorps         // 0F 57
+        case vxorpd         // 66 0F 57
 
         /// `pp` bits for the VEX prefix: 0=none, 1=66, 2=F3, 3=F2.
         var ppBits: UInt8 {
             switch self {
-            case .vaddps, .vsubps, .vmulps, .vdivps: return 0b00
-            case .vaddpd, .vsubpd, .vmulpd, .vdivpd: return 0b01
-            case .vaddss, .vsubss, .vmulss, .vdivss: return 0b10
-            case .vaddsd, .vsubsd, .vmulsd, .vdivsd: return 0b11
+            case .vaddps, .vsubps, .vmulps, .vdivps,
+                 .vminps, .vmaxps, .vandps, .vandnps,
+                 .vorps,  .vxorps: return 0b00
+            case .vaddpd, .vsubpd, .vmulpd, .vdivpd,
+                 .vminpd, .vmaxpd, .vandpd, .vandnpd,
+                 .vorpd,  .vxorpd: return 0b01
+            case .vaddss, .vsubss, .vmulss, .vdivss,
+                 .vminss, .vmaxss: return 0b10
+            case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
+                 .vminsd, .vmaxsd: return 0b11
             }
         }
 
@@ -1169,6 +1192,12 @@ internal enum X86 {
             case .vsubps, .vsubpd, .vsubss, .vsubsd: return 0x5C
             case .vmulps, .vmulpd, .vmulss, .vmulsd: return 0x59
             case .vdivps, .vdivpd, .vdivss, .vdivsd: return 0x5E
+            case .vminps, .vminpd, .vminss, .vminsd: return 0x5D
+            case .vmaxps, .vmaxpd, .vmaxss, .vmaxsd: return 0x5F
+            case .vandps, .vandpd:                    return 0x54
+            case .vandnps, .vandnpd:                  return 0x55
+            case .vorps,  .vorpd:                     return 0x56
+            case .vxorps, .vxorpd:                    return 0x57
             }
         }
 
@@ -1177,7 +1206,8 @@ internal enum X86 {
         var isScalar: Bool {
             switch self {
             case .vaddss, .vaddsd, .vsubss, .vsubsd,
-                 .vmulss, .vmulsd, .vdivss, .vdivsd: return true
+                 .vmulss, .vmulsd, .vdivss, .vdivsd,
+                 .vminss, .vminsd, .vmaxss, .vmaxsd: return true
             default:                                  return false
             }
         }
@@ -1186,9 +1216,11 @@ internal enum X86 {
         /// packed; m32 for SS; m64 for SD.
         func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
             switch self {
-            case .vaddss, .vsubss, .vmulss, .vdivss: return .dword
-            case .vaddsd, .vsubsd, .vmulsd, .vdivsd: return .qword
-            default:                                  return size.packedMemoryWidth
+            case .vaddss, .vsubss, .vmulss, .vdivss,
+                 .vminss, .vmaxss: return .dword
+            case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
+                 .vminsd, .vmaxsd: return .qword
+            default:               return size.packedMemoryWidth
             }
         }
 
