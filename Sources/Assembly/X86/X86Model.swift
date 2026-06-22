@@ -839,6 +839,10 @@ internal enum X86 {
         /// 128-bit only. Encoded with a VEX prefix; the kind picks the
         /// mandatory prefix and 0F-escape, and `size` picks VEX.L.
         case vexArithmetic(VexArithmeticKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// AVX/AVX2 VEX-encoded packed integer 3-operand instructions
+        /// — all ride `VEX.128/256 66 0F xx /r` with `xmm/ymm` operands
+        /// and `xmm/m128 (or ymm/m256)` source.
+        case vexPackedInteger(VexPackedIntegerKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1226,6 +1230,48 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8, opcode: UInt8) -> VexArithmeticKind? {
             allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
+        }
+    }
+
+    /// AVX/AVX2 VEX-encoded packed integer operations. All ride
+    /// `VEX.128/256 66 0F xx /r` with a single-byte opcode — pp is
+    /// fixed at 01 and the escape is 0F.
+    enum VexPackedIntegerKind: String, Equatable, CaseIterable {
+        // Unsaturated add by lane width
+        case vpaddb         // 66 0F FC
+        case vpaddw         // 66 0F FD
+        case vpaddd         // 66 0F FE
+        case vpaddq         // 66 0F D4
+        // Unsaturated sub by lane width
+        case vpsubb         // 66 0F F8
+        case vpsubw         // 66 0F F9
+        case vpsubd         // 66 0F FA
+        case vpsubq         // 66 0F FB
+        // Bit-wise logic
+        case vpand          // 66 0F DB
+        case vpandn         // 66 0F DF
+        case vpor           // 66 0F EB
+        case vpxor          // 66 0F EF
+
+        var opcode: UInt8 {
+            switch self {
+            case .vpaddb: return 0xFC
+            case .vpaddw: return 0xFD
+            case .vpaddd: return 0xFE
+            case .vpaddq: return 0xD4
+            case .vpsubb: return 0xF8
+            case .vpsubw: return 0xF9
+            case .vpsubd: return 0xFA
+            case .vpsubq: return 0xFB
+            case .vpand:  return 0xDB
+            case .vpandn: return 0xDF
+            case .vpor:   return 0xEB
+            case .vpxor:  return 0xEF
+            }
+        }
+
+        static func decode(opcode: UInt8) -> VexPackedIntegerKind? {
+            allCases.first { $0.opcode == opcode }
         }
     }
 

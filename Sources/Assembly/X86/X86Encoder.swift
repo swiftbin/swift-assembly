@@ -199,6 +199,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeCrc32(destination: dst, source: src), patches: [])
         case .vexArithmetic(let kind, let size, let dst, let src1, let src2):
             return Encoded(bytes: try encodeVexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), patches: [])
+        case .vexPackedInteger(let kind, let size, let dst, let src1, let src2):
+            return Encoded(bytes: try encodeVexPackedInteger(kind, size: size, destination: dst, source1: src1, source2: src2), patches: [])
         }
     }
 
@@ -1708,23 +1710,33 @@ internal enum X86InstructionEncoder {
     /// byte level by VEX.build), and `src2` in ModR/M.rm or memory.
     private static func encodeVexArithmetic(_ kind: X86.VexArithmeticKind, size: X86.AVXVectorSize, destination dst: UInt8, source1 src1: UInt8, source2: X86.VectorOrMemory) throws -> [UInt8] {
         let lBit = kind.isScalar ? 0 : size.lBit
+        return try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: lBit, destination: dst, source1: src1, source2: source2)
+    }
+
+    /// Shared VEX `xmm/ymm, xmm/ymm, xmm/ymm/m{128,256}` encoder body.
+    /// Caller picks pp / escape / w / l and the trailing opcode byte.
+    private static func encodeVexThreeOp(escape: UInt8, w: UInt8, pp: UInt8, opcode: UInt8, lBit: UInt8, destination dst: UInt8, source1 src1: UInt8, source2: X86.VectorOrMemory) throws -> [UInt8] {
         let dstHigh = (dst >> 3) & 1
         let dstLow = dst & 0x7
         switch source2 {
         case .register(let rm):
             let rmHigh = (rm >> 3) & 1
             let rmLow = rm & 0x7
-            var bytes = X86.VEX.build(r: dstHigh, x: 0, b: rmHigh, escape: X86.VEX.escape0F, w: 0, vvvv: src1, l: lBit, pp: kind.ppBits)
-            bytes.append(kind.opcode)
+            var bytes = X86.VEX.build(r: dstHigh, x: 0, b: rmHigh, escape: escape, w: w, vvvv: src1, l: lBit, pp: pp)
+            bytes.append(opcode)
             bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dstLow, rm: rmLow))
             return bytes
         case .memory(let mem):
             let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dstLow)
-            var bytes = X86.VEX.build(r: dstHigh, x: rexX, b: rexB, escape: X86.VEX.escape0F, w: 0, vvvv: src1, l: lBit, pp: kind.ppBits)
-            bytes.append(kind.opcode)
+            var bytes = X86.VEX.build(r: dstHigh, x: rexX, b: rexB, escape: escape, w: w, vvvv: src1, l: lBit, pp: pp)
+            bytes.append(opcode)
             bytes.append(contentsOf: addressing)
             return bytes
         }
+    }
+
+    private static func encodeVexPackedInteger(_ kind: X86.VexPackedIntegerKind, size: X86.AVXVectorSize, destination dst: UInt8, source1 src1: UInt8, source2: X86.VectorOrMemory) throws -> [UInt8] {
+        try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: source2)
     }
 
     // MARK: - MOVD / MOVQ (XMM ↔ GPR/memory)

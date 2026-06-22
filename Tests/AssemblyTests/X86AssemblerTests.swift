@@ -3700,4 +3700,50 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18c VEX packed integer basics
+
+    private static let vexPackedIntegerCases: [(String, [UInt8])] = [
+        // VPADD
+        ("vpaddb xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xFC, 0xC2]),
+        ("vpaddw xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xFD, 0xC2]),
+        ("vpaddd xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xFE, 0xC2]),
+        ("vpaddq xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xD4, 0xC2]),
+        // VPSUB
+        ("vpsubb xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xF8, 0xC2]),
+        ("vpsubw xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xF9, 0xC2]),
+        ("vpsubd xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xFA, 0xC2]),
+        ("vpsubq xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xFB, 0xC2]),
+        // Bit-wise
+        ("vpand xmm0, xmm1, xmm2",                      [0xC5, 0xF1, 0xDB, 0xC2]),
+        ("vpandn xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xDF, 0xC2]),
+        ("vpor xmm0, xmm1, xmm2",                       [0xC5, 0xF1, 0xEB, 0xC2]),
+        ("vpxor xmm0, xmm1, xmm2",                      [0xC5, 0xF1, 0xEF, 0xC2]),
+        // 256-bit (AVX2)
+        ("vpaddd ymm0, ymm1, ymm2",                     [0xC5, 0xF5, 0xFE, 0xC2]),
+        ("vpxor ymm0, ymm1, ymm2",                      [0xC5, 0xF5, 0xEF, 0xC2]),
+        // Memory source + extended regs
+        ("vpaddb xmm0, xmm1, xmmword ptr [rdi]",        [0xC5, 0xF1, 0xFC, 0x07]),
+        ("vpxor ymm15, ymm0, ymmword ptr [rsi]",        [0xC5, 0x7D, 0xEF, 0x3E]),
+    ]
+
+    func testVexPackedIntegerAssembles() throws {
+        for (source, expected) in Self.vexPackedIntegerCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexPackedIntegerDisassembles() throws {
+        for (source, bytes) in Self.vexPackedIntegerCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexPackedIntegerStreamRoundTrip() throws {
+        let source = Self.vexPackedIntegerCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexPackedIntegerCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

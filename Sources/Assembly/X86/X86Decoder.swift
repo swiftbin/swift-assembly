@@ -780,11 +780,27 @@ internal enum X86InstructionDecoder {
         if let kind = X86.VexArithmeticKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexArithmetic(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
         }
+        if v.pp == 0b01, let kind = X86.VexPackedIntegerKind.decode(opcode: opcode) {
+            return try decodeVexPackedInteger(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
+        }
         throw AssemblerError.unknownEncoding(UInt32(opcode))
     }
 
     private static func decodeVexArithmetic(_ kind: X86.VexArithmeticKind, prefixes: Prefixes, vvvv: UInt8, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {
         let size: X86.AVXVectorSize = (lBit == 1 && !kind.isScalar) ? .ymm : .xmm
+        let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: vvvv, cursor: &cursor)
+        return Decoded(instruction: .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    private static func decodeVexPackedInteger(_ kind: X86.VexPackedIntegerKind, prefixes: Prefixes, vvvv: UInt8, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let size: X86.AVXVectorSize = (lBit == 1) ? .ymm : .xmm
+        let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: vvvv, cursor: &cursor)
+        return Decoded(instruction: .vexPackedInteger(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    /// Shared three-operand decoder: reads ModR/M + optional SIB/disp
+    /// and returns `(dst, src1, src2)`.
+    private static func decodeVexThreeOpOperands(prefixes: Prefixes, vvvv: UInt8, cursor: inout Cursor) throws -> (UInt8, UInt8, X86.VectorOrMemory) {
         let modrm = try cursor.takeByte()
         let dst = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
         let src1 = vvvv & 0xF
@@ -796,7 +812,7 @@ internal enum X86InstructionDecoder {
             let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
             src2 = .memory(mem)
         }
-        return Decoded(instruction: .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+        return (dst, src1, src2)
     }
 
     // MARK: - SSE3

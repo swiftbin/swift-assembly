@@ -105,6 +105,9 @@ internal enum X86Parser {
         if let kind = X86.VexArithmeticKind(rawValue: instruction.mnemonic) {
             return try parseVexArithmetic(kind, instruction)
         }
+        if let kind = X86.VexPackedIntegerKind(rawValue: instruction.mnemonic) {
+            return try parseVexPackedInteger(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1062,6 +1065,29 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// VPADD/VPSUB/VPAND/VPANDN/VPOR/VPXOR — `xmm/ymm` three-op shape.
+    private static func parseVexPackedInteger(_ kind: X86.VexPackedIntegerKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        let src2 = try parseVectorOrMemory(
+            instruction.operands[2],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        return .vexPackedInteger(kind, size: size, destination: dst, source1: src1, source2: src2)
     }
 
     private static func parseVectorRegister(_ text: String, mnemonic: String, scalarOnly: Bool) throws -> (X86.AVXVectorSize, UInt8) {
