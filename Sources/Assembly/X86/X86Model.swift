@@ -1283,6 +1283,28 @@ internal enum X86 {
         case vpavgb         // 66 0F E0
         case vpavgw         // 66 0F E3
         case vpsadbw        // 66 0F F6
+        // Interleave lanes
+        case vpunpcklbw     // 66 0F 60
+        case vpunpcklwd     // 66 0F 61
+        case vpunpckldq     // 66 0F 62
+        case vpunpcklqdq    // 66 0F 6C
+        case vpunpckhbw     // 66 0F 68
+        case vpunpckhwd     // 66 0F 69
+        case vpunpckhdq     // 66 0F 6A
+        case vpunpckhqdq    // 66 0F 6D
+        // Pack with saturation
+        case vpacksswb      // 66 0F 63
+        case vpackssdw      // 66 0F 6B
+        case vpackuswb      // 66 0F 67
+        // Variable shifts (count from xmm/m128)
+        case vpsrlw         // 66 0F D1
+        case vpsrld         // 66 0F D2
+        case vpsrlq         // 66 0F D3
+        case vpsllw         // 66 0F F1
+        case vpslld         // 66 0F F2
+        case vpsllq         // 66 0F F3
+        case vpsraw         // 66 0F E1
+        case vpsrad         // 66 0F E2
 
         var opcode: UInt8 {
             switch self {
@@ -1324,6 +1346,25 @@ internal enum X86 {
             case .vpavgb:    return 0xE0
             case .vpavgw:    return 0xE3
             case .vpsadbw:   return 0xF6
+            case .vpunpcklbw:  return 0x60
+            case .vpunpcklwd:  return 0x61
+            case .vpunpckldq:  return 0x62
+            case .vpunpcklqdq: return 0x6C
+            case .vpunpckhbw:  return 0x68
+            case .vpunpckhwd:  return 0x69
+            case .vpunpckhdq:  return 0x6A
+            case .vpunpckhqdq: return 0x6D
+            case .vpacksswb:   return 0x63
+            case .vpackssdw:   return 0x6B
+            case .vpackuswb:   return 0x67
+            case .vpsrlw:      return 0xD1
+            case .vpsrld:      return 0xD2
+            case .vpsrlq:      return 0xD3
+            case .vpsllw:      return 0xF1
+            case .vpslld:      return 0xF2
+            case .vpsllq:      return 0xF3
+            case .vpsraw:      return 0xE1
+            case .vpsrad:      return 0xE2
             }
         }
 

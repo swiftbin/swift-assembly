@@ -3805,4 +3805,54 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18e VEX PUNPCK / PACK / variable shifts
+
+    private static let vexPackedIntegerPunpackCases: [(String, [UInt8])] = [
+        // Interleave low
+        ("vpunpcklbw xmm0, xmm1, xmm2",                 [0xC5, 0xF1, 0x60, 0xC2]),
+        ("vpunpcklwd xmm0, xmm1, xmm2",                 [0xC5, 0xF1, 0x61, 0xC2]),
+        ("vpunpckldq xmm0, xmm1, xmm2",                 [0xC5, 0xF1, 0x62, 0xC2]),
+        ("vpunpcklqdq xmm0, xmm1, xmm2",                [0xC5, 0xF1, 0x6C, 0xC2]),
+        // Interleave high
+        ("vpunpckhbw xmm0, xmm1, xmm2",                 [0xC5, 0xF1, 0x68, 0xC2]),
+        ("vpunpckhwd xmm0, xmm1, xmm2",                 [0xC5, 0xF1, 0x69, 0xC2]),
+        ("vpunpckhdq xmm0, xmm1, xmm2",                 [0xC5, 0xF1, 0x6A, 0xC2]),
+        ("vpunpckhqdq xmm0, xmm1, xmm2",                [0xC5, 0xF1, 0x6D, 0xC2]),
+        // Pack
+        ("vpacksswb xmm0, xmm1, xmm2",                  [0xC5, 0xF1, 0x63, 0xC2]),
+        ("vpackssdw xmm0, xmm1, xmm2",                  [0xC5, 0xF1, 0x6B, 0xC2]),
+        ("vpackuswb xmm0, xmm1, xmm2",                  [0xC5, 0xF1, 0x67, 0xC2]),
+        // Variable shifts
+        ("vpsrlw xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xD1, 0xC2]),
+        ("vpsrld xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xD2, 0xC2]),
+        ("vpsrlq xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xD3, 0xC2]),
+        ("vpsllw xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xF1, 0xC2]),
+        ("vpslld xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xF2, 0xC2]),
+        ("vpsllq xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xF3, 0xC2]),
+        ("vpsraw xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xE1, 0xC2]),
+        ("vpsrad xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xE2, 0xC2]),
+        // 256-bit smoke
+        ("vpunpcklbw ymm0, ymm1, ymm2",                 [0xC5, 0xF5, 0x60, 0xC2]),
+    ]
+
+    func testVexPunpackPackShiftAssembles() throws {
+        for (source, expected) in Self.vexPackedIntegerPunpackCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexPunpackPackShiftDisassembles() throws {
+        for (source, bytes) in Self.vexPackedIntegerPunpackCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexPunpackPackShiftStreamRoundTrip() throws {
+        let source = Self.vexPackedIntegerPunpackCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexPackedIntegerPunpackCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
