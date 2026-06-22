@@ -254,6 +254,20 @@ internal enum X86InstructionFormatter {
         case .vexMaskExtract(let kind, let size, let dst, let src):
             let prefix = size == .xmm ? "xmm" : "ymm"
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(prefix)\(src)"
+        case .bmiAndn(let dst, let src1, let src2):
+            let src2Str: String
+            switch src2 {
+            case .register(let r): src2Str = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w): src2Str = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "andn \(X86.RegisterTable.canonicalName(for: dst)), \(X86.RegisterTable.canonicalName(for: src1)), \(src2Str)"
+        case .bmiUnary(let kind, let dst, let src):
+            let srcStr: String
+            switch src {
+            case .register(let r): srcStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w): srcStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(srcStr)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

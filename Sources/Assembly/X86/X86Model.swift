@@ -863,6 +863,14 @@ internal enum X86 {
         /// VMOVMSKPS/PD and VPMOVMSKB — extract a per-lane sign-bit
         /// mask from an XMM/YMM register into a GPR.
         case vexMaskExtract(VexMaskExtractKind, size: AVXVectorSize, destination: Register, source: UInt8)
+        /// BMI1 ANDN — `r32/64, r32/64, r/m32/64`. Encoded as
+        /// VEX.LZ.0F38 F2 /r with the first source in VEX.vvvv and
+        /// the second in ModR/M.rm.
+        case bmiAndn(destination: Register, source1: Register, source2: RegisterOrMemory)
+        /// BMI1 unary ops on `r32/64, r/m32/64` — BLSI/BLSMSK/BLSR.
+        /// All ride VEX.LZ.0F38 F3 with the slash-digit picking the
+        /// op; the destination goes into VEX.vvvv.
+        case bmiUnary(BMI1UnaryKind, destination: Register, source: RegisterOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1633,6 +1641,26 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8, opcode: UInt8) -> VexMaskExtractKind? {
             allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
+        }
+    }
+
+    /// BMI1 unary operations: dst (in VEX.vvvv) <- f(src in ModR/M.rm).
+    /// All ride VEX.LZ.0F38 F3 with `/n` picking the operation.
+    enum BMI1UnaryKind: String, Equatable, CaseIterable {
+        case blsr           // /1 — reset lowest set bit
+        case blsmsk         // /2 — mask up to lowest set bit
+        case blsi           // /3 — isolate lowest set bit
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .blsr:   return 1
+            case .blsmsk: return 2
+            case .blsi:   return 3
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> BMI1UnaryKind? {
+            allCases.first { $0.slashDigit == slashDigit }
         }
     }
 

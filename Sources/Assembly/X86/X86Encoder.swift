@@ -226,6 +226,10 @@ internal enum X86InstructionEncoder {
             // VPMOVMSKB has no YMM form in AVX (it's AVX2). We still
             // honor VEX.L=1 on the encoding when requested.
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst.number, source1: 0, source2: .register(src)), patches: [])
+        case .bmiAndn(let dst, let src1, let src2):
+            return Encoded(bytes: try encodeBmiAndn(destination: dst, source1: src1, source2: src2), patches: [])
+        case .bmiUnary(let kind, let dst, let src):
+            return Encoded(bytes: try encodeBmiUnary(kind, destination: dst, source: src), patches: [])
         }
     }
 
@@ -1785,6 +1789,71 @@ internal enum X86InstructionEncoder {
             return try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.storeOpcode, lBit: size.lBit, destination: src, source1: 0, source2: .memory(mem))
         case (.memory, .memory):
             throw AssemblerError.unsupportedOperand("\(kind.rawValue): cannot have two memory operands")
+        }
+    }
+
+    // MARK: - BMI1 (ANDN + BLSI/BLSMSK/BLSR)
+
+    /// `VEX.LZ.0F38.W0|W1 F2 /r` — ANDN.
+    private static func encodeBmiAndn(destination dst: X86.Register, source1 src1: X86.Register, source2: X86.RegisterOrMemory) throws -> [UInt8] {
+        try checkBmiWidth(dst.width, mnemonic: "andn")
+        guard dst.width == src1.width else {
+            throw AssemblerError.unsupportedOperand("andn: operand widths must match")
+        }
+        let w: UInt8 = dst.width == .qword ? 1 : 0
+        switch source2 {
+        case .register(let r):
+            guard r.width == dst.width else {
+                throw AssemblerError.unsupportedOperand("andn: operand widths must match")
+            }
+            try checkRegisterRegisterCompat([dst, src1, r], mnemonic: "andn")
+            var bytes = X86.VEX.build(r: dst.highBit, x: 0, b: r.highBit, escape: X86.VEX.escape0F38, w: w, vvvv: src1.number, l: 0, pp: 0)
+            bytes.append(0xF2)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: r.lowBits))
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == dst.width else {
+                throw AssemblerError.unsupportedOperand("andn: memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            var bytes = X86.VEX.build(r: dst.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F38, w: w, vvvv: src1.number, l: 0, pp: 0)
+            bytes.append(0xF2)
+            bytes.append(contentsOf: addressing)
+            return bytes
+        }
+    }
+
+    /// `VEX.LZ.0F38.W0|W1 F3 /n` — BLSI/BLSMSK/BLSR. Destination
+    /// occupies VEX.vvvv; source is in ModR/M.rm; the /n slash-digit
+    /// in ModR/M.reg picks the operation.
+    private static func encodeBmiUnary(_ kind: X86.BMI1UnaryKind, destination dst: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        try checkBmiWidth(dst.width, mnemonic: kind.rawValue)
+        let w: UInt8 = dst.width == .qword ? 1 : 0
+        switch source {
+        case .register(let r):
+            guard r.width == dst.width else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand widths must match")
+            }
+            try checkRegisterRegisterCompat([dst, r], mnemonic: kind.rawValue)
+            var bytes = X86.VEX.build(r: 0, x: 0, b: r.highBit, escape: X86.VEX.escape0F38, w: w, vvvv: dst.number, l: 0, pp: 0)
+            bytes.append(0xF3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: kind.slashDigit, rm: r.lowBits))
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == dst.width else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: kind.slashDigit)
+            var bytes = X86.VEX.build(r: 0, x: rexX, b: rexB, escape: X86.VEX.escape0F38, w: w, vvvv: dst.number, l: 0, pp: 0)
+            bytes.append(0xF3)
+            bytes.append(contentsOf: addressing)
+            return bytes
+        }
+    }
+
+    private static func checkBmiWidth(_ width: X86.RegisterWidth, mnemonic: String) throws {
+        guard width == .dword || width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(mnemonic): operands must be 32- or 64-bit")
         }
     }
 

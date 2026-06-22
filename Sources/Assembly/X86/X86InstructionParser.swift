@@ -126,6 +126,12 @@ internal enum X86Parser {
         if let kind = X86.VexMaskExtractKind(rawValue: instruction.mnemonic) {
             return try parseVexMaskExtract(kind, instruction)
         }
+        if instruction.mnemonic == "andn" {
+            return try parseBmiAndn(instruction)
+        }
+        if let kind = X86.BMI1UnaryKind(rawValue: instruction.mnemonic) {
+            return try parseBmiUnary(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1083,6 +1089,55 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// ANDN — `r32/64, r32/64, r/m32/64`.
+    private static func parseBmiAndn(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "andn",
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try register(instruction.operands[0])
+        let src1 = try register(instruction.operands[1])
+        let src2 = try parseGPROrSizedMemory(instruction.operands[2], expectedWidth: dst.width, mnemonic: "andn")
+        return .bmiAndn(destination: dst, source1: src1, source2: src2)
+    }
+
+    /// BLSI/BLSMSK/BLSR — `r32/64, r/m32/64`.
+    private static func parseBmiUnary(_ kind: X86.BMI1UnaryKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try register(instruction.operands[0])
+        let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
+        return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    private static func parseGPROrSizedMemory(_ text: String, expectedWidth: X86.RegisterWidth, mnemonic: String) throws -> X86.RegisterOrMemory {
+        if let r = try? register(text) {
+            guard r.width == expectedWidth else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): operand widths must match")
+            }
+            return .register(r)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (w, body) = stripSizeHint(trimmed) {
+            guard w == expectedWidth else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): memory operand width disagrees with mnemonic")
+            }
+            return .memory(try memoryOperand(body), width: w)
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed), width: expectedWidth)
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected a register or memory operand")
     }
 
     /// VMOVMSKPS/PD and VPMOVMSKB — `r32/r64, xmm/ymm`.

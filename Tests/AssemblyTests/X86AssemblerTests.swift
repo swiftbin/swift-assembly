@@ -4094,4 +4094,39 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18l BMI1
+
+    private static let bmi1Cases: [(String, [UInt8])] = [
+        // ANDN
+        ("andn eax, ebx, ecx",                          [0xC4, 0xE2, 0x60, 0xF2, 0xC1]),
+        ("andn rax, rbx, rcx",                          [0xC4, 0xE2, 0xE0, 0xF2, 0xC1]),
+        ("andn eax, ebx, dword ptr [rdi]",              [0xC4, 0xE2, 0x60, 0xF2, 0x07]),
+        // BLSR / BLSMSK / BLSI
+        ("blsr eax, ebx",                               [0xC4, 0xE2, 0x78, 0xF3, 0xCB]),
+        ("blsmsk eax, ebx",                             [0xC4, 0xE2, 0x78, 0xF3, 0xD3]),
+        ("blsi eax, ebx",                               [0xC4, 0xE2, 0x78, 0xF3, 0xDB]),
+        ("blsi rax, rbx",                               [0xC4, 0xE2, 0xF8, 0xF3, 0xDB]),
+        ("blsr eax, dword ptr [rdi]",                   [0xC4, 0xE2, 0x78, 0xF3, 0x0F]),
+    ]
+
+    func testBmi1Assembles() throws {
+        for (source, expected) in Self.bmi1Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBmi1Disassembles() throws {
+        for (source, bytes) in Self.bmi1Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testBmi1StreamRoundTrip() throws {
+        let source = Self.bmi1Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.bmi1Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
