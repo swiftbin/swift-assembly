@@ -1252,21 +1252,78 @@ internal enum X86 {
         case vpandn         // 66 0F DF
         case vpor           // 66 0F EB
         case vpxor          // 66 0F EF
+        // Saturating add / sub
+        case vpaddsb        // 66 0F EC
+        case vpaddsw        // 66 0F ED
+        case vpaddusb       // 66 0F DC
+        case vpaddusw       // 66 0F DD
+        case vpsubsb        // 66 0F E8
+        case vpsubsw        // 66 0F E9
+        case vpsubusb       // 66 0F D8
+        case vpsubusw       // 66 0F D9
+        // Compare (equal / greater-than) by lane width
+        case vpcmpeqb       // 66 0F 74
+        case vpcmpeqw       // 66 0F 75
+        case vpcmpeqd       // 66 0F 76
+        case vpcmpgtb       // 66 0F 64
+        case vpcmpgtw       // 66 0F 65
+        case vpcmpgtd       // 66 0F 66
+        // Multiplies and multiply-add
+        case vpmullw        // 66 0F D5
+        case vpmulhw        // 66 0F E5
+        case vpmulhuw       // 66 0F E4
+        case vpmuludq       // 66 0F F4
+        case vpmaddwd       // 66 0F F5
+        // Min / max
+        case vpminub        // 66 0F DA
+        case vpminsw        // 66 0F EA
+        case vpmaxub        // 66 0F DE
+        case vpmaxsw        // 66 0F EE
+        // Average and sum-of-absolute-differences
+        case vpavgb         // 66 0F E0
+        case vpavgw         // 66 0F E3
+        case vpsadbw        // 66 0F F6
 
         var opcode: UInt8 {
             switch self {
-            case .vpaddb: return 0xFC
-            case .vpaddw: return 0xFD
-            case .vpaddd: return 0xFE
-            case .vpaddq: return 0xD4
-            case .vpsubb: return 0xF8
-            case .vpsubw: return 0xF9
-            case .vpsubd: return 0xFA
-            case .vpsubq: return 0xFB
-            case .vpand:  return 0xDB
-            case .vpandn: return 0xDF
-            case .vpor:   return 0xEB
-            case .vpxor:  return 0xEF
+            case .vpaddb:    return 0xFC
+            case .vpaddw:    return 0xFD
+            case .vpaddd:    return 0xFE
+            case .vpaddq:    return 0xD4
+            case .vpsubb:    return 0xF8
+            case .vpsubw:    return 0xF9
+            case .vpsubd:    return 0xFA
+            case .vpsubq:    return 0xFB
+            case .vpand:     return 0xDB
+            case .vpandn:    return 0xDF
+            case .vpor:      return 0xEB
+            case .vpxor:     return 0xEF
+            case .vpaddsb:   return 0xEC
+            case .vpaddsw:   return 0xED
+            case .vpaddusb:  return 0xDC
+            case .vpaddusw:  return 0xDD
+            case .vpsubsb:   return 0xE8
+            case .vpsubsw:   return 0xE9
+            case .vpsubusb:  return 0xD8
+            case .vpsubusw:  return 0xD9
+            case .vpcmpeqb:  return 0x74
+            case .vpcmpeqw:  return 0x75
+            case .vpcmpeqd:  return 0x76
+            case .vpcmpgtb:  return 0x64
+            case .vpcmpgtw:  return 0x65
+            case .vpcmpgtd:  return 0x66
+            case .vpmullw:   return 0xD5
+            case .vpmulhw:   return 0xE5
+            case .vpmulhuw:  return 0xE4
+            case .vpmuludq:  return 0xF4
+            case .vpmaddwd:  return 0xF5
+            case .vpminub:   return 0xDA
+            case .vpminsw:   return 0xEA
+            case .vpmaxub:   return 0xDE
+            case .vpmaxsw:   return 0xEE
+            case .vpavgb:    return 0xE0
+            case .vpavgw:    return 0xE3
+            case .vpsadbw:   return 0xF6
             }
         }
 

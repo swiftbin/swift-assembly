@@ -3746,4 +3746,63 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18d VEX packed integer extras
+
+    private static let vexPackedIntegerExtraCases: [(String, [UInt8])] = [
+        // Saturating add/sub
+        ("vpaddsb xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xEC, 0xC2]),
+        ("vpaddsw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xED, 0xC2]),
+        ("vpaddusb xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xDC, 0xC2]),
+        ("vpaddusw xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xDD, 0xC2]),
+        ("vpsubsb xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xE8, 0xC2]),
+        ("vpsubsw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xE9, 0xC2]),
+        ("vpsubusb xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xD8, 0xC2]),
+        ("vpsubusw xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xD9, 0xC2]),
+        // Compare
+        ("vpcmpeqb xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0x74, 0xC2]),
+        ("vpcmpeqw xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0x75, 0xC2]),
+        ("vpcmpeqd xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0x76, 0xC2]),
+        ("vpcmpgtb xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0x64, 0xC2]),
+        ("vpcmpgtw xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0x65, 0xC2]),
+        ("vpcmpgtd xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0x66, 0xC2]),
+        // Multiplies / multiply-add
+        ("vpmullw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xD5, 0xC2]),
+        ("vpmulhw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xE5, 0xC2]),
+        ("vpmulhuw xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xE4, 0xC2]),
+        ("vpmuludq xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xF4, 0xC2]),
+        ("vpmaddwd xmm0, xmm1, xmm2",                   [0xC5, 0xF1, 0xF5, 0xC2]),
+        // Min/max
+        ("vpminub xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xDA, 0xC2]),
+        ("vpminsw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xEA, 0xC2]),
+        ("vpmaxub xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xDE, 0xC2]),
+        ("vpmaxsw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xEE, 0xC2]),
+        // Avg / SAD
+        ("vpavgb xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xE0, 0xC2]),
+        ("vpavgw xmm0, xmm1, xmm2",                     [0xC5, 0xF1, 0xE3, 0xC2]),
+        ("vpsadbw xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0xF6, 0xC2]),
+        // AVX2 256-bit smoke check
+        ("vpcmpeqd ymm0, ymm1, ymm2",                   [0xC5, 0xF5, 0x76, 0xC2]),
+        ("vpmaddwd ymm0, ymm1, ymmword ptr [rdi]",      [0xC5, 0xF5, 0xF5, 0x07]),
+    ]
+
+    func testVexPackedIntegerExtraAssembles() throws {
+        for (source, expected) in Self.vexPackedIntegerExtraCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexPackedIntegerExtraDisassembles() throws {
+        for (source, bytes) in Self.vexPackedIntegerExtraCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexPackedIntegerExtraStreamRoundTrip() throws {
+        let source = Self.vexPackedIntegerExtraCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexPackedIntegerExtraCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
