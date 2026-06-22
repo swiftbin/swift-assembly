@@ -78,6 +78,11 @@ internal enum X86InstructionDecoder {
             return bytes[offset]
         }
 
+        func peekByte() throws -> UInt8 {
+            guard offset < bytes.count else { throw AssemblerError.invalidByteCount(bytes.count) }
+            return bytes[offset]
+        }
+
         mutating func takeLE16() throws -> UInt16 {
             let lo = try takeByte()
             let hi = try takeByte()
@@ -844,6 +849,19 @@ internal enum X86InstructionDecoder {
         // VMOV family — both opcodes (load and store) live here.
         if v.vvvv == 0, let (kind, isStore) = X86.VexMovKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexMov(kind, isStore: isStore, prefixes: prefixes, lBit: v.l, cursor: &cursor)
+        }
+        // VMOVHLPS / VMOVLHPS — register-only forms of 0F 12 / 16
+        // under VEX with no prefix and mod=11.
+        if v.pp == 0 && (opcode == 0x12 || opcode == 0x16),
+           let kind = X86.VexHalfMoveRegKind.decode(opcode: opcode) {
+            let modrm = try cursor.peekByte()
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                _ = try cursor.takeByte()
+                let dst = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let src1 = v.vvvv & 0xF
+                let src2 = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                return Decoded(instruction: .vexHalfMoveReg(kind, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+            }
         }
         // VMOVD / VMOVQ — VEX.128.66.0F.W0|W1 6E (load) / 7E (store).
         if v.vvvv == 0 && v.pp == 0b01 && (opcode == 0x6E || opcode == 0x7E) {

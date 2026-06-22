@@ -895,6 +895,10 @@ internal enum X86 {
         /// memory operand. Encoded as VEX.128.66.0F.W0|W1 6E (load) or
         /// 7E (store). W=1 selects MOVQ over MOVD.
         case vexMovDQ(MovDQKind, direction: MovDQDirection, xmm: XMMRegister, gpr: RegisterOrMemory)
+        /// VMOVHLPS / VMOVLHPS — register-form half-vector moves
+        /// (the memory forms are deferred). Encoded as VEX.128.0F.WIG
+        /// 12 / 16 /r with mod==11 and vvvv carrying the first source.
+        case vexHalfMoveReg(VexHalfMoveRegKind, destination: UInt8, source1: UInt8, source2: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1734,6 +1738,24 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8) -> BMI2PextDepKind? {
             allCases.first { $0.ppBits == ppBits }
+        }
+    }
+
+    /// VMOVHLPS / VMOVLHPS — register-only half-vector moves under
+    /// VEX. Both share pp=0 / escape=0F; opcode picks the operation.
+    enum VexHalfMoveRegKind: String, Equatable, CaseIterable {
+        case vmovhlps       // 0F 12 mod=11 — src2.high → dst.low
+        case vmovlhps       // 0F 16 mod=11 — src2.low  → dst.high
+
+        var opcode: UInt8 {
+            switch self {
+            case .vmovhlps: return 0x12
+            case .vmovlhps: return 0x16
+            }
+        }
+
+        static func decode(opcode: UInt8) -> VexHalfMoveRegKind? {
+            allCases.first { $0.opcode == opcode }
         }
     }
 

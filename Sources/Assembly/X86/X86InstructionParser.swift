@@ -151,6 +151,9 @@ internal enum X86Parser {
             let kind: X86.MovDQKind = instruction.mnemonic == "vmovq" ? .movq : .movd
             return try parseVexMovDQ(kind, instruction)
         }
+        if let kind = X86.VexHalfMoveRegKind(rawValue: instruction.mnemonic) {
+            return try parseVexHalfMoveReg(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1137,6 +1140,23 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VMOVHLPS / VMOVLHPS — 3-operand register-only.
+    private static func parseVexHalfMoveReg(_ kind: X86.VexHalfMoveRegKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]),
+              let src1 = parseXMMRegister(instruction.operands[1]),
+              let src2 = parseXMMRegister(instruction.operands[2]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): all operands must be XMM registers")
+        }
+        return .vexHalfMoveReg(kind, destination: dst.number, source1: src1.number, source2: src2.number)
     }
 
     /// VMOVD / VMOVQ — XMM ↔ GPR/memory.

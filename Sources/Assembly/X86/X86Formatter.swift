@@ -310,6 +310,8 @@ internal enum X86InstructionFormatter {
             case .load:  return "v\(kind.rawValue) \(xmmStr), \(gprStr)"
             case .store: return "v\(kind.rawValue) \(gprStr), \(xmmStr)"
             }
+        case .vexHalfMoveReg(let kind, let dst, let src1, let src2):
+            return "\(kind.rawValue) xmm\(dst), xmm\(src1), xmm\(src2)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

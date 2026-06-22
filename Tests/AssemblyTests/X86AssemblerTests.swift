@@ -4294,4 +4294,32 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18r VEX half-vector register MOV
+
+    private static let vexHalfMoveRegCases: [(String, [UInt8])] = [
+        ("vmovhlps xmm0, xmm1, xmm2",                   [0xC5, 0xF0, 0x12, 0xC2]),
+        ("vmovlhps xmm0, xmm1, xmm2",                   [0xC5, 0xF0, 0x16, 0xC2]),
+        ("vmovhlps xmm15, xmm1, xmm2",                  [0xC5, 0x70, 0x12, 0xFA]),
+    ]
+
+    func testVexHalfMoveRegAssembles() throws {
+        for (source, expected) in Self.vexHalfMoveRegCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexHalfMoveRegDisassembles() throws {
+        for (source, bytes) in Self.vexHalfMoveRegCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexHalfMoveRegStreamRoundTrip() throws {
+        let source = Self.vexHalfMoveRegCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexHalfMoveRegCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
