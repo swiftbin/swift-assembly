@@ -1115,15 +1115,15 @@ internal enum X86Parser {
                 actual: instruction.operands.count
             )
         }
-        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
-        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: kind.isScalar)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: kind.isScalar)
         guard size == size1 else {
             throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
         }
         let src2 = try parseVectorOrMemory(
             instruction.operands[2],
             size: size,
-            memoryWidth: size.packedMemoryWidth,
+            memoryWidth: kind.memoryWidth(size: size),
             mnemonic: kind.rawValue
         )
         let imm = try immediateAny(instruction.operands[3])
@@ -1213,7 +1213,7 @@ internal enum X86Parser {
         let src = try parseVectorOrMemory(
             instruction.operands[1],
             size: size,
-            memoryWidth: size.packedMemoryWidth,
+            memoryWidth: kind.memoryWidth(size: size),
             mnemonic: kind.rawValue
         )
         return .vexUnary(kind, size: size, destination: dst, source: src)

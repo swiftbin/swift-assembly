@@ -219,7 +219,7 @@ internal enum X86InstructionFormatter {
             let srcStr: String
             switch src {
             case .register(let n): srcStr = "\(prefix)\(n)"
-            case .memory(let m):   srcStr = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(kind.memoryWidth(size: size))) \(formatMemory(m))"
             }
             return "\(kind.rawValue) \(prefix)\(dst), \(srcStr)"
         case .vexMov(let kind, let size, let dst, let src):
@@ -244,11 +244,11 @@ internal enum X86InstructionFormatter {
             }
             return "\(kind.rawValue) \(prefix)\(dst), \(srcStr), \(imm)"
         case .vexThreeOpImm(let kind, let size, let dst, let src1, let src2, let imm):
-            let prefix = size == .xmm ? "xmm" : "ymm"
+            let prefix = (kind.isScalar || size == .xmm) ? "xmm" : "ymm"
             let src2Str: String
             switch src2 {
             case .register(let n): src2Str = "\(prefix)\(n)"
-            case .memory(let m):   src2Str = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(kind.memoryWidth(size: size))) \(formatMemory(m))"
             }
             return "\(kind.rawValue) \(prefix)\(dst), \(prefix)\(src1), \(src2Str), \(imm)"
         case .movDQ(let kind, let direction, let xmm, let gpr):

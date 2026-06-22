@@ -1195,6 +1195,13 @@ internal enum X86 {
         case vorpd          // 66 0F 56
         case vxorps         // 0F 57
         case vxorpd         // 66 0F 57
+        // SSE3 V-prefixed packed FP
+        case vhaddps        // F2 0F 7C
+        case vhaddpd        // 66 0F 7C
+        case vhsubps        // F2 0F 7D
+        case vhsubpd        // 66 0F 7D
+        case vaddsubps      // F2 0F D0
+        case vaddsubpd      // 66 0F D0
 
         /// `pp` bits for the VEX prefix: 0=none, 1=66, 2=F3, 3=F2.
         var ppBits: UInt8 {
@@ -1204,12 +1211,14 @@ internal enum X86 {
                  .vorps,  .vxorps: return 0b00
             case .vaddpd, .vsubpd, .vmulpd, .vdivpd,
                  .vminpd, .vmaxpd, .vandpd, .vandnpd,
-                 .vorpd,  .vxorpd: return 0b01
+                 .vorpd,  .vxorpd,
+                 .vhaddpd, .vhsubpd, .vaddsubpd: return 0b01
             case .vaddss, .vsubss, .vmulss, .vdivss,
                  .vminss, .vmaxss, .vsqrtss, .vrsqrtss,
                  .vrcpss: return 0b10
             case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
-                 .vminsd, .vmaxsd, .vsqrtsd: return 0b11
+                 .vminsd, .vmaxsd, .vsqrtsd,
+                 .vhaddps, .vhsubps, .vaddsubps: return 0b11
             }
         }
 
@@ -1229,6 +1238,9 @@ internal enum X86 {
             case .vsqrtss, .vsqrtsd:                  return 0x51
             case .vrsqrtss:                            return 0x52
             case .vrcpss:                              return 0x53
+            case .vhaddps, .vhaddpd:                  return 0x7C
+            case .vhsubps, .vhsubpd:                  return 0x7D
+            case .vaddsubps, .vaddsubpd:              return 0xD0
             }
         }
 
@@ -1407,11 +1419,18 @@ internal enum X86 {
         case vsqrtpd        // 66 0F 51 — packed double
         case vrsqrtps       //    0F 52 — packed single only
         case vrcpps         //    0F 53 — packed single only
+        // SSE3 V-prefixed 2-op moves / loads
+        case vmovsldup      // F3 0F 12 — duplicate even-indexed singles
+        case vmovshdup      // F3 0F 16 — duplicate odd-indexed singles
+        case vmovddup       // F2 0F 12 — duplicate one double per lane
+        case vlddqu         // F2 0F F0 — unaligned dqword load
 
         var ppBits: UInt8 {
             switch self {
             case .vsqrtps, .vrsqrtps, .vrcpps: return 0b00
             case .vsqrtpd:                       return 0b01
+            case .vmovsldup, .vmovshdup:         return 0b10
+            case .vmovddup, .vlddqu:             return 0b11
             }
         }
 
@@ -1420,7 +1439,17 @@ internal enum X86 {
             case .vsqrtps, .vsqrtpd: return 0x51
             case .vrsqrtps:           return 0x52
             case .vrcpps:             return 0x53
+            case .vmovsldup, .vmovddup: return 0x12
+            case .vmovshdup:           return 0x16
+            case .vlddqu:              return 0xF0
             }
+        }
+
+        /// VMOVDDUP narrows the memory operand to m64 in the 128-bit
+        /// form. The 256-bit form uses m256.
+        func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
+            if self == .vmovddup && size == .xmm { return .qword }
+            return size.packedMemoryWidth
         }
 
         static func decode(ppBits: UInt8, opcode: UInt8) -> VexUnaryKind? {
@@ -1524,23 +1553,31 @@ internal enum X86 {
     }
 
     /// VSHUFPS/PD and VPALIGNR — 3-operand imm8 instructions.
-    /// VSHUFPS/PD ride `0F C6`; VPALIGNR rides `66 0F 3A 0F`.
+    /// VSHUFPS/PD ride `0F C6`; VPALIGNR rides `66 0F 3A 0F`. VCMP*
+    /// ride `[prefix] 0F C2` with imm8 picking the predicate.
     enum VexThreeOpImmKind: String, Equatable, CaseIterable {
         case vshufps    //    0F   C6
         case vshufpd    // 66 0F   C6
         case vpalignr   // 66 0F3A 0F
+        case vcmpps     //    0F   C2
+        case vcmppd     // 66 0F   C2
+        case vcmpss     // F3 0F   C2
+        case vcmpsd     // F2 0F   C2
 
         var ppBits: UInt8 {
             switch self {
-            case .vshufps:                          return 0b00
-            case .vshufpd, .vpalignr:               return 0b01
+            case .vshufps, .vcmpps:                 return 0b00
+            case .vshufpd, .vpalignr, .vcmppd:      return 0b01
+            case .vcmpss:                           return 0b10
+            case .vcmpsd:                           return 0b11
             }
         }
 
         var escape: UInt8 {
             switch self {
-            case .vshufps, .vshufpd: return 0b00001     // 0F
-            case .vpalignr:           return 0b00011    // 0F 3A
+            case .vshufps, .vshufpd,
+                 .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0b00001     // 0F
+            case .vpalignr:                            return 0b00011    // 0F 3A
             }
         }
 
@@ -1548,7 +1585,22 @@ internal enum X86 {
             switch self {
             case .vshufps, .vshufpd: return 0xC6
             case .vpalignr:           return 0x0F
+            case .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0xC2
             }
+        }
+
+        /// VCMPSS reads a 32-bit memory source; VCMPSD reads 64-bit;
+        /// the rest take the size-driven packed width.
+        func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
+            switch self {
+            case .vcmpss: return .dword
+            case .vcmpsd: return .qword
+            default:      return size.packedMemoryWidth
+            }
+        }
+
+        var isScalar: Bool {
+            self == .vcmpss || self == .vcmpsd
         }
 
         static func decode(escape: UInt8, ppBits: UInt8, opcode: UInt8) -> VexThreeOpImmKind? {

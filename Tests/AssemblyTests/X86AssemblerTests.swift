@@ -4015,4 +4015,51 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18j VEX CMP + SSE3 V-prefix
+
+    private static let vexCmpAndSse3Cases: [(String, [UInt8])] = [
+        // VCMPPS / VCMPPD / VCMPSS / VCMPSD
+        ("vcmpps xmm0, xmm1, xmm2, 0",                  [0xC5, 0xF0, 0xC2, 0xC2, 0x00]),
+        ("vcmppd xmm0, xmm1, xmm2, 1",                  [0xC5, 0xF1, 0xC2, 0xC2, 0x01]),
+        ("vcmpss xmm0, xmm1, xmm2, 2",                  [0xC5, 0xF2, 0xC2, 0xC2, 0x02]),
+        ("vcmpsd xmm0, xmm1, xmm2, 3",                  [0xC5, 0xF3, 0xC2, 0xC2, 0x03]),
+        ("vcmpps ymm0, ymm1, ymm2, 4",                  [0xC5, 0xF4, 0xC2, 0xC2, 0x04]),
+        ("vcmpss xmm0, xmm1, dword ptr [rdi], 5",       [0xC5, 0xF2, 0xC2, 0x07, 0x05]),
+        ("vcmpsd xmm0, xmm1, qword ptr [rdi], 6",       [0xC5, 0xF3, 0xC2, 0x07, 0x06]),
+        // SSE3 V-prefixed
+        ("vaddsubps xmm0, xmm1, xmm2",                  [0xC5, 0xF3, 0xD0, 0xC2]),
+        ("vaddsubpd ymm0, ymm1, ymm2",                  [0xC5, 0xF5, 0xD0, 0xC2]),
+        ("vhaddps xmm0, xmm1, xmm2",                    [0xC5, 0xF3, 0x7C, 0xC2]),
+        ("vhaddpd xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0x7C, 0xC2]),
+        ("vhsubps xmm0, xmm1, xmm2",                    [0xC5, 0xF3, 0x7D, 0xC2]),
+        ("vhsubpd xmm0, xmm1, xmm2",                    [0xC5, 0xF1, 0x7D, 0xC2]),
+        // VLDDQU / VMOVDDUP / VMOVSHDUP / VMOVSLDUP
+        ("vlddqu xmm0, xmmword ptr [rdi]",              [0xC5, 0xFB, 0xF0, 0x07]),
+        ("vmovddup xmm0, qword ptr [rdi]",              [0xC5, 0xFB, 0x12, 0x07]),
+        ("vmovddup xmm0, xmm1",                         [0xC5, 0xFB, 0x12, 0xC1]),
+        ("vmovshdup xmm0, xmm1",                        [0xC5, 0xFA, 0x16, 0xC1]),
+        ("vmovsldup xmm0, xmm1",                        [0xC5, 0xFA, 0x12, 0xC1]),
+        ("vmovddup ymm0, ymmword ptr [rdi]",            [0xC5, 0xFF, 0x12, 0x07]),
+    ]
+
+    func testVexCmpAndSse3Assembles() throws {
+        for (source, expected) in Self.vexCmpAndSse3Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexCmpAndSse3Disassembles() throws {
+        for (source, bytes) in Self.vexCmpAndSse3Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexCmpAndSse3StreamRoundTrip() throws {
+        let source = Self.vexCmpAndSse3Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexCmpAndSse3Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
