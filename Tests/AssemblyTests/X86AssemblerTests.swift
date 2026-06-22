@@ -3855,4 +3855,42 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18f VEX 2-op (VSQRT/VRSQRT/VRCP)
+
+    private static let vexUnaryCases: [(String, [UInt8])] = [
+        // Packed 2-op forms
+        ("vsqrtps xmm0, xmm1",                          [0xC5, 0xF8, 0x51, 0xC1]),
+        ("vsqrtpd xmm0, xmm1",                          [0xC5, 0xF9, 0x51, 0xC1]),
+        ("vsqrtps ymm0, ymm1",                          [0xC5, 0xFC, 0x51, 0xC1]),
+        ("vsqrtpd ymm0, ymm1",                          [0xC5, 0xFD, 0x51, 0xC1]),
+        ("vrsqrtps xmm0, xmm1",                         [0xC5, 0xF8, 0x52, 0xC1]),
+        ("vrcpps xmm0, xmm1",                           [0xC5, 0xF8, 0x53, 0xC1]),
+        ("vsqrtps xmm0, xmmword ptr [rdi]",             [0xC5, 0xF8, 0x51, 0x07]),
+        // Scalar three-operand forms via VexArithmeticKind
+        ("vsqrtss xmm0, xmm1, xmm2",                    [0xC5, 0xF2, 0x51, 0xC2]),
+        ("vsqrtsd xmm0, xmm1, xmm2",                    [0xC5, 0xF3, 0x51, 0xC2]),
+        ("vrsqrtss xmm0, xmm1, xmm2",                   [0xC5, 0xF2, 0x52, 0xC2]),
+        ("vrcpss xmm0, xmm1, dword ptr [rdi]",          [0xC5, 0xF2, 0x53, 0x07]),
+    ]
+
+    func testVexUnaryAssembles() throws {
+        for (source, expected) in Self.vexUnaryCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexUnaryDisassembles() throws {
+        for (source, bytes) in Self.vexUnaryCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexUnaryStreamRoundTrip() throws {
+        let source = Self.vexUnaryCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexUnaryCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

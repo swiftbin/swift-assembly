@@ -843,6 +843,9 @@ internal enum X86 {
         /// — all ride `VEX.128/256 66 0F xx /r` with `xmm/ymm` operands
         /// and `xmm/m128 (or ymm/m256)` source.
         case vexPackedInteger(VexPackedIntegerKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// AVX 2-operand FP transforms: VSQRTPS/PD, VRSQRTPS, VRCPPS.
+        /// Source is `xmm/ymm/m128/m256`; VEX.vvvv must be all-ones.
+        case vexUnary(VexUnaryKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1163,6 +1166,12 @@ internal enum X86 {
         case vmaxpd         // 66 0F 5F
         case vmaxss         // F3 0F 5F
         case vmaxsd         // F2 0F 5F
+        // Scalar reciprocal / sqrt. Three-operand form (vvvv carries the
+        // first source); no PD variants for RSQRT/RCP.
+        case vsqrtss        // F3 0F 51
+        case vsqrtsd        // F2 0F 51
+        case vrsqrtss       // F3 0F 52
+        case vrcpss         // F3 0F 53
         // Bit-wise logic on packed singles/doubles. No scalar form.
         case vandps         // 0F 54
         case vandpd         // 66 0F 54
@@ -1183,9 +1192,10 @@ internal enum X86 {
                  .vminpd, .vmaxpd, .vandpd, .vandnpd,
                  .vorpd,  .vxorpd: return 0b01
             case .vaddss, .vsubss, .vmulss, .vdivss,
-                 .vminss, .vmaxss: return 0b10
+                 .vminss, .vmaxss, .vsqrtss, .vrsqrtss,
+                 .vrcpss: return 0b10
             case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
-                 .vminsd, .vmaxsd: return 0b11
+                 .vminsd, .vmaxsd, .vsqrtsd: return 0b11
             }
         }
 
@@ -1202,6 +1212,9 @@ internal enum X86 {
             case .vandnps, .vandnpd:                  return 0x55
             case .vorps,  .vorpd:                     return 0x56
             case .vxorps, .vxorpd:                    return 0x57
+            case .vsqrtss, .vsqrtsd:                  return 0x51
+            case .vrsqrtss:                            return 0x52
+            case .vrcpss:                              return 0x53
             }
         }
 
@@ -1211,8 +1224,9 @@ internal enum X86 {
             switch self {
             case .vaddss, .vaddsd, .vsubss, .vsubsd,
                  .vmulss, .vmulsd, .vdivss, .vdivsd,
-                 .vminss, .vminsd, .vmaxss, .vmaxsd: return true
-            default:                                  return false
+                 .vminss, .vminsd, .vmaxss, .vmaxsd,
+                 .vsqrtss, .vsqrtsd, .vrsqrtss, .vrcpss: return true
+            default:                                      return false
             }
         }
 
@@ -1221,9 +1235,9 @@ internal enum X86 {
         func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
             switch self {
             case .vaddss, .vsubss, .vmulss, .vdivss,
-                 .vminss, .vmaxss: return .dword
+                 .vminss, .vmaxss, .vsqrtss, .vrsqrtss, .vrcpss: return .dword
             case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
-                 .vminsd, .vmaxsd: return .qword
+                 .vminsd, .vmaxsd, .vsqrtsd:               return .qword
             default:               return size.packedMemoryWidth
             }
         }
@@ -1370,6 +1384,33 @@ internal enum X86 {
 
         static func decode(opcode: UInt8) -> VexPackedIntegerKind? {
             allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    /// AVX 2-operand packed FP transforms (no vvvv source).
+    enum VexUnaryKind: String, Equatable, CaseIterable {
+        case vsqrtps        //    0F 51 — packed single
+        case vsqrtpd        // 66 0F 51 — packed double
+        case vrsqrtps       //    0F 52 — packed single only
+        case vrcpps         //    0F 53 — packed single only
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vsqrtps, .vrsqrtps, .vrcpps: return 0b00
+            case .vsqrtpd:                       return 0b01
+            }
+        }
+
+        var opcode: UInt8 {
+            switch self {
+            case .vsqrtps, .vsqrtpd: return 0x51
+            case .vrsqrtps:           return 0x52
+            case .vrcpps:             return 0x53
+            }
+        }
+
+        static func decode(ppBits: UInt8, opcode: UInt8) -> VexUnaryKind? {
+            allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
         }
     }
 

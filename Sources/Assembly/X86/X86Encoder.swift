@@ -201,6 +201,11 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), patches: [])
         case .vexPackedInteger(let kind, let size, let dst, let src1, let src2):
             return Encoded(bytes: try encodeVexPackedInteger(kind, size: size, destination: dst, source1: src1, source2: src2), patches: [])
+        case .vexUnary(let kind, let size, let dst, let src):
+            // src1 = 0 here: VEX.vvvv is the inverted register number,
+            // and the "reserved" slot is encoded as all-ones, which
+            // means the natural value is 0.
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
         }
     }
 

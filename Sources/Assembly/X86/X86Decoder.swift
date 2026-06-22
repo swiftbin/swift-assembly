@@ -777,6 +777,11 @@ internal enum X86InstructionDecoder {
         guard v.escape == X86.VEX.escape0F else {
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
+        // VSQRTPS/PD, VRSQRTPS, VRCPPS — 2-op packed; the vvvv slot is
+        // reserved and encoded all-ones, which un-inverts to 0.
+        if v.vvvv == 0, let kind = X86.VexUnaryKind.decode(ppBits: v.pp, opcode: opcode) {
+            return try decodeVexUnary(kind, prefixes: prefixes, lBit: v.l, cursor: &cursor)
+        }
         if let kind = X86.VexArithmeticKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexArithmetic(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
         }
@@ -790,6 +795,12 @@ internal enum X86InstructionDecoder {
         let size: X86.AVXVectorSize = (lBit == 1 && !kind.isScalar) ? .ymm : .xmm
         let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: vvvv, cursor: &cursor)
         return Decoded(instruction: .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    private static func decodeVexUnary(_ kind: X86.VexUnaryKind, prefixes: Prefixes, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let size: X86.AVXVectorSize = lBit == 1 ? .ymm : .xmm
+        let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+        return Decoded(instruction: .vexUnary(kind, size: size, destination: dst, source: src), length: cursor.consumed)
     }
 
     private static func decodeVexPackedInteger(_ kind: X86.VexPackedIntegerKind, prefixes: Prefixes, vvvv: UInt8, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {

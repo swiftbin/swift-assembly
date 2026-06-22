@@ -108,6 +108,9 @@ internal enum X86Parser {
         if let kind = X86.VexPackedIntegerKind(rawValue: instruction.mnemonic) {
             return try parseVexPackedInteger(kind, instruction)
         }
+        if let kind = X86.VexUnaryKind(rawValue: instruction.mnemonic) {
+            return try parseVexUnary(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1065,6 +1068,26 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// VSQRTPS/PD, VRSQRTPS, VRCPPS — `xmm/ymm` two-op shape (the VEX
+    /// vvvv slot is reserved and must be all-ones).
+    private static func parseVexUnary(_ kind: X86.VexUnaryKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let src = try parseVectorOrMemory(
+            instruction.operands[1],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        return .vexUnary(kind, size: size, destination: dst, source: src)
     }
 
     /// VPADD/VPSUB/VPAND/VPANDN/VPOR/VPXOR — `xmm/ymm` three-op shape.
