@@ -3933,4 +3933,46 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18h VEX imm8 SIMD shifts
+
+    private static let vexImmediateShiftCases: [(String, [UInt8])] = [
+        // PSRL imm
+        ("vpsrlw xmm0, xmm1, 1",                        [0xC5, 0xF9, 0x71, 0xD1, 0x01]),
+        ("vpsrld xmm0, xmm1, 4",                        [0xC5, 0xF9, 0x72, 0xD1, 0x04]),
+        ("vpsrlq xmm0, xmm1, 7",                        [0xC5, 0xF9, 0x73, 0xD1, 0x07]),
+        // PSLL imm
+        ("vpsllw xmm0, xmm1, 1",                        [0xC5, 0xF9, 0x71, 0xF1, 0x01]),
+        ("vpslld xmm0, xmm1, 4",                        [0xC5, 0xF9, 0x72, 0xF1, 0x04]),
+        ("vpsllq xmm0, xmm1, 7",                        [0xC5, 0xF9, 0x73, 0xF1, 0x07]),
+        // PSRA imm
+        ("vpsraw xmm0, xmm1, 1",                        [0xC5, 0xF9, 0x71, 0xE1, 0x01]),
+        ("vpsrad xmm0, xmm1, 31",                       [0xC5, 0xF9, 0x72, 0xE1, 0x1F]),
+        // 128-bit byte shifts
+        ("vpslldq xmm0, xmm1, 4",                       [0xC5, 0xF9, 0x73, 0xF9, 0x04]),
+        ("vpsrldq xmm0, xmm1, 8",                       [0xC5, 0xF9, 0x73, 0xD9, 0x08]),
+        // 256-bit (AVX2)
+        ("vpslld ymm0, ymm1, 4",                        [0xC5, 0xFD, 0x72, 0xF1, 0x04]),
+        ("vpsrldq ymm0, ymm1, 8",                       [0xC5, 0xFD, 0x73, 0xD9, 0x08]),
+    ]
+
+    func testVexImmediateShiftAssembles() throws {
+        for (source, expected) in Self.vexImmediateShiftCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexImmediateShiftDisassembles() throws {
+        for (source, bytes) in Self.vexImmediateShiftCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexImmediateShiftStreamRoundTrip() throws {
+        let source = Self.vexImmediateShiftCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexImmediateShiftCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

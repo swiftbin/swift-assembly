@@ -232,6 +232,9 @@ internal enum X86InstructionFormatter {
                 }
             }
             return "\(kind.rawValue) \(render(dst)), \(render(src))"
+        case .vexShiftImmediate(let kind, let size, let dst, let src, let imm):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            return "\(kind.rawValue) \(prefix)\(dst), \(prefix)\(src), \(imm)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

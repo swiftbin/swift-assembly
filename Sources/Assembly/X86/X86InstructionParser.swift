@@ -114,6 +114,9 @@ internal enum X86Parser {
         if let kind = X86.VexMovKind(rawValue: instruction.mnemonic) {
             return try parseVexMov(kind, instruction)
         }
+        if let kind = X86.VexImmediateShiftKind(rawValue: instruction.mnemonic) {
+            return try parseVexShiftImmediate(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1073,6 +1076,27 @@ internal enum X86Parser {
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
     }
 
+    /// VPSLLW/D/Q imm8 etc. — `xmm/ymm dst, xmm/ymm src, imm8`.
+    private static func parseVexShiftImmediate(_ kind: X86.VexImmediateShiftKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vexShiftImmediate(kind, size: size, destination: dst, source: src, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
     /// VMOV family — two operands; either side may be memory.
     private static func parseVexMov(_ kind: X86.VexMovKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 2 else {
@@ -1147,6 +1171,13 @@ internal enum X86Parser {
                 actual: instruction.operands.count
             )
         }
+        // VPSLLW/VPSRLW/... share the mnemonic with their imm8 form
+        // (VexImmediateShiftKind). Route to the imm8 case when the
+        // third operand parses as an immediate.
+        if let immKind = X86.VexImmediateShiftKind(rawValue: kind.rawValue),
+           let immValue = try? immediateAny(instruction.operands[2]) {
+            return try makeVexShiftImmediate(immKind, dstText: instruction.operands[0], srcText: instruction.operands[1], imm: immValue)
+        }
         let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
         let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
         guard size == size1 else {
@@ -1159,6 +1190,18 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexPackedInteger(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    private static func makeVexShiftImmediate(_ kind: X86.VexImmediateShiftKind, dstText: String, srcText: String, imm: Int64) throws -> X86.Instruction {
+        let (size, dst) = try parseVectorRegister(dstText, mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src) = try parseVectorRegister(srcText, mnemonic: kind.rawValue, scalarOnly: false)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vexShiftImmediate(kind, size: size, destination: dst, source: src, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     private static func parseVectorRegister(_ text: String, mnemonic: String, scalarOnly: Bool) throws -> (X86.AVXVectorSize, UInt8) {

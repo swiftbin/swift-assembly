@@ -786,6 +786,11 @@ internal enum X86InstructionDecoder {
         if v.vvvv == 0, let (kind, isStore) = X86.VexMovKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexMov(kind, isStore: isStore, prefixes: prefixes, lBit: v.l, cursor: &cursor)
         }
+        // Imm8 SIMD shifts (66 0F 71/72/73 /n ib) under VEX use NDD —
+        // the destination lives in vvvv and the source in ModR/M.rm.
+        if v.pp == 0b01 && (opcode == 0x71 || opcode == 0x72 || opcode == 0x73) {
+            return try decodeVexShiftImmediate(opcode: opcode, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
+        }
         if let kind = X86.VexArithmeticKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexArithmetic(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
         }
@@ -799,6 +804,21 @@ internal enum X86InstructionDecoder {
         let size: X86.AVXVectorSize = (lBit == 1 && !kind.isScalar) ? .ymm : .xmm
         let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: vvvv, cursor: &cursor)
         return Decoded(instruction: .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    private static func decodeVexShiftImmediate(opcode: UInt8, prefixes: Prefixes, vvvv: UInt8, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let modrm = try cursor.takeByte()
+        guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let slashDigit = X86.ModRM.reg.extract(modrm)
+        guard let kind = X86.VexImmediateShiftKind.decode(opcode: opcode, slashDigit: slashDigit) else {
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
+        let src = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+        let imm = try cursor.takeByte()
+        let size: X86.AVXVectorSize = lBit == 1 ? .ymm : .xmm
+        return Decoded(instruction: .vexShiftImmediate(kind, size: size, destination: vvvv, source: src, immediate: imm), length: cursor.consumed)
     }
 
     private static func decodeVexMov(_ kind: X86.VexMovKind, isStore: Bool, prefixes: Prefixes, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {

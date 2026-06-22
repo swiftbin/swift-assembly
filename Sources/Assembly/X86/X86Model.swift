@@ -849,6 +849,11 @@ internal enum X86 {
         /// VMOVAPS/VMOVAPD/VMOVUPS/VMOVUPD/VMOVDQA/VMOVDQU. The opcode
         /// pair (load/store) is selected by which side is memory.
         case vexMov(VexMovKind, size: AVXVectorSize, destination: VectorOrMemory, source: VectorOrMemory)
+        /// AVX/AVX2 imm8-controlled SIMD shifts. The destination goes
+        /// into VEX.vvvv (the "non-destructive source" slot), the
+        /// source register into ModR/M.rm, and the slash-digit selects
+        /// the operation in ModR/M.reg.
+        case vexShiftImmediate(VexImmediateShiftKind, size: AVXVectorSize, destination: UInt8, source: UInt8, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1458,6 +1463,37 @@ internal enum X86 {
                 if kind.storeOpcode == opcode { return (kind, true) }
             }
             return nil
+        }
+    }
+
+    /// VEX imm8-controlled SIMD shifts. Same opcode/slash-digit
+    /// mapping as the SSE2 versions; just the encoding form differs.
+    enum VexImmediateShiftKind: String, Equatable, CaseIterable {
+        case vpsrlw, vpsrld, vpsrlq
+        case vpsllw, vpslld, vpsllq
+        case vpsraw, vpsrad
+        case vpsrldq, vpslldq
+
+        var opcode: UInt8 {
+            switch self {
+            case .vpsrlw, .vpsraw, .vpsllw:                return 0x71
+            case .vpsrld, .vpsrad, .vpslld:                return 0x72
+            case .vpsrlq, .vpsllq, .vpsrldq, .vpslldq:     return 0x73
+            }
+        }
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .vpsrlw, .vpsrld, .vpsrlq: return 2
+            case .vpsrldq:                  return 3
+            case .vpsraw, .vpsrad:          return 4
+            case .vpsllw, .vpslld, .vpsllq: return 6
+            case .vpslldq:                  return 7
+            }
+        }
+
+        static func decode(opcode: UInt8, slashDigit: UInt8) -> VexImmediateShiftKind? {
+            allCases.first { $0.opcode == opcode && $0.slashDigit == slashDigit }
         }
     }
 

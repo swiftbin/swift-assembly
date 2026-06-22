@@ -208,6 +208,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
         case .vexMov(let kind, let size, let dst, let src):
             return Encoded(bytes: try encodeVexMov(kind, size: size, destination: dst, source: src), patches: [])
+        case .vexShiftImmediate(let kind, let size, let dst, let src, let imm):
+            return Encoded(bytes: encodeVexShiftImmediate(kind, size: size, destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1744,6 +1746,16 @@ internal enum X86InstructionEncoder {
 
     private static func encodeVexPackedInteger(_ kind: X86.VexPackedIntegerKind, size: X86.AVXVectorSize, destination dst: UInt8, source1 src1: UInt8, source2: X86.VectorOrMemory) throws -> [UInt8] {
         try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: source2)
+    }
+
+    private static func encodeVexShiftImmediate(_ kind: X86.VexImmediateShiftKind, size: X86.AVXVectorSize, destination dst: UInt8, source src: UInt8, immediate: UInt8) -> [UInt8] {
+        // dst goes into VEX.vvvv; src is encoded in ModR/M.rm. The
+        // slash-digit lives in ModR/M.reg, with no extension bit.
+        var bytes = X86.VEX.build(r: 0, x: 0, b: (src >> 3) & 1, escape: X86.VEX.escape0F, w: 0, vvvv: dst, l: size.lBit, pp: 0b01)
+        bytes.append(kind.opcode)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: kind.slashDigit, rm: src & 0x7))
+        bytes.append(immediate)
+        return bytes
     }
 
     private static func encodeVexMov(_ kind: X86.VexMovKind, size: X86.AVXVectorSize, destination: X86.VectorOrMemory, source: X86.VectorOrMemory) throws -> [UInt8] {
