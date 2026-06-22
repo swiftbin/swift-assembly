@@ -219,6 +219,13 @@ internal enum X86InstructionEncoder {
             var bytes = try encodeVexThreeOp(escape: kind.escape, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: lBit, destination: dst, source1: src1, source2: src2)
             bytes.append(imm)
             return Encoded(bytes: bytes, patches: [])
+        case .vexMaskExtract(let kind, let size, let dst, let src):
+            guard dst.width == .dword || dst.width == .qword else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a 32- or 64-bit GPR")
+            }
+            // VPMOVMSKB has no YMM form in AVX (it's AVX2). We still
+            // honor VEX.L=1 on the encoding when requested.
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst.number, source1: 0, source2: .register(src)), patches: [])
         }
     }
 

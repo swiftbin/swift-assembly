@@ -791,6 +791,17 @@ internal enum X86InstructionDecoder {
         if v.vvvv == 0, let kind = X86.VexUnaryKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexUnary(kind, prefixes: prefixes, lBit: v.l, cursor: &cursor)
         }
+        if v.vvvv == 0, let kind = X86.VexMaskExtractKind.decode(ppBits: v.pp, opcode: opcode) {
+            let modrm = try cursor.takeByte()
+            guard X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = makeRegister(number: regNum, width: .dword, hasREX: prefixes.hasREX)
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexMaskExtract(kind, size: size, destination: dst, source: rmNum), length: cursor.consumed)
+        }
         // VMOV family — both opcodes (load and store) live here.
         if v.vvvv == 0, let (kind, isStore) = X86.VexMovKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexMov(kind, isStore: isStore, prefixes: prefixes, lBit: v.l, cursor: &cursor)

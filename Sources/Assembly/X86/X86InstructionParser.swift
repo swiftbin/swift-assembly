@@ -123,6 +123,9 @@ internal enum X86Parser {
         if let kind = X86.VexThreeOpImmKind(rawValue: instruction.mnemonic) {
             return try parseVexThreeOpImm(kind, instruction)
         }
+        if let kind = X86.VexMaskExtractKind(rawValue: instruction.mnemonic) {
+            return try parseVexMaskExtract(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1080,6 +1083,24 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// VMOVMSKPS/PD and VPMOVMSKB — `r32/r64, xmm/ymm`.
+    private static func parseVexMaskExtract(_ kind: X86.VexMaskExtractKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let destination = try register(instruction.operands[0])
+        guard destination.width == .dword || destination.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a 32- or 64-bit GPR")
+        }
+        let (size, src) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        // VPMOVMSKB allows YMM under AVX2; the others allow either.
+        return .vexMaskExtract(kind, size: size, destination: destination, source: src)
     }
 
     /// VPSHUFD/LW/HW — 2-operand `xmm/ymm, xmm/ymm/m, imm8`.

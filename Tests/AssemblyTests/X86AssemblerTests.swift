@@ -4062,4 +4062,36 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18k VEX MOVMSK family
+
+    private static let vexMaskExtractCases: [(String, [UInt8])] = [
+        ("vmovmskps eax, xmm1",                         [0xC5, 0xF8, 0x50, 0xC1]),
+        ("vmovmskpd eax, xmm1",                         [0xC5, 0xF9, 0x50, 0xC1]),
+        ("vmovmskps eax, ymm1",                         [0xC5, 0xFC, 0x50, 0xC1]),
+        ("vmovmskpd eax, ymm1",                         [0xC5, 0xFD, 0x50, 0xC1]),
+        ("vpmovmskb eax, xmm1",                         [0xC5, 0xF9, 0xD7, 0xC1]),
+        // AVX2 256-bit form
+        ("vpmovmskb eax, ymm1",                         [0xC5, 0xFD, 0xD7, 0xC1]),
+    ]
+
+    func testVexMaskExtractAssembles() throws {
+        for (source, expected) in Self.vexMaskExtractCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexMaskExtractDisassembles() throws {
+        for (source, bytes) in Self.vexMaskExtractCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexMaskExtractStreamRoundTrip() throws {
+        let source = Self.vexMaskExtractCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexMaskExtractCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

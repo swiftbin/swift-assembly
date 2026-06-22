@@ -860,6 +860,9 @@ internal enum X86 {
         /// VSHUFPS/PD and VPALIGNR — 3-operand
         /// `xmm/ymm, xmm/ymm, xmm/ymm/m, imm8` (first source in vvvv).
         case vexThreeOpImm(VexThreeOpImmKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory, immediate: UInt8)
+        /// VMOVMSKPS/PD and VPMOVMSKB — extract a per-lane sign-bit
+        /// mask from an XMM/YMM register into a GPR.
+        case vexMaskExtract(VexMaskExtractKind, size: AVXVectorSize, destination: Register, source: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1605,6 +1608,31 @@ internal enum X86 {
 
         static func decode(escape: UInt8, ppBits: UInt8, opcode: UInt8) -> VexThreeOpImmKind? {
             allCases.first { $0.escape == escape && $0.ppBits == ppBits && $0.opcode == opcode }
+        }
+    }
+
+    /// VEX-encoded mask extract — GPR <- per-lane sign-bit mask.
+    enum VexMaskExtractKind: String, Equatable, CaseIterable {
+        case vmovmskps      //    0F 50 — packed singles
+        case vmovmskpd      // 66 0F 50 — packed doubles
+        case vpmovmskb      // 66 0F D7 — bytes
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vmovmskps: return 0b00
+            case .vmovmskpd, .vpmovmskb: return 0b01
+            }
+        }
+
+        var opcode: UInt8 {
+            switch self {
+            case .vmovmskps, .vmovmskpd: return 0x50
+            case .vpmovmskb:             return 0xD7
+            }
+        }
+
+        static func decode(ppBits: UInt8, opcode: UInt8) -> VexMaskExtractKind? {
+            allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
         }
     }
 
