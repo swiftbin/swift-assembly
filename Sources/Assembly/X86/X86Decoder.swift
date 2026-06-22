@@ -772,9 +772,13 @@ internal enum X86InstructionDecoder {
     private static func decodeVex(decoded v: X86.VEX.Decoded, cursor: inout Cursor) throws -> Decoded {
         let prefixes = prefixesFromVex(v)
         let opcode = try cursor.takeByte()
-        // BMI1: VEX.LZ.0F38 F2/F3 — GPR ops.
-        if v.escape == X86.VEX.escape0F38 && v.pp == 0 {
+        // BMI1: VEX.LZ.0F38 F2/F3 — GPR ops (ANDN + BLSI/BLSMSK/BLSR).
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0 && (opcode == 0xF2 || opcode == 0xF3) {
             return try decodeBmi1(opcode: opcode, prefixes: prefixes, vvvv: v.vvvv, w: v.w, cursor: &cursor)
+        }
+        // BMI2 shift-like family (BEXTR + BZHI + SHLX/SARX/SHRX).
+        if v.escape == X86.VEX.escape0F38, let kind = X86.BMI2ShiftLikeKind.decode(ppBits: v.pp, opcode: opcode) {
+            return try decodeBmiShiftLike(kind, prefixes: prefixes, vvvv: v.vvvv, w: v.w, cursor: &cursor)
         }
         // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
         // currently modelled here lives on 0F.
@@ -874,6 +878,23 @@ internal enum X86InstructionDecoder {
             src = partner
         }
         return Decoded(instruction: .vexMov(kind, size: size, destination: dst, source: src), length: cursor.consumed)
+    }
+
+    private static func decodeBmiShiftLike(_ kind: X86.BMI2ShiftLikeKind, prefixes: Prefixes, vvvv: UInt8, w: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let width: X86.RegisterWidth = w == 1 ? .qword : .dword
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let src2 = makeRegister(number: vvvv & 0xF, width: width, hasREX: prefixes.hasREX)
+        let src1: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            src1 = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            src1 = .memory(mem, width: width)
+        }
+        return Decoded(instruction: .bmiShiftLike(kind, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
     }
 
     private static func decodeBmi1(opcode: UInt8, prefixes: Prefixes, vvvv: UInt8, w: UInt8, cursor: inout Cursor) throws -> Decoded {

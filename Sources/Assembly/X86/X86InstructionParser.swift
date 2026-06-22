@@ -132,6 +132,9 @@ internal enum X86Parser {
         if let kind = X86.BMI1UnaryKind(rawValue: instruction.mnemonic) {
             return try parseBmiUnary(kind, instruction)
         }
+        if let kind = X86.BMI2ShiftLikeKind(rawValue: instruction.mnemonic) {
+            return try parseBmiShiftLike(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1118,6 +1121,21 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// BEXTR/BZHI/SARX/SHLX/SHRX — `dst, r/m (value), reg (control)`.
+    private static func parseBmiShiftLike(_ kind: X86.BMI2ShiftLikeKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try register(instruction.operands[0])
+        let src1 = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
+        let src2 = try register(instruction.operands[2])
+        return .bmiShiftLike(kind, destination: dst, source1: src1, source2: src2)
     }
 
     private static func parseGPROrSizedMemory(_ text: String, expectedWidth: X86.RegisterWidth, mnemonic: String) throws -> X86.RegisterOrMemory {

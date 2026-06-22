@@ -268,6 +268,13 @@ internal enum X86InstructionFormatter {
             case .memory(let m, let w): srcStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
             }
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(srcStr)"
+        case .bmiShiftLike(let kind, let dst, let src1, let src2):
+            let src1Str: String
+            switch src1 {
+            case .register(let r): src1Str = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w): src1Str = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(src1Str), \(X86.RegisterTable.canonicalName(for: src2))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

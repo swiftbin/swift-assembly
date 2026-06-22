@@ -4129,4 +4129,42 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18m BMI2 shift-like GPR ops
+
+    private static let bmi2ShiftLikeCases: [(String, [UInt8])] = [
+        // BEXTR — pp=0, opcode F7
+        ("bextr eax, ebx, ecx",                         [0xC4, 0xE2, 0x70, 0xF7, 0xC3]),
+        ("bextr rax, rbx, rcx",                         [0xC4, 0xE2, 0xF0, 0xF7, 0xC3]),
+        // BZHI — pp=0, opcode F5
+        ("bzhi eax, ebx, ecx",                          [0xC4, 0xE2, 0x70, 0xF5, 0xC3]),
+        // SHLX — pp=66, opcode F7
+        ("shlx eax, ebx, ecx",                          [0xC4, 0xE2, 0x71, 0xF7, 0xC3]),
+        // SARX — pp=F3, opcode F7
+        ("sarx eax, ebx, ecx",                          [0xC4, 0xE2, 0x72, 0xF7, 0xC3]),
+        // SHRX — pp=F2, opcode F7
+        ("shrx eax, ebx, ecx",                          [0xC4, 0xE2, 0x73, 0xF7, 0xC3]),
+        // Memory source
+        ("bextr eax, dword ptr [rdi], ecx",             [0xC4, 0xE2, 0x70, 0xF7, 0x07]),
+    ]
+
+    func testBmi2ShiftLikeAssembles() throws {
+        for (source, expected) in Self.bmi2ShiftLikeCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBmi2ShiftLikeDisassembles() throws {
+        for (source, bytes) in Self.bmi2ShiftLikeCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testBmi2ShiftLikeStreamRoundTrip() throws {
+        let source = Self.bmi2ShiftLikeCases.map(\.0).joined(separator: "\n")
+        let expected = Self.bmi2ShiftLikeCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

@@ -871,6 +871,10 @@ internal enum X86 {
         /// All ride VEX.LZ.0F38 F3 with the slash-digit picking the
         /// op; the destination goes into VEX.vvvv.
         case bmiUnary(BMI1UnaryKind, destination: Register, source: RegisterOrMemory)
+        /// BMI1 BEXTR and BMI2 BZHI/SARX/SHLX/SHRX — `dst, src1, src2`
+        /// where src1 carries the value and src2 the control field
+        /// (in VEX.vvvv). All ride VEX.LZ.[pp].0F38 [opcode] /r.
+        case bmiShiftLike(BMI2ShiftLikeKind, destination: Register, source1: RegisterOrMemory, source2: Register)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1661,6 +1665,37 @@ internal enum X86 {
 
         static func decode(slashDigit: UInt8) -> BMI1UnaryKind? {
             allCases.first { $0.slashDigit == slashDigit }
+        }
+    }
+
+    /// BMI1 BEXTR + BMI2 BZHI/SARX/SHLX/SHRX. All ride
+    /// `VEX.LZ.[pp].0F38.[W] [opcode] /r` with dst in ModR/M.reg, the
+    /// shifted value in ModR/M.rm, and the control in VEX.vvvv.
+    enum BMI2ShiftLikeKind: String, Equatable, CaseIterable {
+        case bextr          // pp=0,  opcode F7  (BMI1)
+        case bzhi           // pp=0,  opcode F5
+        case shlx           // pp=66, opcode F7
+        case sarx           // pp=F3, opcode F7
+        case shrx           // pp=F2, opcode F7
+
+        var ppBits: UInt8 {
+            switch self {
+            case .bextr, .bzhi: return 0b00
+            case .shlx:         return 0b01
+            case .sarx:         return 0b10
+            case .shrx:         return 0b11
+            }
+        }
+
+        var opcode: UInt8 {
+            switch self {
+            case .bzhi: return 0xF5
+            default:    return 0xF7
+            }
+        }
+
+        static func decode(ppBits: UInt8, opcode: UInt8) -> BMI2ShiftLikeKind? {
+            allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
         }
     }
 
