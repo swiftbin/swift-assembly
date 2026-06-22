@@ -210,6 +210,14 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexMov(kind, size: size, destination: dst, source: src), patches: [])
         case .vexShiftImmediate(let kind, let size, let dst, let src, let imm):
             return Encoded(bytes: encodeVexShiftImmediate(kind, size: size, destination: dst, source: src, immediate: imm), patches: [])
+        case .vexShuffleImm(let kind, let size, let dst, let src, let imm):
+            var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: 0x70, lBit: size.lBit, destination: dst, source1: 0, source2: src)
+            bytes.append(imm)
+            return Encoded(bytes: bytes, patches: [])
+        case .vexThreeOpImm(let kind, let size, let dst, let src1, let src2, let imm):
+            var bytes = try encodeVexThreeOp(escape: kind.escape, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: src2)
+            bytes.append(imm)
+            return Encoded(bytes: bytes, patches: [])
         }
     }
 

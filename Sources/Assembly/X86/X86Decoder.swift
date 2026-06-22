@@ -772,8 +772,17 @@ internal enum X86InstructionDecoder {
     private static func decodeVex(decoded v: X86.VEX.Decoded, cursor: inout Cursor) throws -> Decoded {
         let prefixes = prefixesFromVex(v)
         let opcode = try cursor.takeByte()
-        // For Phase 18a only the 0F escape is dispatched; the 0F 38 and
-        // 0F 3A escapes will land here when later AVX phases add cases.
+        // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
+        // currently modelled here lives on 0F.
+        if v.escape == X86.VEX.escape0F3A {
+            if let kind = X86.VexThreeOpImmKind.decode(escape: v.escape, ppBits: v.pp, opcode: opcode) {
+                let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+                return Decoded(instruction: .vexThreeOpImm(kind, size: size, destination: dst, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
+            }
+            throw AssemblerError.unknownEncoding(UInt32(opcode))
+        }
         guard v.escape == X86.VEX.escape0F else {
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
@@ -790,6 +799,21 @@ internal enum X86InstructionDecoder {
         // the destination lives in vvvv and the source in ModR/M.rm.
         if v.pp == 0b01 && (opcode == 0x71 || opcode == 0x72 || opcode == 0x73) {
             return try decodeVexShiftImmediate(opcode: opcode, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
+        }
+        // VPSHUFD/LW/HW — 2-op imm8 (vvvv reserved).
+        if v.escape == X86.VEX.escape0F && opcode == 0x70 && v.vvvv == 0,
+           let kind = X86.VexShuffleImmKind.decode(ppBits: v.pp) {
+            let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+            let imm = try cursor.takeByte()
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexShuffleImm(kind, size: size, destination: dst, source: src, immediate: imm), length: cursor.consumed)
+        }
+        // VSHUFPS/PD (0F C6) and VPALIGNR (0F 3A 0F) — 3-op imm8.
+        if let kind = X86.VexThreeOpImmKind.decode(escape: v.escape, ppBits: v.pp, opcode: opcode) {
+            let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+            let imm = try cursor.takeByte()
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexThreeOpImm(kind, size: size, destination: dst, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
         }
         if let kind = X86.VexArithmeticKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexArithmetic(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)

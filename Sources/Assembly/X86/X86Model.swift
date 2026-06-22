@@ -854,6 +854,12 @@ internal enum X86 {
         /// source register into ModR/M.rm, and the slash-digit selects
         /// the operation in ModR/M.reg.
         case vexShiftImmediate(VexImmediateShiftKind, size: AVXVectorSize, destination: UInt8, source: UInt8, immediate: UInt8)
+        /// VPSHUFD/LW/HW — 2-operand `xmm/ymm, xmm/ymm/m, imm8`
+        /// (vvvv reserved).
+        case vexShuffleImm(VexShuffleImmKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory, immediate: UInt8)
+        /// VSHUFPS/PD and VPALIGNR — 3-operand
+        /// `xmm/ymm, xmm/ymm, xmm/ymm/m, imm8` (first source in vvvv).
+        case vexThreeOpImm(VexThreeOpImmKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1494,6 +1500,59 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, slashDigit: UInt8) -> VexImmediateShiftKind? {
             allCases.first { $0.opcode == opcode && $0.slashDigit == slashDigit }
+        }
+    }
+
+    /// VPSHUFD/LW/HW — 2-operand imm8 shuffles. All ride `[prefix] 0F
+    /// 70 /r ib` with the mandatory prefix selecting the kind.
+    enum VexShuffleImmKind: String, Equatable, CaseIterable {
+        case vpshufd    // 66 0F 70
+        case vpshuflw   // F2 0F 70
+        case vpshufhw   // F3 0F 70
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vpshufd:  return 0b01
+            case .vpshuflw: return 0b11
+            case .vpshufhw: return 0b10
+            }
+        }
+
+        static func decode(ppBits: UInt8) -> VexShuffleImmKind? {
+            allCases.first { $0.ppBits == ppBits }
+        }
+    }
+
+    /// VSHUFPS/PD and VPALIGNR — 3-operand imm8 instructions.
+    /// VSHUFPS/PD ride `0F C6`; VPALIGNR rides `66 0F 3A 0F`.
+    enum VexThreeOpImmKind: String, Equatable, CaseIterable {
+        case vshufps    //    0F   C6
+        case vshufpd    // 66 0F   C6
+        case vpalignr   // 66 0F3A 0F
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vshufps:                          return 0b00
+            case .vshufpd, .vpalignr:               return 0b01
+            }
+        }
+
+        var escape: UInt8 {
+            switch self {
+            case .vshufps, .vshufpd: return 0b00001     // 0F
+            case .vpalignr:           return 0b00011    // 0F 3A
+            }
+        }
+
+        var opcode: UInt8 {
+            switch self {
+            case .vshufps, .vshufpd: return 0xC6
+            case .vpalignr:           return 0x0F
+            }
+        }
+
+        static func decode(escape: UInt8, ppBits: UInt8, opcode: UInt8) -> VexThreeOpImmKind? {
+            allCases.first { $0.escape == escape && $0.ppBits == ppBits && $0.opcode == opcode }
         }
     }
 

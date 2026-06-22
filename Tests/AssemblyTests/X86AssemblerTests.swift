@@ -3975,4 +3975,44 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18i VEX imm8 shuffles
+
+    private static let vexShuffleImmCases: [(String, [UInt8])] = [
+        // VPSHUF — 2-op imm8
+        ("vpshufd xmm0, xmm1, 27",                      [0xC5, 0xF9, 0x70, 0xC1, 0x1B]),
+        ("vpshuflw xmm0, xmm1, 228",                    [0xC5, 0xFB, 0x70, 0xC1, 0xE4]),
+        ("vpshufhw xmm0, xmm1, 228",                    [0xC5, 0xFA, 0x70, 0xC1, 0xE4]),
+        // VSHUFPS / VSHUFPD — 3-op imm8
+        ("vshufps xmm0, xmm1, xmm2, 1",                 [0xC5, 0xF0, 0xC6, 0xC2, 0x01]),
+        ("vshufpd xmm0, xmm1, xmm2, 2",                 [0xC5, 0xF1, 0xC6, 0xC2, 0x02]),
+        // VPALIGNR — 0F 3A escape
+        ("vpalignr xmm0, xmm1, xmm2, 3",                [0xC4, 0xE3, 0x71, 0x0F, 0xC2, 0x03]),
+        // 256-bit (AVX2)
+        ("vpshufd ymm0, ymm1, 0",                       [0xC5, 0xFD, 0x70, 0xC1, 0x00]),
+        ("vshufps ymm0, ymm1, ymm2, 4",                 [0xC5, 0xF4, 0xC6, 0xC2, 0x04]),
+        ("vpalignr ymm0, ymm1, ymm2, 5",                [0xC4, 0xE3, 0x75, 0x0F, 0xC2, 0x05]),
+        // Memory source
+        ("vpshufd xmm0, xmmword ptr [rdi], 1",          [0xC5, 0xF9, 0x70, 0x07, 0x01]),
+    ]
+
+    func testVexShuffleImmAssembles() throws {
+        for (source, expected) in Self.vexShuffleImmCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexShuffleImmDisassembles() throws {
+        for (source, bytes) in Self.vexShuffleImmCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexShuffleImmStreamRoundTrip() throws {
+        let source = Self.vexShuffleImmCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexShuffleImmCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

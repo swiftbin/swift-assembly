@@ -117,6 +117,12 @@ internal enum X86Parser {
         if let kind = X86.VexImmediateShiftKind(rawValue: instruction.mnemonic) {
             return try parseVexShiftImmediate(kind, instruction)
         }
+        if let kind = X86.VexShuffleImmKind(rawValue: instruction.mnemonic) {
+            return try parseVexShuffleImm(kind, instruction)
+        }
+        if let kind = X86.VexThreeOpImmKind(rawValue: instruction.mnemonic) {
+            return try parseVexThreeOpImm(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1074,6 +1080,57 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// VPSHUFD/LW/HW — 2-operand `xmm/ymm, xmm/ymm/m, imm8`.
+    private static func parseVexShuffleImm(_ kind: X86.VexShuffleImmKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let src = try parseVectorOrMemory(
+            instruction.operands[1],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vexShuffleImm(kind, size: size, destination: dst, source: src, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// VSHUFPS/PD and VPALIGNR — 3-operand
+    /// `xmm/ymm, xmm/ymm, xmm/ymm/m, imm8`.
+    private static func parseVexThreeOpImm(_ kind: X86.VexThreeOpImmKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 4 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "4 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        let src2 = try parseVectorOrMemory(
+            instruction.operands[2],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        let imm = try immediateAny(instruction.operands[3])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vexThreeOpImm(kind, size: size, destination: dst, source1: src1, source2: src2, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// VPSLLW/D/Q imm8 etc. — `xmm/ymm dst, xmm/ymm src, imm8`.
