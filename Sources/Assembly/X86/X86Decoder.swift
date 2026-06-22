@@ -782,6 +782,10 @@ internal enum X86InstructionDecoder {
         if v.vvvv == 0, let kind = X86.VexUnaryKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexUnary(kind, prefixes: prefixes, lBit: v.l, cursor: &cursor)
         }
+        // VMOV family — both opcodes (load and store) live here.
+        if v.vvvv == 0, let (kind, isStore) = X86.VexMovKind.decode(ppBits: v.pp, opcode: opcode) {
+            return try decodeVexMov(kind, isStore: isStore, prefixes: prefixes, lBit: v.l, cursor: &cursor)
+        }
         if let kind = X86.VexArithmeticKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexArithmetic(kind, prefixes: prefixes, vvvv: v.vvvv, lBit: v.l, cursor: &cursor)
         }
@@ -795,6 +799,22 @@ internal enum X86InstructionDecoder {
         let size: X86.AVXVectorSize = (lBit == 1 && !kind.isScalar) ? .ymm : .xmm
         let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: vvvv, cursor: &cursor)
         return Decoded(instruction: .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    private static func decodeVexMov(_ kind: X86.VexMovKind, isStore: Bool, prefixes: Prefixes, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let size: X86.AVXVectorSize = lBit == 1 ? .ymm : .xmm
+        let (regNum, _, partner) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+        let dst: X86.VectorOrMemory
+        let src: X86.VectorOrMemory
+        if isStore {
+            // reg field carries the source; rm side is memory.
+            dst = partner
+            src = .register(regNum)
+        } else {
+            dst = .register(regNum)
+            src = partner
+        }
+        return Decoded(instruction: .vexMov(kind, size: size, destination: dst, source: src), length: cursor.consumed)
     }
 
     private static func decodeVexUnary(_ kind: X86.VexUnaryKind, prefixes: Prefixes, lBit: UInt8, cursor: inout Cursor) throws -> Decoded {

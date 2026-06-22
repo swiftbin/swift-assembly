@@ -206,6 +206,8 @@ internal enum X86InstructionEncoder {
             // and the "reserved" slot is encoded as all-ones, which
             // means the natural value is 0.
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
+        case .vexMov(let kind, let size, let dst, let src):
+            return Encoded(bytes: try encodeVexMov(kind, size: size, destination: dst, source: src), patches: [])
         }
     }
 
@@ -1742,6 +1744,20 @@ internal enum X86InstructionEncoder {
 
     private static func encodeVexPackedInteger(_ kind: X86.VexPackedIntegerKind, size: X86.AVXVectorSize, destination dst: UInt8, source1 src1: UInt8, source2: X86.VectorOrMemory) throws -> [UInt8] {
         try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: source2)
+    }
+
+    private static func encodeVexMov(_ kind: X86.VexMovKind, size: X86.AVXVectorSize, destination: X86.VectorOrMemory, source: X86.VectorOrMemory) throws -> [UInt8] {
+        switch (destination, source) {
+        case let (.register(dst), .register(src)):
+            // Register-register form uses the load opcode by convention.
+            return try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.loadOpcode, lBit: size.lBit, destination: dst, source1: 0, source2: .register(src))
+        case let (.register(dst), .memory(mem)):
+            return try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.loadOpcode, lBit: size.lBit, destination: dst, source1: 0, source2: .memory(mem))
+        case let (.memory(mem), .register(src)):
+            return try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.storeOpcode, lBit: size.lBit, destination: src, source1: 0, source2: .memory(mem))
+        case (.memory, .memory):
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): cannot have two memory operands")
+        }
     }
 
     // MARK: - MOVD / MOVQ (XMM ↔ GPR/memory)

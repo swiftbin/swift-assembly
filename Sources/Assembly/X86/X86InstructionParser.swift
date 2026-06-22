@@ -111,6 +111,9 @@ internal enum X86Parser {
         if let kind = X86.VexUnaryKind(rawValue: instruction.mnemonic) {
             return try parseVexUnary(kind, instruction)
         }
+        if let kind = X86.VexMovKind(rawValue: instruction.mnemonic) {
+            return try parseVexMov(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1068,6 +1071,51 @@ internal enum X86Parser {
             mnemonic: kind.rawValue
         )
         return .vexArithmetic(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// VMOV family — two operands; either side may be memory.
+    private static func parseVexMov(_ kind: X86.VexMovKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let lhs = try parseVexMovOperand(instruction.operands[0], mnemonic: kind.rawValue)
+        let rhs = try parseVexMovOperand(instruction.operands[1], mnemonic: kind.rawValue)
+        // Vector sizes must agree.
+        let size: X86.AVXVectorSize
+        switch (lhs.size, rhs.size) {
+        case let (.some(a), .some(b)):
+            guard a == b else { throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match") }
+            size = a
+        case let (.some(a), nil): size = a
+        case let (nil, .some(b)): size = b
+        case (nil, nil):
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): need at least one register operand to pick vector size")
+        }
+        return .vexMov(kind, size: size, destination: lhs.operand, source: rhs.operand)
+    }
+
+    private static func parseVexMovOperand(_ text: String, mnemonic: String) throws -> (operand: X86.VectorOrMemory, size: X86.AVXVectorSize?) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let xmm = parseXMMRegister(trimmed) { return (.register(xmm.number), .xmm) }
+        if let ymm = parseYMMRegister(trimmed) { return (.register(ymm.number), .ymm) }
+        if let (width, body) = stripSizeHint(trimmed) {
+            let size: X86.AVXVectorSize
+            switch width {
+            case .xmmword: size = .xmm
+            case .ymmword: size = .ymm
+            default: throw AssemblerError.unsupportedOperand("\(mnemonic): memory operand width must be xmmword or ymmword")
+            }
+            return (.memory(try memoryOperand(body)), size)
+        }
+        if trimmed.hasPrefix("[") {
+            // Width is implied by the other operand.
+            return (.memory(try memoryOperand(trimmed)), nil)
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected an XMM/YMM register or memory operand")
     }
 
     /// VSQRTPS/PD, VRSQRTPS, VRCPPS — `xmm/ymm` two-op shape (the VEX

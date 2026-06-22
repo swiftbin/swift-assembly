@@ -222,6 +222,16 @@ internal enum X86InstructionFormatter {
             case .memory(let m):   srcStr = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
             }
             return "\(kind.rawValue) \(prefix)\(dst), \(srcStr)"
+        case .vexMov(let kind, let size, let dst, let src):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            let w = size.packedMemoryWidth
+            func render(_ op: X86.VectorOrMemory) -> String {
+                switch op {
+                case .register(let n): return "\(prefix)\(n)"
+                case .memory(let m):   return "\(sizeHintPrefix(w)) \(formatMemory(m))"
+                }
+            }
+            return "\(kind.rawValue) \(render(dst)), \(render(src))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

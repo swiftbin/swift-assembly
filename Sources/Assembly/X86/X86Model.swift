@@ -846,6 +846,9 @@ internal enum X86 {
         /// AVX 2-operand FP transforms: VSQRTPS/PD, VRSQRTPS, VRCPPS.
         /// Source is `xmm/ymm/m128/m256`; VEX.vvvv must be all-ones.
         case vexUnary(VexUnaryKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
+        /// VMOVAPS/VMOVAPD/VMOVUPS/VMOVUPD/VMOVDQA/VMOVDQU. The opcode
+        /// pair (load/store) is selected by which side is memory.
+        case vexMov(VexMovKind, size: AVXVectorSize, destination: VectorOrMemory, source: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1411,6 +1414,50 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8, opcode: UInt8) -> VexUnaryKind? {
             allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
+        }
+    }
+
+    /// VEX move family. Each kind ships a load opcode (xmm/ymm <- src)
+    /// and a store opcode (load + 1, dst <- xmm/ymm).
+    enum VexMovKind: String, Equatable, CaseIterable {
+        case vmovups        //    0F 10 / 11 — unaligned packed single
+        case vmovupd        // 66 0F 10 / 11 — unaligned packed double
+        case vmovaps        //    0F 28 / 29 — aligned packed single
+        case vmovapd        // 66 0F 28 / 29 — aligned packed double
+        case vmovdqu        // F3 0F 6F / 7F — unaligned packed dqword
+        case vmovdqa        // 66 0F 6F / 7F — aligned packed dqword
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vmovups, .vmovaps: return 0b00
+            case .vmovupd, .vmovapd, .vmovdqa: return 0b01
+            case .vmovdqu: return 0b10
+            }
+        }
+
+        var loadOpcode: UInt8 {
+            switch self {
+            case .vmovups, .vmovupd: return 0x10
+            case .vmovaps, .vmovapd: return 0x28
+            case .vmovdqu, .vmovdqa: return 0x6F
+            }
+        }
+
+        /// VMOVAPS/UPS/APD/UPD use load+1 for the store opcode; VMOVDQA
+        /// and VMOVDQU jump to 0x7F (load was 0x6F).
+        var storeOpcode: UInt8 {
+            switch self {
+            case .vmovdqu, .vmovdqa: return 0x7F
+            default:                 return loadOpcode + 1
+            }
+        }
+
+        static func decode(ppBits: UInt8, opcode: UInt8) -> (kind: VexMovKind, isStore: Bool)? {
+            for kind in allCases where kind.ppBits == ppBits {
+                if kind.loadOpcode == opcode  { return (kind, false) }
+                if kind.storeOpcode == opcode { return (kind, true) }
+            }
+            return nil
         }
     }
 
