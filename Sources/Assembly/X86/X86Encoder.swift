@@ -232,6 +232,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeBmiUnary(kind, destination: dst, source: src), patches: [])
         case .bmiShiftLike(let kind, let dst, let src1, let src2):
             return Encoded(bytes: try encodeBmiShiftLike(kind, destination: dst, source1: src1, source2: src2), patches: [])
+        case .rorx(let dst, let src, let imm):
+            return Encoded(bytes: try encodeRorx(destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1856,6 +1858,34 @@ internal enum X86InstructionEncoder {
     private static func checkBmiWidth(_ width: X86.RegisterWidth, mnemonic: String) throws {
         guard width == .dword || width == .qword else {
             throw AssemblerError.unsupportedOperand("\(mnemonic): operands must be 32- or 64-bit")
+        }
+    }
+
+    /// `VEX.LZ.F2.0F3A.W0|W1 F0 /r ib` — RORX.
+    private static func encodeRorx(destination dst: X86.Register, source: X86.RegisterOrMemory, immediate: UInt8) throws -> [UInt8] {
+        try checkBmiWidth(dst.width, mnemonic: "rorx")
+        let w: UInt8 = dst.width == .qword ? 1 : 0
+        switch source {
+        case .register(let r):
+            guard r.width == dst.width else {
+                throw AssemblerError.unsupportedOperand("rorx: operand widths must match")
+            }
+            try checkRegisterRegisterCompat([dst, r], mnemonic: "rorx")
+            var bytes = X86.VEX.build(r: dst.highBit, x: 0, b: r.highBit, escape: X86.VEX.escape0F3A, w: w, vvvv: 0, l: 0, pp: 0b11)
+            bytes.append(0xF0)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: r.lowBits))
+            bytes.append(immediate)
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == dst.width else {
+                throw AssemblerError.unsupportedOperand("rorx: memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            var bytes = X86.VEX.build(r: dst.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F3A, w: w, vvvv: 0, l: 0, pp: 0b11)
+            bytes.append(0xF0)
+            bytes.append(contentsOf: addressing)
+            bytes.append(immediate)
+            return bytes
         }
     }
 

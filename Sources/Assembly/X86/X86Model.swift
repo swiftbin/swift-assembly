@@ -875,6 +875,9 @@ internal enum X86 {
         /// where src1 carries the value and src2 the control field
         /// (in VEX.vvvv). All ride VEX.LZ.[pp].0F38 [opcode] /r.
         case bmiShiftLike(BMI2ShiftLikeKind, destination: Register, source1: RegisterOrMemory, source2: Register)
+        /// RORX — rotate right by imm8 without affecting flags.
+        /// Encoded as VEX.LZ.F2.0F3A F0 /r ib (W picks 32/64).
+        case rorx(destination: Register, source: RegisterOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {

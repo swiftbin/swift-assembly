@@ -4167,4 +4167,32 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18n RORX
+
+    private static let rorxCases: [(String, [UInt8])] = [
+        ("rorx eax, ebx, 7",                            [0xC4, 0xE3, 0x7B, 0xF0, 0xC3, 0x07]),
+        ("rorx rax, rbx, 4",                            [0xC4, 0xE3, 0xFB, 0xF0, 0xC3, 0x04]),
+        ("rorx eax, dword ptr [rdi], 1",                [0xC4, 0xE3, 0x7B, 0xF0, 0x07, 0x01]),
+    ]
+
+    func testRorxAssembles() throws {
+        for (source, expected) in Self.rorxCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testRorxDisassembles() throws {
+        for (source, bytes) in Self.rorxCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testRorxStreamRoundTrip() throws {
+        let source = Self.rorxCases.map(\.0).joined(separator: "\n")
+        let expected = Self.rorxCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
