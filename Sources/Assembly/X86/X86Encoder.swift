@@ -240,6 +240,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMulx(destinationHigh: dstH, destinationLow: dstL, source: src), patches: [])
         case .adx(let kind, let dst, let src):
             return Encoded(bytes: try encodeAdx(kind, destination: dst, source: src), patches: [])
+        case .vexMovDQ(let kind, let direction, let xmm, let gpr):
+            return Encoded(bytes: try encodeVexMovDQ(kind, direction: direction, xmm: xmm, gpr: gpr), patches: [])
         }
     }
 
@@ -1920,6 +1922,27 @@ internal enum X86InstructionEncoder {
             let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dstH.lowBits)
             var bytes = X86.VEX.build(r: dstH.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F38, w: w, vvvv: dstL.number, l: 0, pp: 0b11)
             bytes.append(0xF6)
+            bytes.append(contentsOf: addressing)
+            return bytes
+        }
+    }
+
+    /// VEX-encoded MOVD / MOVQ. Same shape as legacy MovDQ but the
+    /// prefix and REX are folded into the VEX byte.
+    private static func encodeVexMovDQ(_ kind: X86.MovDQKind, direction: X86.MovDQDirection, xmm: X86.XMMRegister, gpr: X86.RegisterOrMemory) throws -> [UInt8] {
+        let w: UInt8 = kind == .movq ? 1 : 0
+        let opcode: UInt8 = direction == .load ? 0x6E : 0x7E
+        switch gpr {
+        case .register(let r):
+            try checkRegisterRegisterCompat([r], mnemonic: kind.rawValue)
+            var bytes = X86.VEX.build(r: xmm.highBit, x: 0, b: r.highBit, escape: X86.VEX.escape0F, w: w, vvvv: 0, l: 0, pp: 0b01)
+            bytes.append(opcode)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: xmm.lowBits, rm: r.lowBits))
+            return bytes
+        case .memory(let mem, _):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: xmm.lowBits)
+            var bytes = X86.VEX.build(r: xmm.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F, w: w, vvvv: 0, l: 0, pp: 0b01)
+            bytes.append(opcode)
             bytes.append(contentsOf: addressing)
             return bytes
         }

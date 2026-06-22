@@ -147,6 +147,10 @@ internal enum X86Parser {
         if let kind = X86.AdxKind(rawValue: instruction.mnemonic) {
             return try parseAdx(kind, instruction)
         }
+        if instruction.mnemonic == "vmovd" || instruction.mnemonic == "vmovq" {
+            let kind: X86.MovDQKind = instruction.mnemonic == "vmovq" ? .movq : .movd
+            return try parseVexMovDQ(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1133,6 +1137,32 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VMOVD / VMOVQ — XMM ↔ GPR/memory.
+    private static func parseVexMovDQ(_ kind: X86.MovDQKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "v" + kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let lhs = instruction.operands[0]
+        let rhs = instruction.operands[1]
+        let gprWidth: X86.RegisterWidth = kind == .movq ? .qword : .dword
+
+        if let xmm = parseXMMRegister(lhs) {
+            // load form: xmm ← GPR/mem
+            let gpr = try parseGPROrSizedMemory(rhs, expectedWidth: gprWidth, mnemonic: "v" + kind.rawValue)
+            return .vexMovDQ(kind, direction: .load, xmm: xmm, gpr: gpr)
+        }
+        if let xmm = parseXMMRegister(rhs) {
+            // store form: GPR/mem ← xmm
+            let gpr = try parseGPROrSizedMemory(lhs, expectedWidth: gprWidth, mnemonic: "v" + kind.rawValue)
+            return .vexMovDQ(kind, direction: .store, xmm: xmm, gpr: gpr)
+        }
+        throw AssemblerError.unsupportedOperand("v\(kind.rawValue): one operand must be an XMM register")
     }
 
     /// ADCX / ADOX — `r32/64, r/m32/64`.

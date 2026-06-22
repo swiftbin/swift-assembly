@@ -303,6 +303,13 @@ internal enum X86InstructionFormatter {
             case .memory(let m, let w): srcStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
             }
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(srcStr)"
+        case .vexMovDQ(let kind, let direction, let xmm, let gpr):
+            let xmmStr = "xmm\(xmm.number)"
+            let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
+            switch direction {
+            case .load:  return "v\(kind.rawValue) \(xmmStr), \(gprStr)"
+            case .store: return "v\(kind.rawValue) \(gprStr), \(xmmStr)"
+            }
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

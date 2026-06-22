@@ -4259,4 +4259,39 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18q VEX MOVD / MOVQ
+
+    private static let vexMovDQCases: [(String, [UInt8])] = [
+        // VMOVD load / store
+        ("vmovd xmm0, eax",                             [0xC5, 0xF9, 0x6E, 0xC0]),
+        ("vmovd eax, xmm0",                             [0xC5, 0xF9, 0x7E, 0xC0]),
+        ("vmovd xmm0, dword ptr [rdi]",                 [0xC5, 0xF9, 0x6E, 0x07]),
+        ("vmovd dword ptr [rdi], xmm0",                 [0xC5, 0xF9, 0x7E, 0x07]),
+        // VMOVQ load / store
+        ("vmovq xmm0, rax",                             [0xC4, 0xE1, 0xF9, 0x6E, 0xC0]),
+        ("vmovq rax, xmm0",                             [0xC4, 0xE1, 0xF9, 0x7E, 0xC0]),
+        ("vmovq xmm0, qword ptr [rdi]",                 [0xC4, 0xE1, 0xF9, 0x6E, 0x07]),
+        ("vmovq qword ptr [rdi], xmm0",                 [0xC4, 0xE1, 0xF9, 0x7E, 0x07]),
+    ]
+
+    func testVexMovDQAssembles() throws {
+        for (source, expected) in Self.vexMovDQCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexMovDQDisassembles() throws {
+        for (source, bytes) in Self.vexMovDQCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexMovDQStreamRoundTrip() throws {
+        let source = Self.vexMovDQCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexMovDQCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

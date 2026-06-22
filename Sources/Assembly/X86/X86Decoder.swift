@@ -845,6 +845,24 @@ internal enum X86InstructionDecoder {
         if v.vvvv == 0, let (kind, isStore) = X86.VexMovKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexMov(kind, isStore: isStore, prefixes: prefixes, lBit: v.l, cursor: &cursor)
         }
+        // VMOVD / VMOVQ — VEX.128.66.0F.W0|W1 6E (load) / 7E (store).
+        if v.vvvv == 0 && v.pp == 0b01 && (opcode == 0x6E || opcode == 0x7E) {
+            let kind: X86.MovDQKind = v.w == 1 ? .movq : .movd
+            let direction: X86.MovDQDirection = opcode == 0x6E ? .load : .store
+            let modrm = try cursor.takeByte()
+            let xmmNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let xmm = X86.XMMRegister(number: xmmNum)
+            let gprWidth: X86.RegisterWidth = kind == .movq ? .qword : .dword
+            let gpr: X86.RegisterOrMemory
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                gpr = .register(makeRegister(number: rmNum, width: gprWidth, hasREX: prefixes.hasREX))
+            } else {
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                gpr = .memory(mem, width: gprWidth)
+            }
+            return Decoded(instruction: .vexMovDQ(kind, direction: direction, xmm: xmm, gpr: gpr), length: cursor.consumed)
+        }
         // Imm8 SIMD shifts (66 0F 71/72/73 /n ib) under VEX use NDD —
         // the destination lives in vvvv and the source in ModR/M.rm.
         if v.pp == 0b01 && (opcode == 0x71 || opcode == 0x72 || opcode == 0x73) {

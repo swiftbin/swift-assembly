@@ -891,6 +891,10 @@ internal enum X86 {
         /// encoded as `[66|F3] 0F 38 F6 /r`. ADCX feeds the CF chain;
         /// ADOX feeds the OF chain.
         case adx(AdxKind, destination: Register, source: RegisterOrMemory)
+        /// VMOVD / VMOVQ — move between an XMM register and a GPR or
+        /// memory operand. Encoded as VEX.128.66.0F.W0|W1 6E (load) or
+        /// 7E (store). W=1 selects MOVQ over MOVD.
+        case vexMovDQ(MovDQKind, direction: MovDQDirection, xmm: XMMRegister, gpr: RegisterOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
