@@ -144,6 +144,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "mulx" {
             return try parseMulx(instruction)
         }
+        if let kind = X86.AdxKind(rawValue: instruction.mnemonic) {
+            return try parseAdx(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1130,6 +1133,20 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// ADCX / ADOX — `r32/64, r/m32/64`.
+    private static func parseAdx(_ kind: X86.AdxKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try register(instruction.operands[0])
+        let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
+        return .adx(kind, destination: dst, source: src)
     }
 
     /// PDEP/PEXT — `dst, src1, r/m`.

@@ -4228,4 +4228,35 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18p ADX (ADCX/ADOX)
+
+    private static let adxCases: [(String, [UInt8])] = [
+        ("adcx eax, ebx",                               [0x66, 0x0F, 0x38, 0xF6, 0xC3]),
+        ("adcx rax, rbx",                               [0x66, 0x48, 0x0F, 0x38, 0xF6, 0xC3]),
+        ("adox eax, ebx",                               [0xF3, 0x0F, 0x38, 0xF6, 0xC3]),
+        ("adox rax, rbx",                               [0xF3, 0x48, 0x0F, 0x38, 0xF6, 0xC3]),
+        ("adcx eax, dword ptr [rdi]",                   [0x66, 0x0F, 0x38, 0xF6, 0x07]),
+        ("adox rax, qword ptr [rdi]",                   [0xF3, 0x48, 0x0F, 0x38, 0xF6, 0x07]),
+    ]
+
+    func testAdxAssembles() throws {
+        for (source, expected) in Self.adxCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testAdxDisassembles() throws {
+        for (source, bytes) in Self.adxCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testAdxStreamRoundTrip() throws {
+        let source = Self.adxCases.map(\.0).joined(separator: "\n")
+        let expected = Self.adxCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

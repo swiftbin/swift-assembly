@@ -548,6 +548,11 @@ internal enum X86InstructionDecoder {
         if prefixes.f2Prefix && (opcode3 == 0xF0 || opcode3 == 0xF1) {
             return try decodeCrc32(opcode3: opcode3, prefixes: prefixes, cursor: &cursor)
         }
+        // ADX — ADCX (66 0F 38 F6) / ADOX (F3 0F 38 F6).
+        if opcode3 == 0xF6 && (prefixes.operandSize || prefixes.f3Prefix) {
+            let kind: X86.AdxKind = prefixes.f3Prefix ? .adox : .adcx
+            return try decodeAdx(kind, prefixes: prefixes, cursor: &cursor)
+        }
         guard prefixes.operandSize else {
             // MMX forms of these opcodes aren't modelled.
             throw AssemblerError.unknownEncoding(0x38)
@@ -921,6 +926,22 @@ internal enum X86InstructionDecoder {
             src2 = .memory(mem, width: width)
         }
         return Decoded(instruction: .bmi2PextDep(kind, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    private static func decodeAdx(_ kind: X86.AdxKind, prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let width: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let src: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            src = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            src = .memory(mem, width: width)
+        }
+        return Decoded(instruction: .adx(kind, destination: dst, source: src), length: cursor.consumed)
     }
 
     private static func decodeMulx(prefixes: Prefixes, vvvv: UInt8, w: UInt8, cursor: inout Cursor) throws -> Decoded {

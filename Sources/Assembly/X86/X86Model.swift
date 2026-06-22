@@ -887,6 +887,10 @@ internal enum X86 {
         /// high half destination in ModR/M.reg and the low half in
         /// VEX.vvvv; the source is in ModR/M.rm.
         case mulx(destinationHigh: Register, destinationLow: Register, source: RegisterOrMemory)
+        /// ADX — ADCX and ADOX. Two-operand carry chain operations
+        /// encoded as `[66|F3] 0F 38 F6 /r`. ADCX feeds the CF chain;
+        /// ADOX feeds the OF chain.
+        case adx(AdxKind, destination: Register, source: RegisterOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1726,6 +1730,21 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8) -> BMI2PextDepKind? {
             allCases.first { $0.ppBits == ppBits }
+        }
+    }
+
+    /// ADCX and ADOX — share opcode 0F 38 F6 and differ in the
+    /// mandatory prefix (66 for ADCX feeding CF, F3 for ADOX feeding
+    /// OF).
+    enum AdxKind: String, Equatable, CaseIterable {
+        case adcx           // 66 0F 38 F6 — feeds the CF chain
+        case adox           // F3 0F 38 F6 — feeds the OF chain
+
+        var prefix: UInt8 {
+            switch self {
+            case .adcx: return 0x66
+            case .adox: return 0xF3
+            }
         }
     }
 
