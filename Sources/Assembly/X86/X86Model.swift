@@ -878,6 +878,15 @@ internal enum X86 {
         /// RORX — rotate right by imm8 without affecting flags.
         /// Encoded as VEX.LZ.F2.0F3A F0 /r ib (W picks 32/64).
         case rorx(destination: Register, source: RegisterOrMemory, immediate: UInt8)
+        /// BMI2 PDEP/PEXT — parallel deposit/extract. Same operand
+        /// layout as ANDN: dst in ModR/M.reg, src1 in VEX.vvvv, src2
+        /// in ModR/M.rm. PDEP rides pp=F2, PEXT rides pp=F3.
+        case bmi2PextDep(BMI2PextDepKind, destination: Register, source1: Register, source2: RegisterOrMemory)
+        /// BMI2 MULX — unsigned multiply without affecting flags. The
+        /// implicit second multiplicand is RDX/EDX. Encoded with the
+        /// high half destination in ModR/M.reg and the low half in
+        /// VEX.vvvv; the source is in ModR/M.rm.
+        case mulx(destinationHigh: Register, destinationLow: Register, source: RegisterOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1699,6 +1708,24 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8, opcode: UInt8) -> BMI2ShiftLikeKind? {
             allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
+        }
+    }
+
+    /// BMI2 parallel-bit deposit/extract. Both ride VEX.LZ.[pp].0F38
+    /// F5 /r with the same operand layout as ANDN.
+    enum BMI2PextDepKind: String, Equatable, CaseIterable {
+        case pdep       // pp = F2
+        case pext       // pp = F3
+
+        var ppBits: UInt8 {
+            switch self {
+            case .pdep: return 0b11
+            case .pext: return 0b10
+            }
+        }
+
+        static func decode(ppBits: UInt8) -> BMI2PextDepKind? {
+            allCases.first { $0.ppBits == ppBits }
         }
     }
 

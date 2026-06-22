@@ -780,6 +780,15 @@ internal enum X86InstructionDecoder {
         if v.escape == X86.VEX.escape0F38, let kind = X86.BMI2ShiftLikeKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeBmiShiftLike(kind, prefixes: prefixes, vvvv: v.vvvv, w: v.w, cursor: &cursor)
         }
+        // PDEP / PEXT — VEX.LZ.[F2|F3].0F38 F5 /r.
+        if v.escape == X86.VEX.escape0F38 && opcode == 0xF5,
+           let kind = X86.BMI2PextDepKind.decode(ppBits: v.pp) {
+            return try decodeBmi2PextDep(kind, prefixes: prefixes, vvvv: v.vvvv, w: v.w, cursor: &cursor)
+        }
+        // MULX — VEX.LZ.F2.0F38 F6 /r.
+        if v.escape == X86.VEX.escape0F38 && opcode == 0xF6 && v.pp == 0b11 {
+            return try decodeMulx(prefixes: prefixes, vvvv: v.vvvv, w: v.w, cursor: &cursor)
+        }
         // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
         // currently modelled here lives on 0F.
         if v.escape == X86.VEX.escape0F3A {
@@ -895,6 +904,40 @@ internal enum X86InstructionDecoder {
             src = partner
         }
         return Decoded(instruction: .vexMov(kind, size: size, destination: dst, source: src), length: cursor.consumed)
+    }
+
+    private static func decodeBmi2PextDep(_ kind: X86.BMI2PextDepKind, prefixes: Prefixes, vvvv: UInt8, w: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let width: X86.RegisterWidth = w == 1 ? .qword : .dword
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dst = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let src1 = makeRegister(number: vvvv & 0xF, width: width, hasREX: prefixes.hasREX)
+        let src2: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            src2 = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            src2 = .memory(mem, width: width)
+        }
+        return Decoded(instruction: .bmi2PextDep(kind, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+    }
+
+    private static func decodeMulx(prefixes: Prefixes, vvvv: UInt8, w: UInt8, cursor: inout Cursor) throws -> Decoded {
+        let width: X86.RegisterWidth = w == 1 ? .qword : .dword
+        let modrm = try cursor.takeByte()
+        let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+        let dstH = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+        let dstL = makeRegister(number: vvvv & 0xF, width: width, hasREX: prefixes.hasREX)
+        let src: X86.RegisterOrMemory
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            src = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+        } else {
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            src = .memory(mem, width: width)
+        }
+        return Decoded(instruction: .mulx(destinationHigh: dstH, destinationLow: dstL, source: src), length: cursor.consumed)
     }
 
     private static func decodeBmiShiftLike(_ kind: X86.BMI2ShiftLikeKind, prefixes: Prefixes, vvvv: UInt8, w: UInt8, cursor: inout Cursor) throws -> Decoded {

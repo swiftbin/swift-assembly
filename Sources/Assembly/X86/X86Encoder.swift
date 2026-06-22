@@ -234,6 +234,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeBmiShiftLike(kind, destination: dst, source1: src1, source2: src2), patches: [])
         case .rorx(let dst, let src, let imm):
             return Encoded(bytes: try encodeRorx(destination: dst, source: src, immediate: imm), patches: [])
+        case .bmi2PextDep(let kind, let dst, let src1, let src2):
+            return Encoded(bytes: try encodeBmi2PextDep(kind, destination: dst, source1: src1, source2: src2), patches: [])
+        case .mulx(let dstH, let dstL, let src):
+            return Encoded(bytes: try encodeMulx(destinationHigh: dstH, destinationLow: dstL, source: src), patches: [])
         }
     }
 
@@ -1858,6 +1862,64 @@ internal enum X86InstructionEncoder {
     private static func checkBmiWidth(_ width: X86.RegisterWidth, mnemonic: String) throws {
         guard width == .dword || width == .qword else {
             throw AssemblerError.unsupportedOperand("\(mnemonic): operands must be 32- or 64-bit")
+        }
+    }
+
+    /// `VEX.LZ.[pp].0F38.W F5 /r` — PDEP (pp=F2) / PEXT (pp=F3).
+    private static func encodeBmi2PextDep(_ kind: X86.BMI2PextDepKind, destination dst: X86.Register, source1 src1: X86.Register, source2: X86.RegisterOrMemory) throws -> [UInt8] {
+        try checkBmiWidth(dst.width, mnemonic: kind.rawValue)
+        guard dst.width == src1.width else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand widths must match")
+        }
+        let w: UInt8 = dst.width == .qword ? 1 : 0
+        switch source2 {
+        case .register(let r):
+            guard r.width == dst.width else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand widths must match")
+            }
+            try checkRegisterRegisterCompat([dst, src1, r], mnemonic: kind.rawValue)
+            var bytes = X86.VEX.build(r: dst.highBit, x: 0, b: r.highBit, escape: X86.VEX.escape0F38, w: w, vvvv: src1.number, l: 0, pp: kind.ppBits)
+            bytes.append(0xF5)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: r.lowBits))
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == dst.width else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            var bytes = X86.VEX.build(r: dst.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F38, w: w, vvvv: src1.number, l: 0, pp: kind.ppBits)
+            bytes.append(0xF5)
+            bytes.append(contentsOf: addressing)
+            return bytes
+        }
+    }
+
+    /// `VEX.LZ.F2.0F38.W F6 /r` — MULX (the multiplicand in RDX/EDX).
+    private static func encodeMulx(destinationHigh dstH: X86.Register, destinationLow dstL: X86.Register, source: X86.RegisterOrMemory) throws -> [UInt8] {
+        try checkBmiWidth(dstH.width, mnemonic: "mulx")
+        guard dstH.width == dstL.width else {
+            throw AssemblerError.unsupportedOperand("mulx: operand widths must match")
+        }
+        let w: UInt8 = dstH.width == .qword ? 1 : 0
+        switch source {
+        case .register(let r):
+            guard r.width == dstH.width else {
+                throw AssemblerError.unsupportedOperand("mulx: operand widths must match")
+            }
+            try checkRegisterRegisterCompat([dstH, dstL, r], mnemonic: "mulx")
+            var bytes = X86.VEX.build(r: dstH.highBit, x: 0, b: r.highBit, escape: X86.VEX.escape0F38, w: w, vvvv: dstL.number, l: 0, pp: 0b11)
+            bytes.append(0xF6)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dstH.lowBits, rm: r.lowBits))
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == dstH.width else {
+                throw AssemblerError.unsupportedOperand("mulx: memory operand width disagrees with mnemonic")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dstH.lowBits)
+            var bytes = X86.VEX.build(r: dstH.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F38, w: w, vvvv: dstL.number, l: 0, pp: 0b11)
+            bytes.append(0xF6)
+            bytes.append(contentsOf: addressing)
+            return bytes
         }
     }
 

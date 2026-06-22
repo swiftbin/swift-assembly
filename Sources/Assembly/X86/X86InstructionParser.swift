@@ -138,6 +138,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "rorx" {
             return try parseRorx(instruction)
         }
+        if let kind = X86.BMI2PextDepKind(rawValue: instruction.mnemonic) {
+            return try parseBmi2PextDep(kind, instruction)
+        }
+        if instruction.mnemonic == "mulx" {
+            return try parseMulx(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1124,6 +1130,37 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// PDEP/PEXT — `dst, src1, r/m`.
+    private static func parseBmi2PextDep(_ kind: X86.BMI2PextDepKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dst = try register(instruction.operands[0])
+        let src1 = try register(instruction.operands[1])
+        let src2 = try parseGPROrSizedMemory(instruction.operands[2], expectedWidth: dst.width, mnemonic: kind.rawValue)
+        return .bmi2PextDep(kind, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// MULX — `dstHigh, dstLow, r/m`. The other multiplicand is
+    /// implicit RDX/EDX.
+    private static func parseMulx(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "mulx",
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let dstH = try register(instruction.operands[0])
+        let dstL = try register(instruction.operands[1])
+        let src = try parseGPROrSizedMemory(instruction.operands[2], expectedWidth: dstH.width, mnemonic: "mulx")
+        return .mulx(destinationHigh: dstH, destinationLow: dstL, source: src)
     }
 
     /// RORX — `dst, r/m, imm8`.

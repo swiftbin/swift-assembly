@@ -4195,4 +4195,37 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18o BMI2 PDEP/PEXT/MULX
+
+    private static let bmi2PextDepMulxCases: [(String, [UInt8])] = [
+        ("pdep eax, ebx, ecx",                          [0xC4, 0xE2, 0x63, 0xF5, 0xC1]),
+        ("pext eax, ebx, ecx",                          [0xC4, 0xE2, 0x62, 0xF5, 0xC1]),
+        ("pdep rax, rbx, rcx",                          [0xC4, 0xE2, 0xE3, 0xF5, 0xC1]),
+        ("mulx eax, ebx, ecx",                          [0xC4, 0xE2, 0x63, 0xF6, 0xC1]),
+        ("mulx rax, rbx, rcx",                          [0xC4, 0xE2, 0xE3, 0xF6, 0xC1]),
+        // Memory source
+        ("pdep eax, ebx, dword ptr [rdi]",              [0xC4, 0xE2, 0x63, 0xF5, 0x07]),
+        ("mulx rax, rbx, qword ptr [rdi]",              [0xC4, 0xE2, 0xE3, 0xF6, 0x07]),
+    ]
+
+    func testBmi2PextDepMulxAssembles() throws {
+        for (source, expected) in Self.bmi2PextDepMulxCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testBmi2PextDepMulxDisassembles() throws {
+        for (source, bytes) in Self.bmi2PextDepMulxCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testBmi2PextDepMulxStreamRoundTrip() throws {
+        let source = Self.bmi2PextDepMulxCases.map(\.0).joined(separator: "\n")
+        let expected = Self.bmi2PextDepMulxCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
