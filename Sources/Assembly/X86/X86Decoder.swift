@@ -799,6 +799,13 @@ internal enum X86InstructionDecoder {
         if v.escape == X86.VEX.escape0F38 && opcode == 0xF6 && v.pp == 0b11 {
             return try decodeMulx(prefixes: prefixes, vvvv: v.vvvv, w: v.w, cursor: &cursor)
         }
+        // VEX SSSE3 family — VEX.128/256.66.0F38 xx /r.
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01,
+           let kind = X86.VexSSSE3Kind.decode(opcode3: opcode) {
+            let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexSSSE3(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+        }
         // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
         // currently modelled here lives on 0F.
         if v.escape == X86.VEX.escape0F3A {

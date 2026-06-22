@@ -4322,4 +4322,46 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18s VEX SSSE3
+
+    private static let vexSSSE3Cases: [(String, [UInt8])] = [
+        ("vpshufb xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x00, 0xC2]),
+        ("vphaddw xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x01, 0xC2]),
+        ("vphaddd xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x02, 0xC2]),
+        ("vphaddsw xmm0, xmm1, xmm2",                   [0xC4, 0xE2, 0x71, 0x03, 0xC2]),
+        ("vpmaddubsw xmm0, xmm1, xmm2",                 [0xC4, 0xE2, 0x71, 0x04, 0xC2]),
+        ("vphsubw xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x05, 0xC2]),
+        ("vphsubd xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x06, 0xC2]),
+        ("vphsubsw xmm0, xmm1, xmm2",                   [0xC4, 0xE2, 0x71, 0x07, 0xC2]),
+        ("vpsignb xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x08, 0xC2]),
+        ("vpsignw xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x09, 0xC2]),
+        ("vpsignd xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x0A, 0xC2]),
+        ("vpmulhrsw xmm0, xmm1, xmm2",                  [0xC4, 0xE2, 0x71, 0x0B, 0xC2]),
+        ("vpabsb xmm0, xmm1, xmm2",                     [0xC4, 0xE2, 0x71, 0x1C, 0xC2]),
+        ("vpabsw xmm0, xmm1, xmm2",                     [0xC4, 0xE2, 0x71, 0x1D, 0xC2]),
+        ("vpabsd xmm0, xmm1, xmm2",                     [0xC4, 0xE2, 0x71, 0x1E, 0xC2]),
+        ("vpshufb ymm0, ymm1, ymm2",                    [0xC4, 0xE2, 0x75, 0x00, 0xC2]),
+        ("vpshufb xmm0, xmm1, xmmword ptr [rdi]",       [0xC4, 0xE2, 0x71, 0x00, 0x07]),
+    ]
+
+    func testVexSSSE3Assembles() throws {
+        for (source, expected) in Self.vexSSSE3Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexSSSE3Disassembles() throws {
+        for (source, bytes) in Self.vexSSSE3Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexSSSE3StreamRoundTrip() throws {
+        let source = Self.vexSSSE3Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexSSSE3Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

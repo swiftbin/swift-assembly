@@ -312,6 +312,14 @@ internal enum X86InstructionFormatter {
             }
         case .vexHalfMoveReg(let kind, let dst, let src1, let src2):
             return "\(kind.rawValue) xmm\(dst), xmm\(src1), xmm\(src2)"
+        case .vexSSSE3(let kind, let size, let dst, let src1, let src2):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            let src2Str: String
+            switch src2 {
+            case .register(let n): src2Str = "\(prefix)\(n)"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(prefix)\(dst), \(prefix)\(src1), \(src2Str)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

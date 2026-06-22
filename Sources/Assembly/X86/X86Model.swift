@@ -899,6 +899,10 @@ internal enum X86 {
         /// (the memory forms are deferred). Encoded as VEX.128.0F.WIG
         /// 12 / 16 /r with mod==11 and vvvv carrying the first source.
         case vexHalfMoveReg(VexHalfMoveRegKind, destination: UInt8, source1: UInt8, source2: UInt8)
+        /// VEX-prefixed SSSE3 family. Encoded as VEX.128/256.66.0F38
+        /// xx /r with the standard 3-op NDS shape: dst in ModR/M.reg,
+        /// src1 in VEX.vvvv, src2 in ModR/M.rm.
+        case vexSSSE3(VexSSSE3Kind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1738,6 +1742,50 @@ internal enum X86 {
 
         static func decode(ppBits: UInt8) -> BMI2PextDepKind? {
             allCases.first { $0.ppBits == ppBits }
+        }
+    }
+
+    /// VEX SSSE3 family (V-prefixed PSHUFB/PHADD/PHSUB/PSIGN/PABS/...).
+    /// Opcode mapping mirrors `SSSE3Kind`; all ride 66 0F 38 xx /r.
+    enum VexSSSE3Kind: String, Equatable, CaseIterable {
+        case vpshufb        // 00
+        case vphaddw        // 01
+        case vphaddd        // 02
+        case vphaddsw       // 03
+        case vpmaddubsw     // 04
+        case vphsubw        // 05
+        case vphsubd        // 06
+        case vphsubsw       // 07
+        case vpsignb        // 08
+        case vpsignw        // 09
+        case vpsignd        // 0A
+        case vpmulhrsw      // 0B
+        case vpabsb         // 1C
+        case vpabsw         // 1D
+        case vpabsd         // 1E
+
+        var opcode3: UInt8 {
+            switch self {
+            case .vpshufb:     return 0x00
+            case .vphaddw:     return 0x01
+            case .vphaddd:     return 0x02
+            case .vphaddsw:    return 0x03
+            case .vpmaddubsw:  return 0x04
+            case .vphsubw:     return 0x05
+            case .vphsubd:     return 0x06
+            case .vphsubsw:    return 0x07
+            case .vpsignb:     return 0x08
+            case .vpsignw:     return 0x09
+            case .vpsignd:     return 0x0A
+            case .vpmulhrsw:   return 0x0B
+            case .vpabsb:      return 0x1C
+            case .vpabsw:      return 0x1D
+            case .vpabsd:      return 0x1E
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> VexSSSE3Kind? {
+            allCases.first { $0.opcode3 == opcode3 }
         }
     }
 
