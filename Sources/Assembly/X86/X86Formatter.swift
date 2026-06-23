@@ -379,6 +379,14 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(mem)), \(prefix)\(src)"
         case .vexMxcsr(let kind, let mem):
             return "v\(kind.rawValue) \(sizeHintPrefix(.dword)) \(formatMemory(mem))"
+        case .vexBroadcast(let kind, let size, let dst, let src):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "xmm\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(kind.elementWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(prefix)\(dst), \(srcStr)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

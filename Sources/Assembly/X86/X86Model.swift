@@ -934,6 +934,10 @@ internal enum X86 {
         /// VLDMXCSR / VSTMXCSR — VEX-encoded MXCSR load / store on
         /// `VEX.LZ.0F AE /2|/3` against an m32 operand.
         case vexMxcsr(MXCSRKind, memory: MemoryOperand)
+        /// AVX2 VPBROADCAST{B,W,D,Q} — replicate a scalar element into
+        /// every lane of the destination. Encoded as
+        /// VEX.128/256.66.0F38 78|79|58|59 /r with vvvv reserved.
+        case vexBroadcast(VexBroadcastKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1938,6 +1942,37 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// AVX2 VPBROADCAST family.
+    enum VexBroadcastKind: String, Equatable, CaseIterable {
+        case vpbroadcastb   // 78
+        case vpbroadcastw   // 79
+        case vpbroadcastd   // 58
+        case vpbroadcastq   // 59
+
+        var opcode: UInt8 {
+            switch self {
+            case .vpbroadcastb: return 0x78
+            case .vpbroadcastw: return 0x79
+            case .vpbroadcastd: return 0x58
+            case .vpbroadcastq: return 0x59
+            }
+        }
+
+        /// Scalar element width when the source is memory.
+        var elementWidth: RegisterWidth {
+            switch self {
+            case .vpbroadcastb: return .byte
+            case .vpbroadcastw: return .word
+            case .vpbroadcastd: return .dword
+            case .vpbroadcastq: return .qword
+            }
+        }
+
+        static func decode(opcode: UInt8) -> VexBroadcastKind? {
+            allCases.first { $0.opcode == opcode }
         }
     }
 

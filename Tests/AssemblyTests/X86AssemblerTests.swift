@@ -4667,4 +4667,34 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18ac AVX2 VPBROADCAST
+
+    private static let vexBroadcastCases: [(String, [UInt8])] = [
+        ("vpbroadcastb xmm0, xmm1",                     [0xC4, 0xE2, 0x79, 0x78, 0xC1]),
+        ("vpbroadcastw xmm0, xmm1",                     [0xC4, 0xE2, 0x79, 0x79, 0xC1]),
+        ("vpbroadcastd xmm0, xmm1",                     [0xC4, 0xE2, 0x79, 0x58, 0xC1]),
+        ("vpbroadcastq ymm0, xmm1",                     [0xC4, 0xE2, 0x7D, 0x59, 0xC1]),
+        ("vpbroadcastb xmm0, byte ptr [rdi]",           [0xC4, 0xE2, 0x79, 0x78, 0x07]),
+    ]
+
+    func testVexBroadcastAssembles() throws {
+        for (source, expected) in Self.vexBroadcastCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexBroadcastDisassembles() throws {
+        for (source, bytes) in Self.vexBroadcastCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexBroadcastStreamRoundTrip() throws {
+        let source = Self.vexBroadcastCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexBroadcastCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

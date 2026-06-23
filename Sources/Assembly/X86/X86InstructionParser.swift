@@ -185,6 +185,9 @@ internal enum X86Parser {
             let kind: X86.MXCSRKind = instruction.mnemonic == "vldmxcsr" ? .ldmxcsr : .stmxcsr
             return try parseVexMxcsr(kind, instruction)
         }
+        if let kind = X86.VexBroadcastKind(rawValue: instruction.mnemonic) {
+            return try parseVexBroadcast(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1171,6 +1174,25 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VPBROADCAST{B,W,D,Q} — `xmm/ymm, xmm/m{element-width}`.
+    private static func parseVexBroadcast(_ kind: X86.VexBroadcastKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let src = try parseVectorOrMemory(
+            instruction.operands[1],
+            size: .xmm,        // source is always 128-bit form even when dst is ymm
+            memoryWidth: kind.elementWidth,
+            mnemonic: kind.rawValue
+        )
+        return .vexBroadcast(kind, size: size, destination: dst, source: src)
     }
 
     /// VLDMXCSR / VSTMXCSR — single m32 operand.
