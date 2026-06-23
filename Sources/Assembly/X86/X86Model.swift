@@ -903,6 +903,12 @@ internal enum X86 {
         /// xx /r with the standard 3-op NDS shape: dst in ModR/M.reg,
         /// src1 in VEX.vvvv, src2 in ModR/M.rm.
         case vexSSSE3(VexSSSE3Kind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// FMA3 fused multiply-add family. Operand layout is the same
+        /// as the rest of the VEX 3-operand world: dst in ModR/M.reg,
+        /// src1 in VEX.vvvv, src2 in ModR/M.rm. The kind picks the
+        /// operation, control digit, and precision; size picks VEX.L
+        /// (packed forms only).
+        case fma3(FMA3Kind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1788,6 +1794,104 @@ internal enum X86 {
             allCases.first { $0.opcode3 == opcode3 }
         }
     }
+
+    /// FMA3 instruction kind. All 60 entries are derived from the
+    /// `(op, control, precision)` axes; the `rawValue` is the NASM
+    /// mnemonic. Encoded as `VEX.NDS.[L].66.0F38.W[0|1] [opcode] /r`.
+    enum FMA3Kind: String, Equatable, CaseIterable {
+        // ── FMADD ────────────────────────────────────────────────
+        case vfmadd132ps, vfmadd213ps, vfmadd231ps
+        case vfmadd132pd, vfmadd213pd, vfmadd231pd
+        case vfmadd132ss, vfmadd213ss, vfmadd231ss
+        case vfmadd132sd, vfmadd213sd, vfmadd231sd
+        // ── FMSUB ────────────────────────────────────────────────
+        case vfmsub132ps, vfmsub213ps, vfmsub231ps
+        case vfmsub132pd, vfmsub213pd, vfmsub231pd
+        case vfmsub132ss, vfmsub213ss, vfmsub231ss
+        case vfmsub132sd, vfmsub213sd, vfmsub231sd
+        // ── FNMADD ───────────────────────────────────────────────
+        case vfnmadd132ps, vfnmadd213ps, vfnmadd231ps
+        case vfnmadd132pd, vfnmadd213pd, vfnmadd231pd
+        case vfnmadd132ss, vfnmadd213ss, vfnmadd231ss
+        case vfnmadd132sd, vfnmadd213sd, vfnmadd231sd
+        // ── FNMSUB ───────────────────────────────────────────────
+        case vfnmsub132ps, vfnmsub213ps, vfnmsub231ps
+        case vfnmsub132pd, vfnmsub213pd, vfnmsub231pd
+        case vfnmsub132ss, vfnmsub213ss, vfnmsub231ss
+        case vfnmsub132sd, vfnmsub213sd, vfnmsub231sd
+        // ── FMADDSUB / FMSUBADD (packed only) ────────────────────
+        case vfmaddsub132ps, vfmaddsub213ps, vfmaddsub231ps
+        case vfmaddsub132pd, vfmaddsub213pd, vfmaddsub231pd
+        case vfmsubadd132ps, vfmsubadd213ps, vfmsubadd231ps
+        case vfmsubadd132pd, vfmsubadd213pd, vfmsubadd231pd
+
+        /// Base opcode picked by operation, before the control bump.
+        private var opBase: UInt8 {
+            switch self {
+            case .vfmadd132ps, .vfmadd213ps, .vfmadd231ps,
+                 .vfmadd132pd, .vfmadd213pd, .vfmadd231pd,
+                 .vfmadd132ss, .vfmadd213ss, .vfmadd231ss,
+                 .vfmadd132sd, .vfmadd213sd, .vfmadd231sd: return 0x98
+            case .vfmsub132ps, .vfmsub213ps, .vfmsub231ps,
+                 .vfmsub132pd, .vfmsub213pd, .vfmsub231pd,
+                 .vfmsub132ss, .vfmsub213ss, .vfmsub231ss,
+                 .vfmsub132sd, .vfmsub213sd, .vfmsub231sd: return 0x9A
+            case .vfnmadd132ps, .vfnmadd213ps, .vfnmadd231ps,
+                 .vfnmadd132pd, .vfnmadd213pd, .vfnmadd231pd,
+                 .vfnmadd132ss, .vfnmadd213ss, .vfnmadd231ss,
+                 .vfnmadd132sd, .vfnmadd213sd, .vfnmadd231sd: return 0x9C
+            case .vfnmsub132ps, .vfnmsub213ps, .vfnmsub231ps,
+                 .vfnmsub132pd, .vfnmsub213pd, .vfnmsub231pd,
+                 .vfnmsub132ss, .vfnmsub213ss, .vfnmsub231ss,
+                 .vfnmsub132sd, .vfnmsub213sd, .vfnmsub231sd: return 0x9E
+            case .vfmaddsub132ps, .vfmaddsub213ps, .vfmaddsub231ps,
+                 .vfmaddsub132pd, .vfmaddsub213pd, .vfmaddsub231pd: return 0x96
+            case .vfmsubadd132ps, .vfmsubadd213ps, .vfmsubadd231ps,
+                 .vfmsubadd132pd, .vfmsubadd213pd, .vfmsubadd231pd: return 0x97
+            }
+        }
+
+        /// Control digit (132/213/231) adds 0/0x10/0x20 to opBase.
+        private var controlOffset: UInt8 {
+            let raw = rawValue
+            if raw.contains("213") { return 0x10 }
+            if raw.contains("231") { return 0x20 }
+            return 0x00
+        }
+
+        /// Scalar precision (SS/SD) adds 1 to the opcode LSB; packed
+        /// keeps it at 0. MADDSUB/MSUBADD don't use this offset (no
+        /// scalar variants).
+        private var precisionOffset: UInt8 {
+            isScalar ? 1 : 0
+        }
+
+        var opcode: UInt8 {
+            opBase + controlOffset + precisionOffset
+        }
+
+        /// W=1 for the double-precision variants (PD/SD), else W=0.
+        var w: UInt8 {
+            rawValue.hasSuffix("pd") || rawValue.hasSuffix("sd") ? 1 : 0
+        }
+
+        var isScalar: Bool {
+            rawValue.hasSuffix("ss") || rawValue.hasSuffix("sd")
+        }
+
+        /// Memory operand width for the third operand.
+        func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
+            if rawValue.hasSuffix("ss") { return .dword }
+            if rawValue.hasSuffix("sd") { return .qword }
+            return size.packedMemoryWidth
+        }
+
+        static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
+            allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// ADCX and ADOX — share opcode 0F 38 F6 and differ in the
 
     /// VMOVHLPS / VMOVLHPS — register-only half-vector moves under
     /// VEX. Both share pp=0 / escape=0F; opcode picks the operation.

@@ -4364,4 +4364,55 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18t FMA3
+
+    private static let fma3Cases: [(String, [UInt8])] = [
+        // VFMADD132PS / 213 / 231 — packed single, xmm
+        ("vfmadd132ps xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0x98, 0xC2]),
+        ("vfmadd213ps xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0xA8, 0xC2]),
+        ("vfmadd231ps xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0xB8, 0xC2]),
+        // VFMADD PD — same opcode with W=1
+        ("vfmadd132pd xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0xF1, 0x98, 0xC2]),
+        ("vfmadd213pd ymm0, ymm1, ymm2",                [0xC4, 0xE2, 0xF5, 0xA8, 0xC2]),
+        // Scalar forms (opcode LSB toggled)
+        ("vfmadd132ss xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0x99, 0xC2]),
+        ("vfmadd213sd xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0xF1, 0xA9, 0xC2]),
+        // VFMSUB family
+        ("vfmsub132ps xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0x9A, 0xC2]),
+        ("vfmsub213pd ymm0, ymm1, ymm2",                [0xC4, 0xE2, 0xF5, 0xAA, 0xC2]),
+        ("vfmsub231ss xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0xBB, 0xC2]),
+        // VFNMADD family
+        ("vfnmadd132ps xmm0, xmm1, xmm2",               [0xC4, 0xE2, 0x71, 0x9C, 0xC2]),
+        ("vfnmadd213sd xmm0, xmm1, xmm2",               [0xC4, 0xE2, 0xF1, 0xAD, 0xC2]),
+        // VFNMSUB family
+        ("vfnmsub231pd ymm0, ymm1, ymm2",               [0xC4, 0xE2, 0xF5, 0xBE, 0xC2]),
+        // VFMADDSUB / VFMSUBADD (packed only)
+        ("vfmaddsub132ps xmm0, xmm1, xmm2",             [0xC4, 0xE2, 0x71, 0x96, 0xC2]),
+        ("vfmaddsub213pd ymm0, ymm1, ymm2",             [0xC4, 0xE2, 0xF5, 0xA6, 0xC2]),
+        ("vfmsubadd231ps xmm0, xmm1, xmm2",             [0xC4, 0xE2, 0x71, 0xB7, 0xC2]),
+        // Memory source
+        ("vfmadd213ps ymm0, ymm1, ymmword ptr [rdi]",   [0xC4, 0xE2, 0x75, 0xA8, 0x07]),
+        ("vfmadd132ss xmm0, xmm1, dword ptr [rdi]",     [0xC4, 0xE2, 0x71, 0x99, 0x07]),
+    ]
+
+    func testFma3Assembles() throws {
+        for (source, expected) in Self.fma3Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testFma3Disassembles() throws {
+        for (source, bytes) in Self.fma3Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testFma3StreamRoundTrip() throws {
+        let source = Self.fma3Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.fma3Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

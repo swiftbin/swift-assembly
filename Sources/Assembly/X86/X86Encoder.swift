@@ -246,6 +246,9 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: 0, opcode: kind.opcode, lBit: 0, destination: dst, source1: src1, source2: .register(src2)), patches: [])
         case .vexSSSE3(let kind, let size, let dst, let src1, let src2):
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: kind.opcode3, lBit: size.lBit, destination: dst, source1: src1, source2: src2), patches: [])
+        case .fma3(let kind, let size, let dst, let src1, let src2):
+            let lBit: UInt8 = kind.isScalar ? 0 : size.lBit
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: kind.w, pp: 0b01, opcode: kind.opcode, lBit: lBit, destination: dst, source1: src1, source2: src2), patches: [])
         }
     }
 
