@@ -178,6 +178,9 @@ internal enum X86Parser {
         if let kind = X86.VexRoundPackedKind(rawValue: instruction.mnemonic) {
             return try parseVexRoundPacked(kind, instruction)
         }
+        if let kind = X86.VexNonTemporalKind(rawValue: instruction.mnemonic) {
+            return try parseVexNonTemporal(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1164,6 +1167,21 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VMOVNT* — `m128/m256, xmm/ymm`.
+    private static func parseVexNonTemporal(_ kind: X86.VexNonTemporalKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        // The second operand is the XMM/YMM source.
+        let (size, src) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        let mem = try parseSizedMemory(instruction.operands[0], expected: size.packedMemoryWidth, mnemonic: kind.rawValue)
+        return .vexNonTemporalStore(kind, size: size, memory: mem, source: src)
     }
 
     /// VROUNDPS / VROUNDPD — `xmm/ymm, xmm/ymm/m, imm8`.

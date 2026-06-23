@@ -906,6 +906,18 @@ internal enum X86InstructionDecoder {
         if v.vvvv == 0, let (kind, isStore) = X86.VexMovKind.decode(ppBits: v.pp, opcode: opcode) {
             return try decodeVexMov(kind, isStore: isStore, prefixes: prefixes, lBit: v.l, cursor: &cursor)
         }
+        // Non-temporal store (VMOVNTPS/PD/DQ) — memory destination only.
+        if v.vvvv == 0,
+           let kind = X86.VexNonTemporalKind.decode(ppBits: v.pp, opcode: opcode) {
+            let modrm = try cursor.takeByte()
+            guard X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexNonTemporalStore(kind, size: size, memory: mem, source: regNum), length: cursor.consumed)
+        }
         // VMOVHLPS / VMOVLHPS — register-only forms of 0F 12 / 16
         // under VEX with no prefix and mod=11.
         if v.pp == 0 && (opcode == 0x12 || opcode == 0x16),

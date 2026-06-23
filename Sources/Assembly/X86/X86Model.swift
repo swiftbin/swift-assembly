@@ -928,6 +928,9 @@ internal enum X86 {
         /// Encoded as VEX.128/256.66.0F3A.WIG 08|09 /r ib with vvvv
         /// reserved.
         case vroundPacked(VexRoundPackedKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory, immediate: UInt8)
+        /// VMOVNTPS / VMOVNTPD / VMOVNTDQ — non-temporal vector store.
+        /// Encoded as `[66] VEX.128/256.0F [2B|E7] /r` (memory in rm).
+        case vexNonTemporalStore(VexNonTemporalKind, size: AVXVectorSize, memory: MemoryOperand, source: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1932,6 +1935,31 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// VEX non-temporal vector stores.
+    enum VexNonTemporalKind: String, Equatable, CaseIterable {
+        case vmovntps       //    0F 2B
+        case vmovntpd       // 66 0F 2B
+        case vmovntdq       // 66 0F E7
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vmovntps: return 0b00
+            default:        return 0b01
+            }
+        }
+
+        var opcode: UInt8 {
+            switch self {
+            case .vmovntps, .vmovntpd: return 0x2B
+            case .vmovntdq:             return 0xE7
+            }
+        }
+
+        static func decode(ppBits: UInt8, opcode: UInt8) -> VexNonTemporalKind? {
+            allCases.first { $0.ppBits == ppBits && $0.opcode == opcode }
         }
     }
 

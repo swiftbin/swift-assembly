@@ -4611,4 +4611,33 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18aa VEX non-temporal stores
+
+    private static let vexNonTemporalCases: [(String, [UInt8])] = [
+        ("vmovntps xmmword ptr [rdi], xmm0",            [0xC5, 0xF8, 0x2B, 0x07]),
+        ("vmovntps ymmword ptr [rdi], ymm0",            [0xC5, 0xFC, 0x2B, 0x07]),
+        ("vmovntpd xmmword ptr [rdi], xmm0",            [0xC5, 0xF9, 0x2B, 0x07]),
+        ("vmovntdq ymmword ptr [rdi], ymm0",            [0xC5, 0xFD, 0xE7, 0x07]),
+    ]
+
+    func testVexNonTemporalAssembles() throws {
+        for (source, expected) in Self.vexNonTemporalCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexNonTemporalDisassembles() throws {
+        for (source, bytes) in Self.vexNonTemporalCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexNonTemporalStreamRoundTrip() throws {
+        let source = Self.vexNonTemporalCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexNonTemporalCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
