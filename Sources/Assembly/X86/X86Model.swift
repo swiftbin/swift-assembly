@@ -920,6 +920,10 @@ internal enum X86 {
         case vexPackExtend(VexPackExtendKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
         /// VAESKEYGENASSIST — VEX.128.66.0F3A.WIG DF /r ib.
         case vaeskeygenassist(destination: UInt8, source: VectorOrMemory, immediate: UInt8)
+        /// VEX PCMPESTRI/M, VPCMPISTRI/M — string compares.
+        /// Encoded as VEX.128.66.0F3A 60-63 ib; 2-op + imm8 (vvvv
+        /// reserved).
+        case vexCmpStr(VexCmpStrKind, destination: UInt8, source: VectorOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1902,6 +1906,27 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// VEX SSE4.2 string compares — 2-operand-plus-imm8 on 0F 3A.
+    enum VexCmpStrKind: String, Equatable, CaseIterable {
+        case vpcmpestrm     // 60
+        case vpcmpestri     // 61
+        case vpcmpistrm     // 62
+        case vpcmpistri     // 63
+
+        var opcode: UInt8 {
+            switch self {
+            case .vpcmpestrm: return 0x60
+            case .vpcmpestri: return 0x61
+            case .vpcmpistrm: return 0x62
+            case .vpcmpistri: return 0x63
+            }
+        }
+
+        static func decode(opcode: UInt8) -> VexCmpStrKind? {
+            allCases.first { $0.opcode == opcode }
         }
     }
 

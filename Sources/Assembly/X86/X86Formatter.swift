@@ -359,6 +359,13 @@ internal enum X86InstructionFormatter {
             case .memory(let m):   srcStr = "\(sizeHintPrefix(.xmmword)) \(formatMemory(m))"
             }
             return "vaeskeygenassist xmm\(dst), \(srcStr), \(imm)"
+        case .vexCmpStr(let kind, let dst, let src, let imm):
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "xmm\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(.xmmword)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) xmm\(dst), \(srcStr), \(imm)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

@@ -4520,4 +4520,33 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18x VEX string compares
+
+    private static let vexCmpStrCases: [(String, [UInt8])] = [
+        ("vpcmpestrm xmm0, xmm1, 12",                   [0xC4, 0xE3, 0x79, 0x60, 0xC1, 0x0C]),
+        ("vpcmpestri xmm0, xmm1, 13",                   [0xC4, 0xE3, 0x79, 0x61, 0xC1, 0x0D]),
+        ("vpcmpistrm xmm0, xmm1, 14",                   [0xC4, 0xE3, 0x79, 0x62, 0xC1, 0x0E]),
+        ("vpcmpistri xmm0, xmm1, 15",                   [0xC4, 0xE3, 0x79, 0x63, 0xC1, 0x0F]),
+    ]
+
+    func testVexCmpStrAssembles() throws {
+        for (source, expected) in Self.vexCmpStrCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexCmpStrDisassembles() throws {
+        for (source, bytes) in Self.vexCmpStrCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexCmpStrStreamRoundTrip() throws {
+        let source = Self.vexCmpStrCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexCmpStrCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
