@@ -1628,12 +1628,20 @@ internal enum X86 {
         case vcmpss     // F3 0F   C2
         case vcmpsd     // F2 0F   C2
         case vpclmulqdq // 66 0F3A 44
+        case vblendps   // 66 0F3A 0C
+        case vblendpd   // 66 0F3A 0D
+        case vpblendw   // 66 0F3A 0E
+        case vdpps      // 66 0F3A 40
+        case vdppd      // 66 0F3A 41
+        case vmpsadbw   // 66 0F3A 42
 
         var ppBits: UInt8 {
             switch self {
             case .vshufps, .vcmpps:                       return 0b00
             case .vshufpd, .vpalignr, .vcmppd,
-                 .vpclmulqdq:                              return 0b01
+                 .vpclmulqdq,
+                 .vblendps, .vblendpd, .vpblendw,
+                 .vdpps, .vdppd, .vmpsadbw:                return 0b01
             case .vcmpss:                                  return 0b10
             case .vcmpsd:                                  return 0b11
             }
@@ -1643,7 +1651,9 @@ internal enum X86 {
             switch self {
             case .vshufps, .vshufpd,
                  .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0b00001     // 0F
-            case .vpalignr, .vpclmulqdq:                return 0b00011  // 0F 3A
+            case .vpalignr, .vpclmulqdq,
+                 .vblendps, .vblendpd, .vpblendw,
+                 .vdpps, .vdppd, .vmpsadbw:           return 0b00011    // 0F 3A
             }
         }
 
@@ -1653,6 +1663,12 @@ internal enum X86 {
             case .vpalignr:           return 0x0F
             case .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0xC2
             case .vpclmulqdq:         return 0x44
+            case .vblendps:           return 0x0C
+            case .vblendpd:           return 0x0D
+            case .vpblendw:           return 0x0E
+            case .vdpps:              return 0x40
+            case .vdppd:              return 0x41
+            case .vmpsadbw:           return 0x42
             }
         }
 

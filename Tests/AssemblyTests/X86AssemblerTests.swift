@@ -4549,4 +4549,35 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18y VEX SSE4.1 imm8 3-op
+
+    private static let vexSSE41ImmCases: [(String, [UInt8])] = [
+        ("vblendps xmm0, xmm1, xmm2, 4",                [0xC4, 0xE3, 0x71, 0x0C, 0xC2, 0x04]),
+        ("vblendpd ymm0, ymm1, ymm2, 5",                [0xC4, 0xE3, 0x75, 0x0D, 0xC2, 0x05]),
+        ("vpblendw xmm0, xmm1, xmm2, 6",                [0xC4, 0xE3, 0x71, 0x0E, 0xC2, 0x06]),
+        ("vdpps xmm0, xmm1, xmm2, 240",                 [0xC4, 0xE3, 0x71, 0x40, 0xC2, 0xF0]),
+        ("vdppd xmm0, xmm1, xmm2, 51",                  [0xC4, 0xE3, 0x71, 0x41, 0xC2, 0x33]),
+        ("vmpsadbw xmm0, xmm1, xmm2, 7",                [0xC4, 0xE3, 0x71, 0x42, 0xC2, 0x07]),
+    ]
+
+    func testVexSSE41ImmAssembles() throws {
+        for (source, expected) in Self.vexSSE41ImmCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexSSE41ImmDisassembles() throws {
+        for (source, bytes) in Self.vexSSE41ImmCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexSSE41ImmStreamRoundTrip() throws {
+        let source = Self.vexSSE41ImmCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexSSE41ImmCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
