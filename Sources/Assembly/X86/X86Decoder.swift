@@ -813,6 +813,20 @@ internal enum X86InstructionDecoder {
             let size: X86.AVXVectorSize = (kind.isScalar || v.l == 0) ? .xmm : .ymm
             return Decoded(instruction: .fma3(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
         }
+        // VEX SSE4.1 packed 3-op family.
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01,
+           let kind = X86.VexSSE41PackedKind.decode(opcode3: opcode) {
+            let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexSSE41Packed(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+        }
+        // VEX SSE4.1 2-op family (VPTEST / VPHMINPOSUW).
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.vvvv == 0,
+           let kind = X86.VexSSE41UnaryKind.decode(opcode3: opcode) {
+            let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexSSE41Unary(kind, size: size, destination: dst, source: src), length: cursor.consumed)
+        }
         // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
         // currently modelled here lives on 0F.
         if v.escape == X86.VEX.escape0F3A {

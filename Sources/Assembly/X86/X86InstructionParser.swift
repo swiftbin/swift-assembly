@@ -160,6 +160,12 @@ internal enum X86Parser {
         if let kind = X86.FMA3Kind(rawValue: instruction.mnemonic) {
             return try parseFma3(kind, instruction)
         }
+        if let kind = X86.VexSSE41PackedKind(rawValue: instruction.mnemonic) {
+            return try parseVexSSE41Packed(kind, instruction)
+        }
+        if let kind = X86.VexSSE41UnaryKind(rawValue: instruction.mnemonic) {
+            return try parseVexSSE41Unary(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1146,6 +1152,48 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VEX SSE4.1 3-op packed integer.
+    private static func parseVexSSE41Packed(_ kind: X86.VexSSE41PackedKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        let src2 = try parseVectorOrMemory(
+            instruction.operands[2],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        return .vexSSE41Packed(kind, size: size, destination: dst, source1: src1, source2: src2)
+    }
+
+    /// VEX SSE4.1 2-op (VPTEST / VPHMINPOSUW).
+    private static func parseVexSSE41Unary(_ kind: X86.VexSSE41UnaryKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let src = try parseVectorOrMemory(
+            instruction.operands[1],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        return .vexSSE41Unary(kind, size: size, destination: dst, source: src)
     }
 
     /// FMA3 — `xmm/ymm, xmm/ymm, xmm/ymm/m{128|256|32|64}`.

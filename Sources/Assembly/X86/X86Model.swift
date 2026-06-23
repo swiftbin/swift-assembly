@@ -909,6 +909,12 @@ internal enum X86 {
         /// operation, control digit, and precision; size picks VEX.L
         /// (packed forms only).
         case fma3(FMA3Kind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// VEX SSE4.1 packed-integer 3-operand family. Encoded as
+        /// VEX.NDS.128/256.66.0F38 xx /r.
+        case vexSSE41Packed(VexSSE41PackedKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// VEX SSE4.1 2-operand family: VPTEST and VPHMINPOSUW. The
+        /// VEX.vvvv slot is reserved.
+        case vexSSE41Unary(VexSSE41UnaryKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1888,6 +1894,62 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// VEX SSE4.1 3-operand packed integer instructions on 66 0F 38.
+    enum VexSSE41PackedKind: String, Equatable, CaseIterable {
+        case vpmuldq        // 28
+        case vpcmpeqq       // 29
+        case vpackusdw      // 2B
+        case vpcmpgtq       // 37 — SSE4.2 packed compare gt qword
+        case vpminsb        // 38
+        case vpminsd        // 39
+        case vpminuw        // 3A
+        case vpminud        // 3B
+        case vpmaxsb        // 3C
+        case vpmaxsd        // 3D
+        case vpmaxuw        // 3E
+        case vpmaxud        // 3F
+        case vpmulld        // 40
+
+        var opcode3: UInt8 {
+            switch self {
+            case .vpmuldq:     return 0x28
+            case .vpcmpeqq:    return 0x29
+            case .vpackusdw:   return 0x2B
+            case .vpcmpgtq:    return 0x37
+            case .vpminsb:     return 0x38
+            case .vpminsd:     return 0x39
+            case .vpminuw:     return 0x3A
+            case .vpminud:     return 0x3B
+            case .vpmaxsb:     return 0x3C
+            case .vpmaxsd:     return 0x3D
+            case .vpmaxuw:     return 0x3E
+            case .vpmaxud:     return 0x3F
+            case .vpmulld:     return 0x40
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> VexSSE41PackedKind? {
+            allCases.first { $0.opcode3 == opcode3 }
+        }
+    }
+
+    /// VEX SSE4.1 2-operand family on 66 0F 38: VPTEST, VPHMINPOSUW.
+    enum VexSSE41UnaryKind: String, Equatable, CaseIterable {
+        case vptest         // 17 — sets EFLAGS from AND / ANDN
+        case vphminposuw    // 41 — horizontal min unsigned word + pos
+
+        var opcode3: UInt8 {
+            switch self {
+            case .vptest:      return 0x17
+            case .vphminposuw: return 0x41
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> VexSSE41UnaryKind? {
+            allCases.first { $0.opcode3 == opcode3 }
         }
     }
 

@@ -4415,4 +4415,43 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18u VEX SSE4.1 packed
+
+    private static let vexSSE41PackedCases: [(String, [UInt8])] = [
+        ("vpmuldq xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x28, 0xC2]),
+        ("vpcmpeqq xmm0, xmm1, xmm2",                   [0xC4, 0xE2, 0x71, 0x29, 0xC2]),
+        ("vpackusdw xmm0, xmm1, xmm2",                  [0xC4, 0xE2, 0x71, 0x2B, 0xC2]),
+        ("vpcmpgtq xmm0, xmm1, xmm2",                   [0xC4, 0xE2, 0x71, 0x37, 0xC2]),
+        ("vpminsb xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x38, 0xC2]),
+        ("vpminsd xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x39, 0xC2]),
+        ("vpmaxsb xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x3C, 0xC2]),
+        ("vpmaxud xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x3F, 0xC2]),
+        ("vpmulld xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x40, 0xC2]),
+        ("vpmulld ymm0, ymm1, ymm2",                    [0xC4, 0xE2, 0x75, 0x40, 0xC2]),
+        // 2-op (VPTEST / VPHMINPOSUW)
+        ("vptest xmm0, xmm1",                           [0xC4, 0xE2, 0x79, 0x17, 0xC1]),
+        ("vptest ymm0, ymm1",                           [0xC4, 0xE2, 0x7D, 0x17, 0xC1]),
+        ("vphminposuw xmm0, xmm1",                      [0xC4, 0xE2, 0x79, 0x41, 0xC1]),
+    ]
+
+    func testVexSSE41PackedAssembles() throws {
+        for (source, expected) in Self.vexSSE41PackedCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexSSE41PackedDisassembles() throws {
+        for (source, bytes) in Self.vexSSE41PackedCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexSSE41PackedStreamRoundTrip() throws {
+        let source = Self.vexSSE41PackedCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexSSE41PackedCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
