@@ -169,6 +169,9 @@ internal enum X86Parser {
         if let kind = X86.VexPackExtendKind(rawValue: instruction.mnemonic) {
             return try parseVexPackExtend(kind, instruction)
         }
+        if instruction.mnemonic == "vaeskeygenassist" {
+            return try parseVaesKeygenAssist(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1155,6 +1158,32 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VAESKEYGENASSIST — `xmm, xmm/m128, imm8`.
+    private static func parseVaesKeygenAssist(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "vaeskeygenassist",
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: "vaeskeygenassist", scalarOnly: false)
+        guard size == .xmm else {
+            throw AssemblerError.unsupportedOperand("vaeskeygenassist: only the 128-bit form is defined")
+        }
+        let src = try parseVectorOrMemory(
+            instruction.operands[1],
+            size: .xmm,
+            memoryWidth: .xmmword,
+            mnemonic: "vaeskeygenassist"
+        )
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "vaeskeygenassist", value: imm, range: 0...255)
+        }
+        return .vaeskeygenassist(destination: dst, source: src, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// VEX widening pack moves — `xmm/ymm, xmm/ymm/m{w|d|q|m128}`.

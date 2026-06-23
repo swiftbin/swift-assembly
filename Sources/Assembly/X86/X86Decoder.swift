@@ -837,6 +837,12 @@ internal enum X86InstructionDecoder {
         // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
         // currently modelled here lives on 0F.
         if v.escape == X86.VEX.escape0F3A {
+            // VAESKEYGENASSIST — VEX.128.66.0F3A DF /r ib.
+            if v.pp == 0b01 && opcode == 0xDF && v.vvvv == 0 {
+                let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vaeskeygenassist(destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
             // RORX — VEX.LZ.F2.0F3A F0 /r ib (GPR, 2-op + imm).
             if v.pp == 0b11 && opcode == 0xF0 {
                 let width: X86.RegisterWidth = v.w == 1 ? .qword : .dword

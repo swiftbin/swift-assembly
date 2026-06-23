@@ -918,6 +918,8 @@ internal enum X86 {
         /// VEX-prefixed PMOVSX*/PMOVZX*. 2-operand widening pack moves
         /// on `66 0F 38 2x|3x /r`; vvvv reserved.
         case vexPackExtend(VexPackExtendKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
+        /// VAESKEYGENASSIST — VEX.128.66.0F3A.WIG DF /r ib.
+        case vaeskeygenassist(destination: UInt8, source: VectorOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1621,13 +1623,15 @@ internal enum X86 {
         case vcmppd     // 66 0F   C2
         case vcmpss     // F3 0F   C2
         case vcmpsd     // F2 0F   C2
+        case vpclmulqdq // 66 0F3A 44
 
         var ppBits: UInt8 {
             switch self {
-            case .vshufps, .vcmpps:                 return 0b00
-            case .vshufpd, .vpalignr, .vcmppd:      return 0b01
-            case .vcmpss:                           return 0b10
-            case .vcmpsd:                           return 0b11
+            case .vshufps, .vcmpps:                       return 0b00
+            case .vshufpd, .vpalignr, .vcmppd,
+                 .vpclmulqdq:                              return 0b01
+            case .vcmpss:                                  return 0b10
+            case .vcmpsd:                                  return 0b11
             }
         }
 
@@ -1635,7 +1639,7 @@ internal enum X86 {
             switch self {
             case .vshufps, .vshufpd,
                  .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0b00001     // 0F
-            case .vpalignr:                            return 0b00011    // 0F 3A
+            case .vpalignr, .vpclmulqdq:                return 0b00011  // 0F 3A
             }
         }
 
@@ -1644,6 +1648,7 @@ internal enum X86 {
             case .vshufps, .vshufpd: return 0xC6
             case .vpalignr:           return 0x0F
             case .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0xC2
+            case .vpclmulqdq:         return 0x44
             }
         }
 
@@ -1915,6 +1920,11 @@ internal enum X86 {
         case vpmaxuw        // 3E
         case vpmaxud        // 3F
         case vpmulld        // 40
+        // VEX AES round operations (3-op NDS).
+        case vaesenc        // DC
+        case vaesenclast    // DD
+        case vaesdec        // DE
+        case vaesdeclast    // DF
 
         var opcode3: UInt8 {
             switch self {
@@ -1931,6 +1941,10 @@ internal enum X86 {
             case .vpmaxuw:     return 0x3E
             case .vpmaxud:     return 0x3F
             case .vpmulld:     return 0x40
+            case .vaesenc:     return 0xDC
+            case .vaesenclast: return 0xDD
+            case .vaesdec:     return 0xDE
+            case .vaesdeclast: return 0xDF
             }
         }
 
@@ -1943,11 +1957,13 @@ internal enum X86 {
     enum VexSSE41UnaryKind: String, Equatable, CaseIterable {
         case vptest         // 17 — sets EFLAGS from AND / ANDN
         case vphminposuw    // 41 — horizontal min unsigned word + pos
+        case vaesimc        // DB — AES inverse mix-columns
 
         var opcode3: UInt8 {
             switch self {
             case .vptest:      return 0x17
             case .vphminposuw: return 0x41
+            case .vaesimc:     return 0xDB
             }
         }
 

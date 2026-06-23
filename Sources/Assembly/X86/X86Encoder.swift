@@ -255,6 +255,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: kind.opcode3, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
         case .vexPackExtend(let kind, let size, let dst, let src):
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: kind.opcode3, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
+        case .vaeskeygenassist(let dst, let src, let imm):
+            var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: 0xDF, lBit: 0, destination: dst, source1: 0, source2: src)
+            bytes.append(imm)
+            return Encoded(bytes: bytes, patches: [])
         }
     }
 

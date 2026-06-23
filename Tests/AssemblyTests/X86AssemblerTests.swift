@@ -4488,4 +4488,36 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18w VEX AES + PCLMULQDQ
+
+    private static let vexAesPclmulCases: [(String, [UInt8])] = [
+        ("vaesimc xmm0, xmm1",                          [0xC4, 0xE2, 0x79, 0xDB, 0xC1]),
+        ("vaesenc xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0xDC, 0xC2]),
+        ("vaesenclast xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0xDD, 0xC2]),
+        ("vaesdec xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0xDE, 0xC2]),
+        ("vaesdeclast xmm0, xmm1, xmm2",                [0xC4, 0xE2, 0x71, 0xDF, 0xC2]),
+        ("vaeskeygenassist xmm0, xmm1, 16",             [0xC4, 0xE3, 0x79, 0xDF, 0xC1, 0x10]),
+        ("vpclmulqdq xmm0, xmm1, xmm2, 17",             [0xC4, 0xE3, 0x71, 0x44, 0xC2, 0x11]),
+    ]
+
+    func testVexAesPclmulAssembles() throws {
+        for (source, expected) in Self.vexAesPclmulCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexAesPclmulDisassembles() throws {
+        for (source, bytes) in Self.vexAesPclmulCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexAesPclmulStreamRoundTrip() throws {
+        let source = Self.vexAesPclmulCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexAesPclmulCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
