@@ -924,6 +924,10 @@ internal enum X86 {
         /// Encoded as VEX.128.66.0F3A 60-63 ib; 2-op + imm8 (vvvv
         /// reserved).
         case vexCmpStr(VexCmpStrKind, destination: UInt8, source: VectorOrMemory, immediate: UInt8)
+        /// VROUNDPS / VROUNDPD — 2-operand-plus-imm8 packed rounding.
+        /// Encoded as VEX.128/256.66.0F3A.WIG 08|09 /r ib with vvvv
+        /// reserved.
+        case vroundPacked(VexRoundPackedKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1634,6 +1638,8 @@ internal enum X86 {
         case vdpps      // 66 0F3A 40
         case vdppd      // 66 0F3A 41
         case vmpsadbw   // 66 0F3A 42
+        case vroundss   // 66 0F3A 0A — scalar single
+        case vroundsd   // 66 0F3A 0B — scalar double
 
         var ppBits: UInt8 {
             switch self {
@@ -1641,7 +1647,8 @@ internal enum X86 {
             case .vshufpd, .vpalignr, .vcmppd,
                  .vpclmulqdq,
                  .vblendps, .vblendpd, .vpblendw,
-                 .vdpps, .vdppd, .vmpsadbw:                return 0b01
+                 .vdpps, .vdppd, .vmpsadbw,
+                 .vroundss, .vroundsd:                     return 0b01
             case .vcmpss:                                  return 0b10
             case .vcmpsd:                                  return 0b11
             }
@@ -1653,7 +1660,8 @@ internal enum X86 {
                  .vcmpps, .vcmppd, .vcmpss, .vcmpsd: return 0b00001     // 0F
             case .vpalignr, .vpclmulqdq,
                  .vblendps, .vblendpd, .vpblendw,
-                 .vdpps, .vdppd, .vmpsadbw:           return 0b00011    // 0F 3A
+                 .vdpps, .vdppd, .vmpsadbw,
+                 .vroundss, .vroundsd:                return 0b00011    // 0F 3A
             }
         }
 
@@ -1669,6 +1677,8 @@ internal enum X86 {
             case .vdpps:              return 0x40
             case .vdppd:              return 0x41
             case .vmpsadbw:           return 0x42
+            case .vroundss:           return 0x0A
+            case .vroundsd:           return 0x0B
             }
         }
 
@@ -1676,14 +1686,14 @@ internal enum X86 {
         /// the rest take the size-driven packed width.
         func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
             switch self {
-            case .vcmpss: return .dword
-            case .vcmpsd: return .qword
-            default:      return size.packedMemoryWidth
+            case .vcmpss, .vroundss: return .dword
+            case .vcmpsd, .vroundsd: return .qword
+            default:                  return size.packedMemoryWidth
             }
         }
 
         var isScalar: Bool {
-            self == .vcmpss || self == .vcmpsd
+            self == .vcmpss || self == .vcmpsd || self == .vroundss || self == .vroundsd
         }
 
         static func decode(escape: UInt8, ppBits: UInt8, opcode: UInt8) -> VexThreeOpImmKind? {
@@ -1922,6 +1932,23 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// VROUNDPS / VROUNDPD — packed 2-operand-plus-imm8 on 0F 3A.
+    enum VexRoundPackedKind: String, Equatable, CaseIterable {
+        case vroundps       // 0F 3A 08
+        case vroundpd       // 0F 3A 09
+
+        var opcode: UInt8 {
+            switch self {
+            case .vroundps: return 0x08
+            case .vroundpd: return 0x09
+            }
+        }
+
+        static func decode(opcode: UInt8) -> VexRoundPackedKind? {
+            allCases.first { $0.opcode == opcode }
         }
     }
 

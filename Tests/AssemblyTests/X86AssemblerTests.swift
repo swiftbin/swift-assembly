@@ -4580,4 +4580,35 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18z VROUND family
+
+    private static let vroundCases: [(String, [UInt8])] = [
+        // Packed (2-op + imm)
+        ("vroundps xmm0, xmm1, 0",                      [0xC4, 0xE3, 0x79, 0x08, 0xC1, 0x00]),
+        ("vroundpd ymm0, ymm1, 1",                      [0xC4, 0xE3, 0x7D, 0x09, 0xC1, 0x01]),
+        // Scalar (3-op + imm)
+        ("vroundss xmm0, xmm1, xmm2, 2",                [0xC4, 0xE3, 0x71, 0x0A, 0xC2, 0x02]),
+        ("vroundsd xmm0, xmm1, xmm2, 3",                [0xC4, 0xE3, 0x71, 0x0B, 0xC2, 0x03]),
+    ]
+
+    func testVroundAssembles() throws {
+        for (source, expected) in Self.vroundCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVroundDisassembles() throws {
+        for (source, bytes) in Self.vroundCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVroundStreamRoundTrip() throws {
+        let source = Self.vroundCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vroundCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

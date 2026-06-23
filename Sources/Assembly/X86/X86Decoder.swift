@@ -850,6 +850,14 @@ internal enum X86InstructionDecoder {
                 let imm = try cursor.takeByte()
                 return Decoded(instruction: .vexCmpStr(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
             }
+            // VROUNDPS / VROUNDPD — packed 2-op + imm8.
+            if v.pp == 0b01 && v.vvvv == 0,
+               let kind = X86.VexRoundPackedKind.decode(opcode: opcode) {
+                let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+                return Decoded(instruction: .vroundPacked(kind, size: size, destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
             // RORX — VEX.LZ.F2.0F3A F0 /r ib (GPR, 2-op + imm).
             if v.pp == 0b11 && opcode == 0xF0 {
                 let width: X86.RegisterWidth = v.w == 1 ? .qword : .dword

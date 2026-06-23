@@ -366,6 +366,14 @@ internal enum X86InstructionFormatter {
             case .memory(let m):   srcStr = "\(sizeHintPrefix(.xmmword)) \(formatMemory(m))"
             }
             return "\(kind.rawValue) xmm\(dst), \(srcStr), \(imm)"
+        case .vroundPacked(let kind, let size, let dst, let src, let imm):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "\(prefix)\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(prefix)\(dst), \(srcStr), \(imm)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)
