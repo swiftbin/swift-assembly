@@ -915,6 +915,9 @@ internal enum X86 {
         /// VEX SSE4.1 2-operand family: VPTEST and VPHMINPOSUW. The
         /// VEX.vvvv slot is reserved.
         case vexSSE41Unary(VexSSE41UnaryKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
+        /// VEX-prefixed PMOVSX*/PMOVZX*. 2-operand widening pack moves
+        /// on `66 0F 38 2x|3x /r`; vvvv reserved.
+        case vexPackExtend(VexPackExtendKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1949,6 +1952,56 @@ internal enum X86 {
         }
 
         static func decode(opcode3: UInt8) -> VexSSE41UnaryKind? {
+            allCases.first { $0.opcode3 == opcode3 }
+        }
+    }
+
+    /// VEX widening pack moves — V-prefixed PMOVSX*/PMOVZX*.
+    enum VexPackExtendKind: String, Equatable, CaseIterable {
+        case vpmovsxbw, vpmovsxbd, vpmovsxbq, vpmovsxwd, vpmovsxwq, vpmovsxdq
+        case vpmovzxbw, vpmovzxbd, vpmovzxbq, vpmovzxwd, vpmovzxwq, vpmovzxdq
+
+        var opcode3: UInt8 {
+            switch self {
+            case .vpmovsxbw: return 0x20
+            case .vpmovsxbd: return 0x21
+            case .vpmovsxbq: return 0x22
+            case .vpmovsxwd: return 0x23
+            case .vpmovsxwq: return 0x24
+            case .vpmovsxdq: return 0x25
+            case .vpmovzxbw: return 0x30
+            case .vpmovzxbd: return 0x31
+            case .vpmovzxbq: return 0x32
+            case .vpmovzxwd: return 0x33
+            case .vpmovzxwq: return 0x34
+            case .vpmovzxdq: return 0x35
+            }
+        }
+
+        /// Source memory width when in memory form. (For XMM dst; the
+        /// YMM dst doubles each width.)
+        func sourceWidth(size: AVXVectorSize) -> RegisterWidth {
+            let base: RegisterWidth
+            switch self {
+            case .vpmovsxbw, .vpmovsxwd, .vpmovsxdq,
+                 .vpmovzxbw, .vpmovzxwd, .vpmovzxdq: base = .qword
+            case .vpmovsxbd, .vpmovsxwq,
+                 .vpmovzxbd, .vpmovzxwq:             base = .dword
+            case .vpmovsxbq, .vpmovzxbq:             base = .word
+            }
+            // YMM destination doubles the input bytes; bump one tier.
+            if size == .ymm {
+                switch base {
+                case .word:  return .dword
+                case .dword: return .qword
+                case .qword: return .xmmword
+                default:      return base
+                }
+            }
+            return base
+        }
+
+        static func decode(opcode3: UInt8) -> VexPackExtendKind? {
             allCases.first { $0.opcode3 == opcode3 }
         }
     }

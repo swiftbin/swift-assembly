@@ -166,6 +166,9 @@ internal enum X86Parser {
         if let kind = X86.VexSSE41UnaryKind(rawValue: instruction.mnemonic) {
             return try parseVexSSE41Unary(kind, instruction)
         }
+        if let kind = X86.VexPackExtendKind(rawValue: instruction.mnemonic) {
+            return try parseVexPackExtend(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1152,6 +1155,25 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VEX widening pack moves — `xmm/ymm, xmm/ymm/m{w|d|q|m128}`.
+    private static func parseVexPackExtend(_ kind: X86.VexPackExtendKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "2 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let src = try parseVectorOrMemory(
+            instruction.operands[1],
+            size: size,
+            memoryWidth: kind.sourceWidth(size: size),
+            mnemonic: kind.rawValue
+        )
+        return .vexPackExtend(kind, size: size, destination: dst, source: src)
     }
 
     /// VEX SSE4.1 3-op packed integer.

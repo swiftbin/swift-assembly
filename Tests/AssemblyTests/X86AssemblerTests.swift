@@ -4454,4 +4454,38 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18v VEX PMOVSX/PMOVZX
+
+    private static let vexPackExtendCases: [(String, [UInt8])] = [
+        ("vpmovsxbw xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x20, 0xC1]),
+        ("vpmovsxbd xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x21, 0xC1]),
+        ("vpmovsxbq xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x22, 0xC1]),
+        ("vpmovsxwd xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x23, 0xC1]),
+        ("vpmovsxwq xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x24, 0xC1]),
+        ("vpmovsxdq xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x25, 0xC1]),
+        ("vpmovzxbw xmm0, xmm1",                        [0xC4, 0xE2, 0x79, 0x30, 0xC1]),
+        ("vpmovzxdq ymm0, ymm1",                        [0xC4, 0xE2, 0x7D, 0x35, 0xC1]),
+        ("vpmovsxbw xmm0, qword ptr [rdi]",             [0xC4, 0xE2, 0x79, 0x20, 0x07]),
+    ]
+
+    func testVexPackExtendAssembles() throws {
+        for (source, expected) in Self.vexPackExtendCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexPackExtendDisassembles() throws {
+        for (source, bytes) in Self.vexPackExtendCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexPackExtendStreamRoundTrip() throws {
+        let source = Self.vexPackExtendCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexPackExtendCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
