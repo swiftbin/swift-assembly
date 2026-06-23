@@ -4640,4 +4640,31 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18ab VEX LDMXCSR / STMXCSR
+
+    private static let vexMxcsrCases: [(String, [UInt8])] = [
+        ("vldmxcsr dword ptr [rdi]",                    [0xC5, 0xF8, 0xAE, 0x17]),
+        ("vstmxcsr dword ptr [rdi]",                    [0xC5, 0xF8, 0xAE, 0x1F]),
+    ]
+
+    func testVexMxcsrAssembles() throws {
+        for (source, expected) in Self.vexMxcsrCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexMxcsrDisassembles() throws {
+        for (source, bytes) in Self.vexMxcsrCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexMxcsrStreamRoundTrip() throws {
+        let source = Self.vexMxcsrCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexMxcsrCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

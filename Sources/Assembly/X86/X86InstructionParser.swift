@@ -181,6 +181,10 @@ internal enum X86Parser {
         if let kind = X86.VexNonTemporalKind(rawValue: instruction.mnemonic) {
             return try parseVexNonTemporal(kind, instruction)
         }
+        if instruction.mnemonic == "vldmxcsr" || instruction.mnemonic == "vstmxcsr" {
+            let kind: X86.MXCSRKind = instruction.mnemonic == "vldmxcsr" ? .ldmxcsr : .stmxcsr
+            return try parseVexMxcsr(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1167,6 +1171,19 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VLDMXCSR / VSTMXCSR — single m32 operand.
+    private static func parseVexMxcsr(_ kind: X86.MXCSRKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: "v" + kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let mem = try parseSizedMemory(instruction.operands[0], expected: .dword, mnemonic: "v" + kind.rawValue)
+        return .vexMxcsr(kind, memory: mem)
     }
 
     /// VMOVNT* — `m128/m256, xmm/ymm`.

@@ -931,6 +931,9 @@ internal enum X86 {
         /// VMOVNTPS / VMOVNTPD / VMOVNTDQ — non-temporal vector store.
         /// Encoded as `[66] VEX.128/256.0F [2B|E7] /r` (memory in rm).
         case vexNonTemporalStore(VexNonTemporalKind, size: AVXVectorSize, memory: MemoryOperand, source: UInt8)
+        /// VLDMXCSR / VSTMXCSR — VEX-encoded MXCSR load / store on
+        /// `VEX.LZ.0F AE /2|/3` against an m32 operand.
+        case vexMxcsr(MXCSRKind, memory: MemoryOperand)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {

@@ -269,6 +269,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: bytes, patches: [])
         case .vexNonTemporalStore(let kind, let size, let mem, let src):
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: src, source1: 0, source2: .memory(mem)), patches: [])
+        case .vexMxcsr(let kind, let mem):
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: 0, opcode: 0xAE, lBit: 0, destination: kind.slashDigit, source1: 0, source2: .memory(mem)), patches: [])
         }
     }
 
