@@ -4781,4 +4781,25 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18ag TSX zero-op + SERIALIZE + WBNOINVD
+
+    private static let zeroOpExtraCases: [(String, [UInt8])] = [
+        ("xend",      [0x0F, 0x01, 0xD5]),
+        ("xtest",     [0x0F, 0x01, 0xD6]),
+        ("serialize", [0x0F, 0x01, 0xE8]),
+        ("wbnoinvd",  [0xF3, 0x0F, 0x09]),
+    ]
+
+    func testZeroOpExtraAssembles() throws {
+        for (source, expected) in Self.zeroOpExtraCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testZeroOpExtraDisassembles() throws {
+        for (source, bytes) in Self.zeroOpExtraCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

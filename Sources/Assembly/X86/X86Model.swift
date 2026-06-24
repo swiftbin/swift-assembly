@@ -223,6 +223,12 @@ internal enum X86 {
         case fcompp, fucompp
         // AVX upper-half zeroing.
         case vzeroupper, vzeroall
+        // TSX transactional-memory operations.
+        case xend           // 0F 01 D5 — commit transaction
+        case xtest          // 0F 01 D6 — query in-transaction flag
+        // Memory ordering / cache.
+        case serialize      // 0F 01 E8 — serializing barrier
+        case wbnoinvd       // F3 0F 09 — write-back caches, no invalidate
 
         var bytes: [UInt8] {
             switch self {
@@ -311,6 +317,10 @@ internal enum X86 {
             case .fucompp:   return [0xDA, 0xE9]
             case .vzeroupper: return [0xC5, 0xF8, 0x77]
             case .vzeroall:   return [0xC5, 0xFC, 0x77]
+            case .xend:       return [0x0F, 0x01, 0xD5]
+            case .xtest:      return [0x0F, 0x01, 0xD6]
+            case .serialize:  return [0x0F, 0x01, 0xE8]
+            case .wbnoinvd:   return [0xF3, 0x0F, 0x09]
             // Control-word ops: WAIT (0x9B) and no-WAIT variants.
             case .fnclex:   return [0xDB, 0xE2]
             case .fninit:   return [0xDB, 0xE3]
