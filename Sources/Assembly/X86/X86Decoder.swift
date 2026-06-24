@@ -1700,7 +1700,19 @@ internal enum X86InstructionDecoder {
 
     private static func decodeCmpxchgWide(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
-        guard X86.ModRM.reg.extract(modrm) == 1 else {
+        let slashDigit = X86.ModRM.reg.extract(modrm)
+        // /6 RDRAND, /7 RDSEED — mod=11 (register destination only).
+        if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister,
+           let kind = X86.RandomBitsKind.decode(slashDigit: slashDigit) {
+            let regNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+            let width: X86.RegisterWidth
+            if prefixes.rexW == 1      { width = .qword }
+            else if prefixes.operandSize { width = .word }
+            else                        { width = .dword }
+            let dst = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+            return Decoded(instruction: .randomBits(kind, destination: dst), length: cursor.consumed)
+        }
+        guard slashDigit == 1 else {
             throw AssemblerError.unknownEncoding(0xC7)
         }
         guard X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {

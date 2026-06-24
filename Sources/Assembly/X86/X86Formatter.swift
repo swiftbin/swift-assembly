@@ -395,6 +395,8 @@ internal enum X86InstructionFormatter {
             case .memory(let m):   src2Str = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
             }
             return "\(kind.rawValue) \(prefix)\(dst), \(prefix)\(src1), \(src2Str)"
+        case .randomBits(let kind, let dst):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

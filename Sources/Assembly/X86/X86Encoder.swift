@@ -275,6 +275,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
         case .vexVarShift(let kind, let size, let dst, let src1, let src2):
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: kind.w, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: src2), patches: [])
+        case .randomBits(let kind, let dst):
+            return Encoded(bytes: try encodeRandomBits(kind, destination: dst), patches: [])
         }
     }
 
@@ -1979,6 +1981,23 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
             return bytes
         }
+    }
+
+    /// `[66] [REX] 0F C7 /6|/7` — RDRAND / RDSEED.
+    private static func encodeRandomBits(_ kind: X86.RandomBitsKind, destination dst: X86.Register) throws -> [UInt8] {
+        guard dst.width == .word || dst.width == .dword || dst.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a 16/32/64-bit GPR")
+        }
+        var bytes: [UInt8] = []
+        if dst.width == .word { bytes.append(0x66) }
+        let rexW: UInt8 = dst.width == .qword ? 1 : 0
+        if let rex = X86.REX.build(w: rexW, b: dst.highBit, forceEmit: needsForcedREX([dst])) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xC7)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: kind.slashDigit, rm: dst.lowBits))
+        return bytes
     }
 
     /// `[66|F3] [REX] 0F 38 F6 /r` — ADCX / ADOX.

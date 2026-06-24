@@ -956,6 +956,10 @@ internal enum X86 {
         /// 3-op NDS on `66 0F 38 47|45|46 /r` with VEX.W picking D/Q
         /// for the SLLV/SRLV family.
         case vexVarShift(VexVarShiftKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// RDRAND / RDSEED — read hardware random / seed into a GPR.
+        /// Encoded as `0F C7 /6` (RDRAND) or `/7` (RDSEED) with the
+        /// destination in ModR/M.rm (mod=11).
+        case randomBits(RandomBitsKind, destination: Register)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1991,6 +1995,23 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// RDRAND / RDSEED — share opcode 0F C7 with /n picking which.
+    enum RandomBitsKind: String, Equatable, CaseIterable {
+        case rdrand     // /6
+        case rdseed     // /7
+
+        var slashDigit: UInt8 {
+            switch self {
+            case .rdrand: return 6
+            case .rdseed: return 7
+            }
+        }
+
+        static func decode(slashDigit: UInt8) -> RandomBitsKind? {
+            allCases.first { $0.slashDigit == slashDigit }
         }
     }
 

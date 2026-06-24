@@ -4843,4 +4843,26 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18aj RDRAND / RDSEED
+
+    private static let randomBitsCases: [(String, [UInt8])] = [
+        ("rdrand ax",  [0x66, 0x0F, 0xC7, 0xF0]),
+        ("rdrand eax", [0x0F, 0xC7, 0xF0]),
+        ("rdrand rax", [0x48, 0x0F, 0xC7, 0xF0]),
+        ("rdseed eax", [0x0F, 0xC7, 0xF8]),
+        ("rdseed r10", [0x49, 0x0F, 0xC7, 0xFA]),
+    ]
+
+    func testRandomBitsAssembles() throws {
+        for (source, expected) in Self.randomBitsCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testRandomBitsDisassembles() throws {
+        for (source, bytes) in Self.randomBitsCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }
