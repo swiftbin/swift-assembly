@@ -4931,4 +4931,27 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18an VEX VPINSRD/Q + VPEXTRD/Q
+
+    private static let vexPinsrPextrDQCases: [(String, [UInt8])] = [
+        ("vpinsrd xmm0, xmm1, eax, 1",                  [0xC4, 0xE3, 0x71, 0x22, 0xC0, 0x01]),
+        ("vpinsrq xmm0, xmm1, rax, 0",                  [0xC4, 0xE3, 0xF1, 0x22, 0xC0, 0x00]),
+        ("vpinsrd xmm0, xmm1, dword ptr [rdi], 2",      [0xC4, 0xE3, 0x71, 0x22, 0x07, 0x02]),
+        ("vpextrd eax, xmm0, 3",                        [0xC4, 0xE3, 0x79, 0x16, 0xC0, 0x03]),
+        ("vpextrq rax, xmm0, 1",                        [0xC4, 0xE3, 0xF9, 0x16, 0xC0, 0x01]),
+        ("vpextrd dword ptr [rdi], xmm0, 0",            [0xC4, 0xE3, 0x79, 0x16, 0x07, 0x00]),
+    ]
+
+    func testVexPinsrPextrDQAssembles() throws {
+        for (source, expected) in Self.vexPinsrPextrDQCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexPinsrPextrDQDisassembles() throws {
+        for (source, bytes) in Self.vexPinsrPextrDQCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

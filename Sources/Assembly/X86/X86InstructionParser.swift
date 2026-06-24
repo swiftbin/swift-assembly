@@ -212,6 +212,14 @@ internal enum X86Parser {
         if instruction.mnemonic == "sha1rnds4" {
             return try parseSha1rnds4(instruction)
         }
+        if instruction.mnemonic == "vpinsrd" || instruction.mnemonic == "vpinsrq" {
+            let width: X86.RegisterWidth = instruction.mnemonic == "vpinsrq" ? .qword : .dword
+            return try parseVexInsertLaneDQ(width: width, instruction)
+        }
+        if instruction.mnemonic == "vpextrd" || instruction.mnemonic == "vpextrq" {
+            let width: X86.RegisterWidth = instruction.mnemonic == "vpextrq" ? .qword : .dword
+            return try parseVexExtractLaneDQ(width: width, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1198,6 +1206,39 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VPINSRD / VPINSRQ — `xmm, xmm, r/m, imm8`.
+    private static func parseVexInsertLaneDQ(width: X86.RegisterWidth, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 4 else {
+            throw AssemblerError.invalidOperandCount(instruction: width == .qword ? "vpinsrq" : "vpinsrd", expected: "4 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]),
+              let src1 = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("vpinsr: first two operands must be XMM registers")
+        }
+        let src2 = try parseGPROrSizedMemory(instruction.operands[2], expectedWidth: width, mnemonic: "vpinsr")
+        let imm = try immediateAny(instruction.operands[3])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "vpinsr", value: imm, range: 0...255)
+        }
+        return .vexInsertLaneDQ(width: width, destination: dst.number, source1: src1.number, source2: src2, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// VPEXTRD / VPEXTRQ — `r/m, xmm, imm8`.
+    private static func parseVexExtractLaneDQ(width: X86.RegisterWidth, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: width == .qword ? "vpextrq" : "vpextrd", expected: "3 operands", actual: instruction.operands.count)
+        }
+        let dst = try parseGPROrSizedMemory(instruction.operands[0], expectedWidth: width, mnemonic: "vpextr")
+        guard let src = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("vpextr: source must be an XMM register")
+        }
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "vpextr", value: imm, range: 0...255)
+        }
+        return .vexExtractLaneDQ(width: width, destination: dst, source: src.number, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// SHA-NI 2-op family.

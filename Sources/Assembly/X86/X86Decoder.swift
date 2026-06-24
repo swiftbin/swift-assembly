@@ -963,6 +963,41 @@ internal enum X86InstructionDecoder {
                 let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
                 return Decoded(instruction: .vexThreeOpImm(kind, size: size, destination: dst, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
             }
+            // VPINSRD/Q — VEX.NDS.128.66.0F3A.W[0|1] 22 /r ib.
+            if v.pp == 0b01 && opcode == 0x22 {
+                let width: X86.RegisterWidth = v.w == 1 ? .qword : .dword
+                let modrm = try cursor.takeByte()
+                let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let dstNum = regNum
+                let src1 = v.vvvv & 0xF
+                let src2: X86.RegisterOrMemory
+                if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                    let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                    src2 = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+                } else {
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    src2 = .memory(mem, width: width)
+                }
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vexInsertLaneDQ(width: width, destination: dstNum, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
+            }
+            // VPEXTRD/Q — VEX.128.66.0F3A.W[0|1] 16 /r ib (vvvv reserved).
+            if v.pp == 0b01 && opcode == 0x16 && v.vvvv == 0 {
+                let width: X86.RegisterWidth = v.w == 1 ? .qword : .dword
+                let modrm = try cursor.takeByte()
+                let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let srcNum = regNum
+                let dst: X86.RegisterOrMemory
+                if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                    let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                    dst = .register(makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX))
+                } else {
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    dst = .memory(mem, width: width)
+                }
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vexExtractLaneDQ(width: width, destination: dst, source: srcNum, immediate: imm), length: cursor.consumed)
+            }
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
         guard v.escape == X86.VEX.escape0F else {

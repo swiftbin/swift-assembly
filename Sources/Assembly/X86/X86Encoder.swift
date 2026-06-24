@@ -289,6 +289,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeShani(kind, destination: dst, source: src), patches: [])
         case .sha1rnds4(let dst, let src, let imm):
             return Encoded(bytes: try encodeSha1rnds4(destination: dst, source: src, immediate: imm), patches: [])
+        case .vexInsertLaneDQ(let width, let dst, let src1, let src2, let imm):
+            return Encoded(bytes: try encodeVexInsertLaneDQ(width: width, destination: dst, source1: src1, source2: src2, immediate: imm), patches: [])
+        case .vexExtractLaneDQ(let width, let dst, let src, let imm):
+            return Encoded(bytes: try encodeVexExtractLaneDQ(width: width, destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1991,6 +1995,70 @@ internal enum X86InstructionEncoder {
             var bytes = X86.VEX.build(r: xmm.highBit, x: rexX, b: rexB, escape: X86.VEX.escape0F, w: w, vvvv: 0, l: 0, pp: 0b01)
             bytes.append(opcode)
             bytes.append(contentsOf: addressing)
+            return bytes
+        }
+    }
+
+    /// VEX VPINSRD / VPINSRQ.
+    private static func encodeVexInsertLaneDQ(width: X86.RegisterWidth, destination dst: UInt8, source1 src1: UInt8, source2: X86.RegisterOrMemory, immediate: UInt8) throws -> [UInt8] {
+        guard width == .dword || width == .qword else {
+            throw AssemblerError.unsupportedOperand("vpinsr: width must be dword or qword")
+        }
+        let w: UInt8 = width == .qword ? 1 : 0
+        let dstHigh = (dst >> 3) & 1
+        let dstLow = dst & 0x7
+        switch source2 {
+        case .register(let r):
+            guard r.width == width else {
+                throw AssemblerError.unsupportedOperand("vpinsr: GPR width must match")
+            }
+            try checkRegisterRegisterCompat([r], mnemonic: "vpinsr")
+            var bytes = X86.VEX.build(r: dstHigh, x: 0, b: r.highBit, escape: X86.VEX.escape0F3A, w: w, vvvv: src1, l: 0, pp: 0b01)
+            bytes.append(0x22)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dstLow, rm: r.lowBits))
+            bytes.append(immediate)
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == width else {
+                throw AssemblerError.unsupportedOperand("vpinsr: memory width must match")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dstLow)
+            var bytes = X86.VEX.build(r: dstHigh, x: rexX, b: rexB, escape: X86.VEX.escape0F3A, w: w, vvvv: src1, l: 0, pp: 0b01)
+            bytes.append(0x22)
+            bytes.append(contentsOf: addressing)
+            bytes.append(immediate)
+            return bytes
+        }
+    }
+
+    /// VEX VPEXTRD / VPEXTRQ.
+    private static func encodeVexExtractLaneDQ(width: X86.RegisterWidth, destination: X86.RegisterOrMemory, source src: UInt8, immediate: UInt8) throws -> [UInt8] {
+        guard width == .dword || width == .qword else {
+            throw AssemblerError.unsupportedOperand("vpextr: width must be dword or qword")
+        }
+        let w: UInt8 = width == .qword ? 1 : 0
+        let srcHigh = (src >> 3) & 1
+        let srcLow = src & 0x7
+        switch destination {
+        case .register(let r):
+            guard r.width == width else {
+                throw AssemblerError.unsupportedOperand("vpextr: GPR width must match")
+            }
+            try checkRegisterRegisterCompat([r], mnemonic: "vpextr")
+            var bytes = X86.VEX.build(r: srcHigh, x: 0, b: r.highBit, escape: X86.VEX.escape0F3A, w: w, vvvv: 0, l: 0, pp: 0b01)
+            bytes.append(0x16)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: srcLow, rm: r.lowBits))
+            bytes.append(immediate)
+            return bytes
+        case .memory(let mem, let memW):
+            guard memW == width else {
+                throw AssemblerError.unsupportedOperand("vpextr: memory width must match")
+            }
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: srcLow)
+            var bytes = X86.VEX.build(r: srcHigh, x: rexX, b: rexB, escape: X86.VEX.escape0F3A, w: w, vvvv: 0, l: 0, pp: 0b01)
+            bytes.append(0x16)
+            bytes.append(contentsOf: addressing)
+            bytes.append(immediate)
             return bytes
         }
     }

@@ -409,6 +409,22 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) xmm\(dst.number), \(formatXMMOrMemory(src, width: .xmmword))"
         case .sha1rnds4(let dst, let src, let imm):
             return "sha1rnds4 xmm\(dst.number), \(formatXMMOrMemory(src, width: .xmmword)), \(imm)"
+        case .vexInsertLaneDQ(let width, let dst, let src1, let src2, let imm):
+            let mnemonic = width == .qword ? "vpinsrq" : "vpinsrd"
+            let src2Str: String
+            switch src2 {
+            case .register(let r): src2Str = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w): src2Str = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "\(mnemonic) xmm\(dst), xmm\(src1), \(src2Str), \(imm)"
+        case .vexExtractLaneDQ(let width, let dst, let src, let imm):
+            let mnemonic = width == .qword ? "vpextrq" : "vpextrd"
+            let dstStr: String
+            switch dst {
+            case .register(let r): dstStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w): dstStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "\(mnemonic) \(dstStr), xmm\(src), \(imm)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

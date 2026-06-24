@@ -977,6 +977,12 @@ internal enum X86 {
         case shani(SHAKind, destination: XMMRegister, source: XMMOrMemory)
         /// SHA1RNDS4 — 2-operand + imm8 on `NP 0F 3A CC /r ib`.
         case sha1rnds4(destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
+        /// VEX VPINSRD / VPINSRQ — `xmm, xmm, r/m32|m64, imm8`.
+        /// 3-op NDS on `66 0F 3A 22 ib` with VEX.W picking D/Q.
+        case vexInsertLaneDQ(width: RegisterWidth, destination: UInt8, source1: UInt8, source2: RegisterOrMemory, immediate: UInt8)
+        /// VEX VPEXTRD / VPEXTRQ — `r/m32|m64, xmm, imm8`.
+        /// 2-op on `66 0F 3A 16 ib` with VEX.W picking D/Q.
+        case vexExtractLaneDQ(width: RegisterWidth, destination: RegisterOrMemory, source: UInt8, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
