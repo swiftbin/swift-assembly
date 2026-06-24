@@ -4762,4 +4762,23 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18af VZEROALL / VZEROUPPER
+
+    private static let vzeroCases: [(String, [UInt8])] = [
+        ("vzeroupper", [0xC5, 0xF8, 0x77]),
+        ("vzeroall",   [0xC5, 0xFC, 0x77]),
+    ]
+
+    func testVzeroAssembles() throws {
+        for (source, expected) in Self.vzeroCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVzeroDisassembles() throws {
+        for (source, bytes) in Self.vzeroCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

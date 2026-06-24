@@ -221,6 +221,8 @@ internal enum X86 {
         case fyl2x, fyl2xp1, fprem, fprem1, fscale, fxtract
         case fninit, finit, fnclex, fclex
         case fcompp, fucompp
+        // AVX upper-half zeroing.
+        case vzeroupper, vzeroall
 
         var bytes: [UInt8] {
             switch self {
@@ -305,8 +307,10 @@ internal enum X86 {
             case .fcos:     return [0xD9, 0xFF]
             case .fnop:     return [0xD9, 0xD0]
             // Compare-and-pop pairs.
-            case .fcompp:   return [0xDE, 0xD9]
-            case .fucompp:  return [0xDA, 0xE9]
+            case .fcompp:    return [0xDE, 0xD9]
+            case .fucompp:   return [0xDA, 0xE9]
+            case .vzeroupper: return [0xC5, 0xF8, 0x77]
+            case .vzeroall:   return [0xC5, 0xFC, 0x77]
             // Control-word ops: WAIT (0x9B) and no-WAIT variants.
             case .fnclex:   return [0xDB, 0xE2]
             case .fninit:   return [0xDB, 0xE3]
