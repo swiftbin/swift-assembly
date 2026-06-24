@@ -952,6 +952,10 @@ internal enum X86 {
         /// every lane of the destination. Encoded as
         /// VEX.128/256.66.0F38 78|79|58|59 /r with vvvv reserved.
         case vexBroadcast(VexBroadcastKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
+        /// AVX2 variable shifts (VPSLLVD/Q, VPSRLVD/Q, VPSRAVD).
+        /// 3-op NDS on `66 0F 38 47|45|46 /r` with VEX.W picking D/Q
+        /// for the SLLV/SRLV family.
+        case vexVarShift(VexVarShiftKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1984,6 +1988,34 @@ internal enum X86 {
         }
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
+            allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// AVX2 variable shifts.
+    enum VexVarShiftKind: String, Equatable, CaseIterable {
+        case vpsllvd        // W0 47
+        case vpsllvq        // W1 47
+        case vpsrlvd        // W0 45
+        case vpsrlvq        // W1 45
+        case vpsravd        // W0 46
+
+        var opcode: UInt8 {
+            switch self {
+            case .vpsllvd, .vpsllvq: return 0x47
+            case .vpsrlvd, .vpsrlvq: return 0x45
+            case .vpsravd:           return 0x46
+            }
+        }
+
+        var w: UInt8 {
+            switch self {
+            case .vpsllvq, .vpsrlvq: return 1
+            default:                  return 0
+            }
+        }
+
+        static func decode(opcode: UInt8, w: UInt8) -> VexVarShiftKind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
         }
     }

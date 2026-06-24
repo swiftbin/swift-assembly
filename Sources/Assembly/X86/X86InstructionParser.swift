@@ -188,6 +188,9 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcast(kind, instruction)
         }
+        if let kind = X86.VexVarShiftKind(rawValue: instruction.mnemonic) {
+            return try parseVexVarShift(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1174,6 +1177,29 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// VPSLLVD/Q VPSRLVD/Q VPSRAVD — `xmm/ymm, xmm/ymm, xmm/ymm/m`.
+    private static func parseVexVarShift(_ kind: X86.VexVarShiftKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "3 operands",
+                actual: instruction.operands.count
+            )
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        guard size == size1 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): vector size of operands must match")
+        }
+        let src2 = try parseVectorOrMemory(
+            instruction.operands[2],
+            size: size,
+            memoryWidth: size.packedMemoryWidth,
+            mnemonic: kind.rawValue
+        )
+        return .vexVarShift(kind, size: size, destination: dst, source1: src1, source2: src2)
     }
 
     /// VPBROADCAST{B,W,D,Q} — `xmm/ymm, xmm/m{element-width}`.

@@ -841,6 +841,13 @@ internal enum X86InstructionDecoder {
             let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
             return Decoded(instruction: .vexBroadcast(kind, size: size, destination: dst, source: src), length: cursor.consumed)
         }
+        // AVX2 variable shifts.
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01,
+           let kind = X86.VexVarShiftKind.decode(opcode: opcode, w: v.w) {
+            let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexVarShift(kind, size: size, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+        }
         // VPALIGNR rides the 0F 3A escape; the rest of the AVX surface
         // currently modelled here lives on 0F.
         if v.escape == X86.VEX.escape0F3A {

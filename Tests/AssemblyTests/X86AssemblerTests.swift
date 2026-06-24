@@ -4802,4 +4802,26 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18ah AVX2 variable shifts
+
+    private static let vexVarShiftCases: [(String, [UInt8])] = [
+        ("vpsllvd xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x47, 0xC2]),
+        ("vpsllvq xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0xF1, 0x47, 0xC2]),
+        ("vpsrlvd ymm0, ymm1, ymm2",                    [0xC4, 0xE2, 0x75, 0x45, 0xC2]),
+        ("vpsrlvq ymm0, ymm1, ymm2",                    [0xC4, 0xE2, 0xF5, 0x45, 0xC2]),
+        ("vpsravd xmm0, xmm1, xmm2",                    [0xC4, 0xE2, 0x71, 0x46, 0xC2]),
+    ]
+
+    func testVexVarShiftAssembles() throws {
+        for (source, expected) in Self.vexVarShiftCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexVarShiftDisassembles() throws {
+        for (source, bytes) in Self.vexVarShiftCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }
