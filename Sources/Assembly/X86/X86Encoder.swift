@@ -277,6 +277,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: kind.w, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: src2), patches: [])
         case .randomBits(let kind, let dst):
             return Encoded(bytes: try encodeRandomBits(kind, destination: dst), patches: [])
+        case .cacheLineOp(let kind, let mem):
+            return Encoded(bytes: try encodeCacheLineOp(kind, memory: mem), patches: [])
         }
     }
 
@@ -1981,6 +1983,26 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
             return bytes
         }
+    }
+
+    /// Cache-line hint encoder.
+    private static func encodeCacheLineOp(_ kind: X86.CacheLineKind, memory: X86.MemoryOperand) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        let slashDigit: UInt8
+        let opcode2: UInt8
+        switch kind {
+        case .clflushopt: bytes.append(0x66); opcode2 = 0xAE; slashDigit = 7
+        case .clwb:       bytes.append(0x66); opcode2 = 0xAE; slashDigit = 6
+        case .cldemote:                       opcode2 = 0x1C; slashDigit = 0
+        }
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: slashDigit)
+        if let rex = X86.REX.build(x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(opcode2)
+        bytes.append(contentsOf: addressing)
+        return bytes
     }
 
     /// `[66] [REX] 0F C7 /6|/7` — RDRAND / RDSEED.

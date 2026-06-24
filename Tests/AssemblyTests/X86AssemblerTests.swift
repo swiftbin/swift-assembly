@@ -4865,4 +4865,24 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18ak CLFLUSHOPT/CLWB/CLDEMOTE
+
+    private static let cacheLineCases: [(String, [UInt8])] = [
+        ("clflushopt byte ptr [rdi]", [0x66, 0x0F, 0xAE, 0x3F]),
+        ("clwb byte ptr [rdi]",       [0x66, 0x0F, 0xAE, 0x37]),
+        ("cldemote byte ptr [rdi]",   [0x0F, 0x1C, 0x07]),
+    ]
+
+    func testCacheLineAssembles() throws {
+        for (source, expected) in Self.cacheLineCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testCacheLineDisassembles() throws {
+        for (source, bytes) in Self.cacheLineCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

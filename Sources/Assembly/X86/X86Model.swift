@@ -960,6 +960,9 @@ internal enum X86 {
         /// Encoded as `0F C7 /6` (RDRAND) or `/7` (RDSEED) with the
         /// destination in ModR/M.rm (mod=11).
         case randomBits(RandomBitsKind, destination: Register)
+        /// CLFLUSHOPT / CLWB / CLDEMOTE — cache-line hints. Single
+        /// byte-pointer memory operand.
+        case cacheLineOp(CacheLineKind, memory: MemoryOperand)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -1996,6 +1999,13 @@ internal enum X86 {
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
         }
+    }
+
+    /// Cache-line hint instructions.
+    enum CacheLineKind: String, Equatable, CaseIterable {
+        case clflushopt     // 66 0F AE /7
+        case clwb           // 66 0F AE /6
+        case cldemote       //    0F 1C /0
     }
 
     /// RDRAND / RDSEED — share opcode 0F C7 with /n picking which.

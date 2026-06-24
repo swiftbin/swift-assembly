@@ -312,6 +312,15 @@ internal enum X86InstructionDecoder {
             return try decodeSSENonTemporalStore(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0x18, 0x0D:
             return try decodePrefetch(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
+        case 0x1C:
+            // CLDEMOTE m8 — 0F 1C /0.
+            let modrm = try cursor.takeByte()
+            guard X86.ModRM.reg.extract(modrm) == 0,
+                  X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+                throw AssemblerError.unknownEncoding(0x1C)
+            }
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .cacheLineOp(.cldemote, memory: mem), length: cursor.consumed)
         case 0xD0, 0x7C, 0x7D, 0xF0:
             return try decodeSSE3(opcode2: opcode2, prefixes: prefixes, cursor: &cursor)
         case 0xC3:
@@ -1546,6 +1555,18 @@ internal enum X86InstructionDecoder {
         if let mxKind = X86.MXCSRKind.decode(slashDigit: nField) {
             let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
             return Decoded(instruction: .mxcsr(mxKind, memory: memory), length: cursor.consumed)
+        }
+        // CLFLUSHOPT / CLWB — 66 prefix repurposes /7 and /6.
+        if prefixes.operandSize {
+            switch nField {
+            case 7:
+                let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                return Decoded(instruction: .cacheLineOp(.clflushopt, memory: memory), length: cursor.consumed)
+            case 6:
+                let memory = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                return Decoded(instruction: .cacheLineOp(.clwb, memory: memory), length: cursor.consumed)
+            default: break
+            }
         }
         guard nField == 7 else {
             throw AssemblerError.unknownEncoding(0xAE)

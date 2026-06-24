@@ -194,6 +194,9 @@ internal enum X86Parser {
         if let kind = X86.RandomBitsKind(rawValue: instruction.mnemonic) {
             return try parseRandomBits(kind, instruction)
         }
+        if let kind = X86.CacheLineKind(rawValue: instruction.mnemonic) {
+            return try parseCacheLineOp(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1180,6 +1183,19 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// CLFLUSHOPT / CLWB / CLDEMOTE — single byte-pointer operand.
+    private static func parseCacheLineOp(_ kind: X86.CacheLineKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(
+                instruction: kind.rawValue,
+                expected: "1 operand",
+                actual: instruction.operands.count
+            )
+        }
+        let memory = try parseSizedMemory(instruction.operands[0], expected: .byte, mnemonic: kind.rawValue)
+        return .cacheLineOp(kind, memory: memory)
     }
 
     /// RDRAND / RDSEED — single GPR destination.
