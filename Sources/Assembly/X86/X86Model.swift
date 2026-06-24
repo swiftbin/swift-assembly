@@ -1280,6 +1280,8 @@ internal enum X86 {
         case vhsubpd        // 66 0F 7D
         case vaddsubps      // F2 0F D0
         case vaddsubpd      // 66 0F D0
+        case vcvtss2sd      // F3 0F 5A — single → double (scalar, 3-op)
+        case vcvtsd2ss      // F2 0F 5A — double → single (scalar, 3-op)
 
         /// `pp` bits for the VEX prefix: 0=none, 1=66, 2=F3, 3=F2.
         var ppBits: UInt8 {
@@ -1293,10 +1295,11 @@ internal enum X86 {
                  .vhaddpd, .vhsubpd, .vaddsubpd: return 0b01
             case .vaddss, .vsubss, .vmulss, .vdivss,
                  .vminss, .vmaxss, .vsqrtss, .vrsqrtss,
-                 .vrcpss: return 0b10
+                 .vrcpss, .vcvtss2sd: return 0b10
             case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
                  .vminsd, .vmaxsd, .vsqrtsd,
-                 .vhaddps, .vhsubps, .vaddsubps: return 0b11
+                 .vhaddps, .vhsubps, .vaddsubps,
+                 .vcvtsd2ss: return 0b11
             }
         }
 
@@ -1319,6 +1322,7 @@ internal enum X86 {
             case .vhaddps, .vhaddpd:                  return 0x7C
             case .vhsubps, .vhsubpd:                  return 0x7D
             case .vaddsubps, .vaddsubpd:              return 0xD0
+            case .vcvtss2sd, .vcvtsd2ss:              return 0x5A
             }
         }
 
@@ -1329,8 +1333,9 @@ internal enum X86 {
             case .vaddss, .vaddsd, .vsubss, .vsubsd,
                  .vmulss, .vmulsd, .vdivss, .vdivsd,
                  .vminss, .vminsd, .vmaxss, .vmaxsd,
-                 .vsqrtss, .vsqrtsd, .vrsqrtss, .vrcpss: return true
-            default:                                      return false
+                 .vsqrtss, .vsqrtsd, .vrsqrtss, .vrcpss,
+                 .vcvtss2sd, .vcvtsd2ss: return true
+            default:                     return false
             }
         }
 
@@ -1339,10 +1344,12 @@ internal enum X86 {
         func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
             switch self {
             case .vaddss, .vsubss, .vmulss, .vdivss,
-                 .vminss, .vmaxss, .vsqrtss, .vrsqrtss, .vrcpss: return .dword
+                 .vminss, .vmaxss, .vsqrtss, .vrsqrtss, .vrcpss,
+                 .vcvtss2sd: return .dword
             case .vaddsd, .vsubsd, .vmulsd, .vdivsd,
-                 .vminsd, .vmaxsd, .vsqrtsd:               return .qword
-            default:               return size.packedMemoryWidth
+                 .vminsd, .vmaxsd, .vsqrtsd,
+                 .vcvtsd2ss: return .qword
+            default:        return size.packedMemoryWidth
             }
         }
 
@@ -1502,12 +1509,19 @@ internal enum X86 {
         case vmovshdup      // F3 0F 16 — duplicate odd-indexed singles
         case vmovddup       // F2 0F 12 — duplicate one double per lane
         case vlddqu         // F2 0F F0 — unaligned dqword load
+        // Same-size packed integer ↔ single conversions
+        case vcvtdq2ps      //    0F 5B — int32 → single
+        case vcvtps2dq      // 66 0F 5B — single → int32 (round)
+        case vcvttps2dq     // F3 0F 5B — single → int32 (truncate)
 
         var ppBits: UInt8 {
             switch self {
-            case .vsqrtps, .vrsqrtps, .vrcpps: return 0b00
-            case .vsqrtpd:                       return 0b01
-            case .vmovsldup, .vmovshdup:         return 0b10
+            case .vsqrtps, .vrsqrtps, .vrcpps,
+                 .vcvtdq2ps:                     return 0b00
+            case .vsqrtpd,
+                 .vcvtps2dq:                     return 0b01
+            case .vmovsldup, .vmovshdup,
+                 .vcvttps2dq:                    return 0b10
             case .vmovddup, .vlddqu:             return 0b11
             }
         }
@@ -1520,6 +1534,7 @@ internal enum X86 {
             case .vmovsldup, .vmovddup: return 0x12
             case .vmovshdup:           return 0x16
             case .vlddqu:              return 0xF0
+            case .vcvtdq2ps, .vcvtps2dq, .vcvttps2dq: return 0x5B
             }
         }
 

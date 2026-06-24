@@ -4697,4 +4697,38 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18ad VEX same-size conversions
+
+    private static let vexConversion1Cases: [(String, [UInt8])] = [
+        ("vcvtdq2ps xmm0, xmm1",                        [0xC5, 0xF8, 0x5B, 0xC1]),
+        ("vcvtps2dq xmm0, xmm1",                        [0xC5, 0xF9, 0x5B, 0xC1]),
+        ("vcvttps2dq xmm0, xmm1",                       [0xC5, 0xFA, 0x5B, 0xC1]),
+        ("vcvtdq2ps ymm0, ymm1",                        [0xC5, 0xFC, 0x5B, 0xC1]),
+        // Scalar (3-op)
+        ("vcvtss2sd xmm0, xmm1, xmm2",                  [0xC5, 0xF2, 0x5A, 0xC2]),
+        ("vcvtsd2ss xmm0, xmm1, xmm2",                  [0xC5, 0xF3, 0x5A, 0xC2]),
+        ("vcvtss2sd xmm0, xmm1, dword ptr [rdi]",       [0xC5, 0xF2, 0x5A, 0x07]),
+        ("vcvtsd2ss xmm0, xmm1, qword ptr [rdi]",       [0xC5, 0xF3, 0x5A, 0x07]),
+    ]
+
+    func testVexConversion1Assembles() throws {
+        for (source, expected) in Self.vexConversion1Cases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexConversion1Disassembles() throws {
+        for (source, bytes) in Self.vexConversion1Cases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexConversion1StreamRoundTrip() throws {
+        let source = Self.vexConversion1Cases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexConversion1Cases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }
