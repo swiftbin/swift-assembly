@@ -4731,4 +4731,35 @@ final class X86AssemblerTests: XCTestCase {
         XCTAssertEqual(bytes, expected)
         XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
     }
+
+    // MARK: - Phase 18ae VEX COMI/UCOMI
+
+    private static let vexComiCases: [(String, [UInt8])] = [
+        ("vucomiss xmm0, xmm1",                         [0xC5, 0xF8, 0x2E, 0xC1]),
+        ("vucomisd xmm0, xmm1",                         [0xC5, 0xF9, 0x2E, 0xC1]),
+        ("vcomiss xmm0, xmm1",                          [0xC5, 0xF8, 0x2F, 0xC1]),
+        ("vcomisd xmm0, xmm1",                          [0xC5, 0xF9, 0x2F, 0xC1]),
+        ("vucomiss xmm0, dword ptr [rdi]",              [0xC5, 0xF8, 0x2E, 0x07]),
+        ("vcomisd xmm0, qword ptr [rdi]",               [0xC5, 0xF9, 0x2F, 0x07]),
+    ]
+
+    func testVexComiAssembles() throws {
+        for (source, expected) in Self.vexComiCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexComiDisassembles() throws {
+        for (source, bytes) in Self.vexComiCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testVexComiStreamRoundTrip() throws {
+        let source = Self.vexComiCases.map(\.0).joined(separator: "\n")
+        let expected = Self.vexComiCases.flatMap(\.1)
+        let bytes = try X86Assembler.assemble(source)
+        XCTAssertEqual(bytes, expected)
+        XCTAssertEqual(try X86Assembler.disassemble(bytes), source)
+    }
 }

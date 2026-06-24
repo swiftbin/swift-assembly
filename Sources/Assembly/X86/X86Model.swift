@@ -1513,13 +1513,20 @@ internal enum X86 {
         case vcvtdq2ps      //    0F 5B — int32 → single
         case vcvtps2dq      // 66 0F 5B — single → int32 (round)
         case vcvttps2dq     // F3 0F 5B — single → int32 (truncate)
+        // Scalar FP compares (set EFLAGS).
+        case vucomiss       //    0F 2E
+        case vucomisd       // 66 0F 2E
+        case vcomiss        //    0F 2F
+        case vcomisd        // 66 0F 2F
 
         var ppBits: UInt8 {
             switch self {
             case .vsqrtps, .vrsqrtps, .vrcpps,
-                 .vcvtdq2ps:                     return 0b00
+                 .vcvtdq2ps,
+                 .vucomiss, .vcomiss:            return 0b00
             case .vsqrtpd,
-                 .vcvtps2dq:                     return 0b01
+                 .vcvtps2dq,
+                 .vucomisd, .vcomisd:            return 0b01
             case .vmovsldup, .vmovshdup,
                  .vcvttps2dq:                    return 0b10
             case .vmovddup, .vlddqu:             return 0b11
@@ -1535,14 +1542,21 @@ internal enum X86 {
             case .vmovshdup:           return 0x16
             case .vlddqu:              return 0xF0
             case .vcvtdq2ps, .vcvtps2dq, .vcvttps2dq: return 0x5B
+            case .vucomiss, .vucomisd: return 0x2E
+            case .vcomiss, .vcomisd:   return 0x2F
             }
         }
 
         /// VMOVDDUP narrows the memory operand to m64 in the 128-bit
-        /// form. The 256-bit form uses m256.
+        /// form; VUCOMISS/VCOMISS read m32; VUCOMISD/VCOMISD read m64.
+        /// Everything else uses the size-derived packed width.
         func memoryWidth(size: AVXVectorSize) -> RegisterWidth {
-            if self == .vmovddup && size == .xmm { return .qword }
-            return size.packedMemoryWidth
+            switch self {
+            case .vmovddup where size == .xmm: return .qword
+            case .vucomiss, .vcomiss:           return .dword
+            case .vucomisd, .vcomisd:           return .qword
+            default:                             return size.packedMemoryWidth
+            }
         }
 
         static func decode(ppBits: UInt8, opcode: UInt8) -> VexUnaryKind? {
