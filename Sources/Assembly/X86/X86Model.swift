@@ -1697,6 +1697,7 @@ internal enum X86 {
         case vmpsadbw   // 66 0F3A 42
         case vroundss   // 66 0F3A 0A — scalar single
         case vroundsd   // 66 0F3A 0B — scalar double
+        case vpblendd   // 66 0F3A 02 — AVX2 blend dwords (imm8 mask)
 
         var ppBits: UInt8 {
             switch self {
@@ -1705,7 +1706,7 @@ internal enum X86 {
                  .vpclmulqdq,
                  .vblendps, .vblendpd, .vpblendw,
                  .vdpps, .vdppd, .vmpsadbw,
-                 .vroundss, .vroundsd:                     return 0b01
+                 .vroundss, .vroundsd, .vpblendd:          return 0b01
             case .vcmpss:                                  return 0b10
             case .vcmpsd:                                  return 0b11
             }
@@ -1718,7 +1719,7 @@ internal enum X86 {
             case .vpalignr, .vpclmulqdq,
                  .vblendps, .vblendpd, .vpblendw,
                  .vdpps, .vdppd, .vmpsadbw,
-                 .vroundss, .vroundsd:                return 0b00011    // 0F 3A
+                 .vroundss, .vroundsd, .vpblendd:     return 0b00011    // 0F 3A
             }
         }
 
@@ -1736,6 +1737,7 @@ internal enum X86 {
             case .vmpsadbw:           return 0x42
             case .vroundss:           return 0x0A
             case .vroundsd:           return 0x0B
+            case .vpblendd:           return 0x02
             }
         }
 

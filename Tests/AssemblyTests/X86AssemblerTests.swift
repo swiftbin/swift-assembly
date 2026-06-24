@@ -4824,4 +4824,23 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18ai VPBLENDD
+
+    private static let vpblenddCases: [(String, [UInt8])] = [
+        ("vpblendd xmm0, xmm1, xmm2, 5",                [0xC4, 0xE3, 0x71, 0x02, 0xC2, 0x05]),
+        ("vpblendd ymm0, ymm1, ymm2, 170",              [0xC4, 0xE3, 0x75, 0x02, 0xC2, 0xAA]),
+    ]
+
+    func testVpblenddAssembles() throws {
+        for (source, expected) in Self.vpblenddCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVpblenddDisassembles() throws {
+        for (source, bytes) in Self.vpblenddCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }
