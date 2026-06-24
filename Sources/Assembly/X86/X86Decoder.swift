@@ -575,6 +575,22 @@ internal enum X86InstructionDecoder {
             let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
             return Decoded(instruction: .invpcid(destination: dst, memory: mem), length: cursor.consumed)
         }
+        // SHA-NI — NP 0F 38 [C8..CD] /r.
+        if !prefixes.operandSize && !prefixes.f2Prefix && !prefixes.f3Prefix,
+           let kind = X86.SHAKind.decode(opcode3: opcode3) {
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = X86.XMMRegister(number: regNum)
+            let src: X86.XMMOrMemory
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                src = .register(X86.XMMRegister(number: rmNum))
+            } else {
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                src = .memory(mem)
+            }
+            return Decoded(instruction: .shani(kind, destination: dst, source: src), length: cursor.consumed)
+        }
         // MOVDIRI — NP 0F 38 F9 /r.
         if opcode3 == 0xF9 && !prefixes.operandSize && !prefixes.f2Prefix && !prefixes.f3Prefix {
             let modrm = try cursor.takeByte()
@@ -630,6 +646,24 @@ internal enum X86InstructionDecoder {
     }
 
     private static func decodeThreeByte0F3A(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
+        let opcode3Peek = try cursor.peekByte()
+        // SHA1RNDS4 — NP 0F 3A CC /r ib.
+        if !prefixes.operandSize && !prefixes.f2Prefix && !prefixes.f3Prefix && opcode3Peek == 0xCC {
+            _ = try cursor.takeByte()
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = X86.XMMRegister(number: regNum)
+            let src: X86.XMMOrMemory
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                src = .register(X86.XMMRegister(number: rmNum))
+            } else {
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                src = .memory(mem)
+            }
+            let imm = try cursor.takeByte()
+            return Decoded(instruction: .sha1rnds4(destination: dst, source: src, immediate: imm), length: cursor.consumed)
+        }
         guard prefixes.operandSize else {
             throw AssemblerError.unknownEncoding(0x3A)
         }

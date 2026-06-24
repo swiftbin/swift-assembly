@@ -973,6 +973,10 @@ internal enum X86 {
         /// a GPR (read as a base register), source is m512.
         /// `66 0F 38 F8 /r`.
         case movdir64b(destination: Register, memory: MemoryOperand)
+        /// SHA-NI 2-operand instructions on `NP 0F 38 [C8..CD] /r`.
+        case shani(SHAKind, destination: XMMRegister, source: XMMOrMemory)
+        /// SHA1RNDS4 — 2-operand + imm8 on `NP 0F 3A CC /r ib`.
+        case sha1rnds4(destination: XMMRegister, source: XMMOrMemory, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -2008,6 +2012,34 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// SHA-NI (Intel SHA New Instructions) — NP 0F 38 family.
+    /// SHA256RNDS2 implicitly reads XMM0 as a third operand; for now
+    /// we model it like the others (xmm, xmm/m128) and document the
+    /// implicit XMM0 in comments.
+    enum SHAKind: String, Equatable, CaseIterable {
+        case sha1nexte      // C8
+        case sha1msg1       // C9
+        case sha1msg2       // CA
+        case sha256rnds2    // CB — implicit XMM0 mask
+        case sha256msg1     // CC
+        case sha256msg2     // CD
+
+        var opcode3: UInt8 {
+            switch self {
+            case .sha1nexte:    return 0xC8
+            case .sha1msg1:     return 0xC9
+            case .sha1msg2:     return 0xCA
+            case .sha256rnds2:  return 0xCB
+            case .sha256msg1:   return 0xCC
+            case .sha256msg2:   return 0xCD
+            }
+        }
+
+        static func decode(opcode3: UInt8) -> SHAKind? {
+            allCases.first { $0.opcode3 == opcode3 }
         }
     }
 

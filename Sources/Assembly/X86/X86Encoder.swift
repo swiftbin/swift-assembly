@@ -285,6 +285,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeMovdiri(memory: mem, source: src), patches: [])
         case .movdir64b(let dst, let mem):
             return Encoded(bytes: try encodeMovdir64b(destination: dst, memory: mem), patches: [])
+        case .shani(let kind, let dst, let src):
+            return Encoded(bytes: try encodeShani(kind, destination: dst, source: src), patches: [])
+        case .sha1rnds4(let dst, let src, let imm):
+            return Encoded(bytes: try encodeSha1rnds4(destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -1989,6 +1993,57 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
             return bytes
         }
+    }
+
+    /// `NP 0F 38 [opcode] /r` — SHA-NI 2-operand family.
+    private static func encodeShani(_ kind: X86.SHAKind, destination dst: X86.XMMRegister, source: X86.XMMOrMemory) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x38)
+            bytes.append(kind.opcode3)
+            bytes.append(contentsOf: addressing)
+        }
+        return bytes
+    }
+
+    /// `NP 0F 3A CC /r ib` — SHA1RNDS4.
+    private static func encodeSha1rnds4(destination dst: X86.XMMRegister, source: X86.XMMOrMemory, immediate: UInt8) throws -> [UInt8] {
+        var bytes: [UInt8] = []
+        switch source {
+        case .register(let rm):
+            if let rex = X86.REX.build(r: dst.highBit, b: rm.highBit) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0xCC)
+            bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: dst.lowBits, rm: rm.lowBits))
+        case .memory(let mem):
+            let (addressing, rexX, rexB) = try encodeMemoryAddressing(mem, regField: dst.lowBits)
+            if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+                bytes.append(rex)
+            }
+            bytes.append(0x0F)
+            bytes.append(0x3A)
+            bytes.append(0xCC)
+            bytes.append(contentsOf: addressing)
+        }
+        bytes.append(immediate)
+        return bytes
     }
 
     /// `66 [REX] 0F 38 82 /r` — INVPCID r64, m128. The r64 destination

@@ -206,6 +206,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "movdir64b" {
             return try parseMovdir64b(instruction)
         }
+        if let kind = X86.SHAKind(rawValue: instruction.mnemonic) {
+            return try parseShani(kind, instruction)
+        }
+        if instruction.mnemonic == "sha1rnds4" {
+            return try parseSha1rnds4(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1192,6 +1198,34 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// SHA-NI 2-op family.
+    private static func parseShani(_ kind: X86.SHAKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "2 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        let src = try parseXMMOrMemorySource(instruction.operands[1], width: .xmmword, mnemonic: kind.rawValue)
+        return .shani(kind, destination: dst, source: src)
+    }
+
+    /// SHA1RNDS4 — `xmm, xmm/m128, imm8`.
+    private static func parseSha1rnds4(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: "sha1rnds4", expected: "3 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("sha1rnds4: destination must be an XMM register")
+        }
+        let src = try parseXMMOrMemorySource(instruction.operands[1], width: .xmmword, mnemonic: "sha1rnds4")
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "sha1rnds4", value: imm, range: 0...255)
+        }
+        return .sha1rnds4(destination: dst, source: src, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// INVPCID r64, m128.

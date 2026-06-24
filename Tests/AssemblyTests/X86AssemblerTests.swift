@@ -4907,4 +4907,28 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18am SHA-NI
+
+    private static let shaniCases: [(String, [UInt8])] = [
+        ("sha1nexte xmm0, xmm1",      [0x0F, 0x38, 0xC8, 0xC1]),
+        ("sha1msg1 xmm0, xmm1",       [0x0F, 0x38, 0xC9, 0xC1]),
+        ("sha1msg2 xmm0, xmm1",       [0x0F, 0x38, 0xCA, 0xC1]),
+        ("sha256rnds2 xmm0, xmm1",    [0x0F, 0x38, 0xCB, 0xC1]),
+        ("sha256msg1 xmm0, xmm1",     [0x0F, 0x38, 0xCC, 0xC1]),
+        ("sha256msg2 xmm0, xmm1",     [0x0F, 0x38, 0xCD, 0xC1]),
+        ("sha1rnds4 xmm0, xmm1, 3",   [0x0F, 0x3A, 0xCC, 0xC1, 0x03]),
+    ]
+
+    func testShaniAssembles() throws {
+        for (source, expected) in Self.shaniCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testShaniDisassembles() throws {
+        for (source, bytes) in Self.shaniCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }
