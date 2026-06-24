@@ -399,6 +399,12 @@ internal enum X86InstructionFormatter {
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst))"
         case .cacheLineOp(let kind, let mem):
             return "\(kind.rawValue) \(sizeHintPrefix(.byte)) \(formatMemory(mem))"
+        case .invpcid(let dst, let mem):
+            return "invpcid \(X86.RegisterTable.canonicalName(for: dst)), \(sizeHintPrefix(.xmmword)) \(formatMemory(mem))"
+        case .movdiri(let mem, let src):
+            return "movdiri \(sizeHintPrefix(src.width)) \(formatMemory(mem)), \(X86.RegisterTable.canonicalName(for: src))"
+        case .movdir64b(let dst, let mem):
+            return "movdir64b \(X86.RegisterTable.canonicalName(for: dst)), \(formatMemory(mem))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

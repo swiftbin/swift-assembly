@@ -279,6 +279,12 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeRandomBits(kind, destination: dst), patches: [])
         case .cacheLineOp(let kind, let mem):
             return Encoded(bytes: try encodeCacheLineOp(kind, memory: mem), patches: [])
+        case .invpcid(let dst, let mem):
+            return Encoded(bytes: try encodeInvpcid(destination: dst, memory: mem), patches: [])
+        case .movdiri(let mem, let src):
+            return Encoded(bytes: try encodeMovdiri(memory: mem, source: src), patches: [])
+        case .movdir64b(let dst, let mem):
+            return Encoded(bytes: try encodeMovdir64b(destination: dst, memory: mem), patches: [])
         }
     }
 
@@ -1983,6 +1989,59 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
             return bytes
         }
+    }
+
+    /// `66 [REX] 0F 38 82 /r` — INVPCID r64, m128. The r64 destination
+    /// is implicit in 64-bit mode; REX.W is not required.
+    private static func encodeInvpcid(destination dst: X86.Register, memory: X86.MemoryOperand) throws -> [UInt8] {
+        guard dst.width == .qword else {
+            throw AssemblerError.unsupportedOperand("invpcid: destination must be r64")
+        }
+        var bytes: [UInt8] = [0x66]
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: dst.lowBits)
+        if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0x38)
+        bytes.append(0x82)
+        bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    /// `[REX] 0F 38 F9 /r` — MOVDIRI m, r32/64.
+    private static func encodeMovdiri(memory: X86.MemoryOperand, source src: X86.Register) throws -> [UInt8] {
+        guard src.width == .dword || src.width == .qword else {
+            throw AssemblerError.unsupportedOperand("movdiri: source must be r32/r64")
+        }
+        let rexW: UInt8 = src.width == .qword ? 1 : 0
+        var bytes: [UInt8] = []
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: src.lowBits)
+        if let rex = X86.REX.build(w: rexW, r: src.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0x38)
+        bytes.append(0xF9)
+        bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
+    /// `66 [REX] 0F 38 F8 /r` — MOVDIR64B r, m512.
+    private static func encodeMovdir64b(destination dst: X86.Register, memory: X86.MemoryOperand) throws -> [UInt8] {
+        guard dst.width == .qword else {
+            throw AssemblerError.unsupportedOperand("movdir64b: destination must be r64")
+        }
+        var bytes: [UInt8] = [0x66]
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: dst.lowBits)
+        if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0x38)
+        bytes.append(0xF8)
+        bytes.append(contentsOf: addressing)
+        return bytes
     }
 
     /// Cache-line hint encoder.

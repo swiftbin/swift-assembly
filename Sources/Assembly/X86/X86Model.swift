@@ -963,6 +963,16 @@ internal enum X86 {
         /// CLFLUSHOPT / CLWB / CLDEMOTE — cache-line hints. Single
         /// byte-pointer memory operand.
         case cacheLineOp(CacheLineKind, memory: MemoryOperand)
+        /// INVPCID r64, m128 — invalidate process-context identifier.
+        /// Encoded as `66 0F 38 82 /r`.
+        case invpcid(destination: Register, memory: MemoryOperand)
+        /// MOVDIRI m32/64, r32/64 — direct-store from GPR.
+        /// Encoded as `NP 0F 38 F9 /r`.
+        case movdiri(memory: MemoryOperand, source: Register)
+        /// MOVDIR64B r, m512 — direct 64-byte move. The destination is
+        /// a GPR (read as a base register), source is m512.
+        /// `66 0F 38 F8 /r`.
+        case movdir64b(destination: Register, memory: MemoryOperand)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {

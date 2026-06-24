@@ -4885,4 +4885,26 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18al INVPCID/MOVDIRI/MOVDIR64B
+
+    private static let directOpCases: [(String, [UInt8])] = [
+        // INVPCID / MOVDIR64B: destination r64 is implicit, no REX.W.
+        ("invpcid rax, xmmword ptr [rdi]",       [0x66, 0x0F, 0x38, 0x82, 0x07]),
+        ("movdiri dword ptr [rdi], eax",         [0x0F, 0x38, 0xF9, 0x07]),
+        ("movdiri qword ptr [rdi], rax",         [0x48, 0x0F, 0x38, 0xF9, 0x07]),
+        ("movdir64b rax, [rdi]",                 [0x66, 0x0F, 0x38, 0xF8, 0x07]),
+    ]
+
+    func testDirectOpAssembles() throws {
+        for (source, expected) in Self.directOpCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testDirectOpDisassembles() throws {
+        for (source, bytes) in Self.directOpCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

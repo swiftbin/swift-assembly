@@ -197,6 +197,15 @@ internal enum X86Parser {
         if let kind = X86.CacheLineKind(rawValue: instruction.mnemonic) {
             return try parseCacheLineOp(kind, instruction)
         }
+        if instruction.mnemonic == "invpcid" {
+            return try parseInvpcid(instruction)
+        }
+        if instruction.mnemonic == "movdiri" {
+            return try parseMovdiri(instruction)
+        }
+        if instruction.mnemonic == "movdir64b" {
+            return try parseMovdir64b(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1183,6 +1192,42 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// INVPCID r64, m128.
+    private static func parseInvpcid(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: "invpcid", expected: "2 operands", actual: instruction.operands.count)
+        }
+        let dst = try register(instruction.operands[0])
+        let mem = try parseSizedMemory(instruction.operands[1], expected: .xmmword, mnemonic: "invpcid")
+        return .invpcid(destination: dst, memory: mem)
+    }
+
+    /// MOVDIRI m, r32/64.
+    private static func parseMovdiri(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: "movdiri", expected: "2 operands", actual: instruction.operands.count)
+        }
+        let src = try register(instruction.operands[1])
+        let mem = try parseSizedMemory(instruction.operands[0], expected: src.width, mnemonic: "movdiri")
+        return .movdiri(memory: mem, source: src)
+    }
+
+    /// MOVDIR64B r64, m512.
+    private static func parseMovdir64b(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: "movdir64b", expected: "2 operands", actual: instruction.operands.count)
+        }
+        let dst = try register(instruction.operands[0])
+        // Source memory width is m512; we accept the bare `[...]` form
+        // since the m512 size hint isn't currently part of the parser.
+        let text = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.hasPrefix("[") else {
+            throw AssemblerError.unsupportedOperand("movdir64b: expected a memory operand")
+        }
+        let mem = try memoryOperand(text)
+        return .movdir64b(destination: dst, memory: mem)
     }
 
     /// CLFLUSHOPT / CLWB / CLDEMOTE — single byte-pointer operand.

@@ -567,6 +567,31 @@ internal enum X86InstructionDecoder {
             let kind: X86.AdxKind = prefixes.f3Prefix ? .adox : .adcx
             return try decodeAdx(kind, prefixes: prefixes, cursor: &cursor)
         }
+        // INVPCID — 66 0F 38 82 /r.
+        if opcode3 == 0x82 && prefixes.operandSize {
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = makeRegister(number: regNum, width: .qword, hasREX: prefixes.hasREX)
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .invpcid(destination: dst, memory: mem), length: cursor.consumed)
+        }
+        // MOVDIRI — NP 0F 38 F9 /r.
+        if opcode3 == 0xF9 && !prefixes.operandSize && !prefixes.f2Prefix && !prefixes.f3Prefix {
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let width: X86.RegisterWidth = prefixes.rexW == 1 ? .qword : .dword
+            let src = makeRegister(number: regNum, width: width, hasREX: prefixes.hasREX)
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .movdiri(memory: mem, source: src), length: cursor.consumed)
+        }
+        // MOVDIR64B — 66 0F 38 F8 /r.
+        if opcode3 == 0xF8 && prefixes.operandSize {
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = makeRegister(number: regNum, width: .qword, hasREX: prefixes.hasREX)
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .movdir64b(destination: dst, memory: mem), length: cursor.consumed)
+        }
         guard prefixes.operandSize else {
             // MMX forms of these opcodes aren't modelled.
             throw AssemblerError.unknownEncoding(0x38)
