@@ -983,6 +983,9 @@ internal enum X86 {
         /// VEX VPEXTRD / VPEXTRQ — `r/m32|m64, xmm, imm8`.
         /// 2-op on `66 0F 3A 16 ib` with VEX.W picking D/Q.
         case vexExtractLaneDQ(width: RegisterWidth, destination: RegisterOrMemory, source: UInt8, immediate: UInt8)
+        /// WAITPKG UMWAIT/UMONITOR/TPAUSE — single GPR operand,
+        /// encoded as `[prefix] 0F AE /6` with mod=11.
+        case waitpkg(WaitpkgKind, register: Register)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
@@ -2018,6 +2021,21 @@ internal enum X86 {
 
         static func decode(opcode: UInt8, w: UInt8) -> FMA3Kind? {
             allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+    }
+
+    /// WAITPKG family — user-mode monitor / wait / pause.
+    enum WaitpkgKind: String, Equatable, CaseIterable {
+        case umonitor       // F3 0F AE /6
+        case umwait         // F2 0F AE /6
+        case tpause         // 66 0F AE /6
+
+        var prefix: UInt8 {
+            switch self {
+            case .umonitor: return 0xF3
+            case .umwait:   return 0xF2
+            case .tpause:   return 0x66
+            }
         }
     }
 

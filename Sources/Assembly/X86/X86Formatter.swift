@@ -425,6 +425,8 @@ internal enum X86InstructionFormatter {
             case .memory(let m, let w): dstStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
             }
             return "\(mnemonic) \(dstStr), xmm\(src), \(imm)"
+        case .waitpkg(let kind, let reg):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: reg))"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

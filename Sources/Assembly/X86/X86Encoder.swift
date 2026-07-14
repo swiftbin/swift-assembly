@@ -293,6 +293,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexInsertLaneDQ(width: width, destination: dst, source1: src1, source2: src2, immediate: imm), patches: [])
         case .vexExtractLaneDQ(let width, let dst, let src, let imm):
             return Encoded(bytes: try encodeVexExtractLaneDQ(width: width, destination: dst, source: src, immediate: imm), patches: [])
+        case .waitpkg(let kind, let reg):
+            return Encoded(bytes: try encodeWaitpkg(kind, register: reg), patches: [])
         }
     }
 
@@ -1997,6 +1999,32 @@ internal enum X86InstructionEncoder {
             bytes.append(contentsOf: addressing)
             return bytes
         }
+    }
+
+    /// UMONITOR / UMWAIT / TPAUSE.
+    private static func encodeWaitpkg(_ kind: X86.WaitpkgKind, register reg: X86.Register) throws -> [UInt8] {
+        guard reg.width == .dword || reg.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): operand must be r32/r64")
+        }
+        var bytes: [UInt8] = [kind.prefix]
+        // UMONITOR uses an address-size register (default r64 in 64-bit mode; 0x67 selects r32).
+        // UMWAIT/TPAUSE use an operand-size register (default r32; REX.W selects r64).
+        var w: UInt8 = 0
+        switch kind {
+        case .umonitor:
+            if reg.width == .dword {
+                bytes.append(0x67)
+            }
+        case .umwait, .tpause:
+            if reg.width == .qword { w = 1 }
+        }
+        if let rex = X86.REX.build(w: w, b: reg.highBit, forceEmit: needsForcedREX([reg])) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0xAE)
+        bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: 6, rm: reg.lowBits))
+        return bytes
     }
 
     /// VEX VPINSRD / VPINSRQ.

@@ -220,6 +220,9 @@ internal enum X86Parser {
             let width: X86.RegisterWidth = instruction.mnemonic == "vpextrq" ? .qword : .dword
             return try parseVexExtractLaneDQ(width: width, instruction)
         }
+        if let kind = X86.WaitpkgKind(rawValue: instruction.mnemonic) {
+            return try parseWaitpkg(kind, instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1206,6 +1209,15 @@ internal enum X86Parser {
         let dst = try register(instruction.operands[0])
         let src = try parseGPROrSizedMemory(instruction.operands[1], expectedWidth: dst.width, mnemonic: kind.rawValue)
         return .bmiUnary(kind, destination: dst, source: src)
+    }
+
+    /// UMONITOR / UMWAIT / TPAUSE — single GPR operand.
+    private static func parseWaitpkg(_ kind: X86.WaitpkgKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 1 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "1 operand", actual: instruction.operands.count)
+        }
+        let reg = try register(instruction.operands[0])
+        return .waitpkg(kind, register: reg)
     }
 
     /// VPINSRD / VPINSRQ — `xmm, xmm, r/m, imm8`.

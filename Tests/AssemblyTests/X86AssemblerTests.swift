@@ -4954,4 +4954,30 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18ao WAITPKG
+
+    private static let waitpkgCases: [(String, [UInt8])] = [
+        // UMONITOR uses an address-size register — default r64 in 64-bit mode; 0x67 selects r32.
+        ("umonitor rax", [0xF3, 0x0F, 0xAE, 0xF0]),
+        ("umonitor eax", [0xF3, 0x67, 0x0F, 0xAE, 0xF0]),
+        ("umonitor r15", [0xF3, 0x41, 0x0F, 0xAE, 0xF7]),
+        // UMWAIT/TPAUSE use an operand-size register — default r32; REX.W selects r64.
+        ("umwait eax",   [0xF2, 0x0F, 0xAE, 0xF0]),
+        ("umwait rcx",   [0xF2, 0x48, 0x0F, 0xAE, 0xF1]),
+        ("tpause eax",   [0x66, 0x0F, 0xAE, 0xF0]),
+        ("tpause rdx",   [0x66, 0x48, 0x0F, 0xAE, 0xF2]),
+    ]
+
+    func testWaitpkgAssembles() throws {
+        for (source, expected) in Self.waitpkgCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testWaitpkgDisassembles() throws {
+        for (source, bytes) in Self.waitpkgCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

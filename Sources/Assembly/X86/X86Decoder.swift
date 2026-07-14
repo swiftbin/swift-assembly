@@ -1642,6 +1642,28 @@ internal enum X86InstructionDecoder {
         let modrm = try cursor.takeByte()
         let nField = X86.ModRM.reg.extract(modrm)
         if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+            // WAITPKG — [F2|F3|66] 0F AE /6 mod=11.
+            if nField == 6 {
+                let kind: X86.WaitpkgKind?
+                if prefixes.f3Prefix        { kind = .umonitor }
+                else if prefixes.f2Prefix   { kind = .umwait }
+                else if prefixes.operandSize { kind = .tpause }
+                else                        { kind = nil }
+                if let waitKind = kind {
+                    let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                    // UMONITOR reads an address — default r64 in 64-bit mode, r32 with 0x67.
+                    // UMWAIT/TPAUSE read a value — default r32, REX.W selects r64.
+                    let width: X86.RegisterWidth
+                    switch waitKind {
+                    case .umonitor:
+                        width = prefixes.addressSize ? .dword : .qword
+                    case .umwait, .tpause:
+                        width = prefixes.rexW == 1 ? .qword : .dword
+                    }
+                    let reg = makeRegister(number: rmNum, width: width, hasREX: prefixes.hasREX)
+                    return Decoded(instruction: .waitpkg(waitKind, register: reg), length: cursor.consumed)
+                }
+            }
             // mod=11 forms — LFENCE/MFENCE/SFENCE are zero-operand;
             // anything else here we don't model yet.
             throw AssemblerError.unknownEncoding(0xAE)
