@@ -947,6 +947,28 @@ internal enum X86InstructionDecoder {
                 let imm = try cursor.takeByte()
                 return Decoded(instruction: .vexCmpStr(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
             }
+            // VEX VINSERTPS — VEX.NDS.128.66.0F3A.WIG 21 /r ib.
+            if v.pp == 0b01 && opcode == 0x21 {
+                let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vinsertps(destination: dst, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
+            }
+            // VEX VEXTRACTPS — VEX.128.66.0F3A.WIG 17 /r ib (vvvv reserved).
+            if v.pp == 0b01 && opcode == 0x17 && v.vvvv == 0 {
+                let modrm = try cursor.takeByte()
+                let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let src = regNum
+                let dst: X86.RegisterOrMemory
+                if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                    let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                    dst = .register(makeRegister(number: rmNum, width: .dword, hasREX: prefixes.hasREX))
+                } else {
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    dst = .memory(mem, width: .dword)
+                }
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vextractps(destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
             // F16C VCVTPS2PH — VEX.128/256.66.0F3A.W0 1D /r ib (vvvv reserved).
             // The ModR/M.reg field holds the XMM/YMM *source*; the r/m
             // field is the XMM-or-memory destination.

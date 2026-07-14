@@ -443,6 +443,20 @@ internal enum X86InstructionFormatter {
             return "xabort \(imm)"
         case .enqcmd(let kind, let dst, let mem):
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatMemory(mem))"
+        case .vinsertps(let dst, let src1, let src2, let imm):
+            let src2Str: String
+            switch src2 {
+            case .register(let n): src2Str = "xmm\(n)"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(.dword)) \(formatMemory(m))"
+            }
+            return "vinsertps xmm\(dst), xmm\(src1), \(src2Str), \(imm)"
+        case .vextractps(let dst, let src, let imm):
+            let dstStr: String
+            switch dst {
+            case .register(let r):        dstStr = X86.RegisterTable.canonicalName(for: r)
+            case .memory(let m, let w):   dstStr = "\(sizeHintPrefix(w)) \(formatMemory(m))"
+            }
+            return "vextractps \(dstStr), xmm\(src), \(imm)"
         case .vcvtps2ph(let size, let dst, let src, let imm):
             let srcPrefix = size == .xmm ? "xmm" : "ymm"
             // Memory dst is m64 for xmm src, m128 for ymm src.

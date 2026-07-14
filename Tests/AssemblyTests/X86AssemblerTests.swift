@@ -5033,6 +5033,30 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18as VEX VINSERTPS / VEXTRACTPS
+
+    private static let vexInsertExtractPsCases: [(String, [UInt8])] = [
+        // VINSERTPS
+        ("vinsertps xmm1, xmm2, xmm3, 16",              [0xC4, 0xE3, 0x69, 0x21, 0xCB, 0x10]),
+        ("vinsertps xmm1, xmm2, dword ptr [rdi], 32",   [0xC4, 0xE3, 0x69, 0x21, 0x0F, 0x20]),
+        // VEXTRACTPS
+        ("vextractps eax, xmm1, 0",                     [0xC4, 0xE3, 0x79, 0x17, 0xC8, 0x00]),
+        ("vextractps dword ptr [rdi], xmm2, 3",         [0xC4, 0xE3, 0x79, 0x17, 0x17, 0x03]),
+        ("vextractps r15d, xmm2, 1",                    [0xC4, 0xC3, 0x79, 0x17, 0xD7, 0x01]),
+    ]
+
+    func testVexInsertExtractPsAssembles() throws {
+        for (source, expected) in Self.vexInsertExtractPsCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexInsertExtractPsDisassembles() throws {
+        for (source, bytes) in Self.vexInsertExtractPsCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18ar ENQCMD / ENQCMDS
 
     private static let enqcmdCases: [(String, [UInt8])] = [

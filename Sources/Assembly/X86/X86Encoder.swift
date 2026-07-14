@@ -305,6 +305,12 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: [0xC6, 0xF8, imm], patches: [])
         case .enqcmd(let kind, let dst, let mem):
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
+        case .vinsertps(let dst, let src1, let src2, let imm):
+            var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: 0x21, lBit: 0, destination: dst, source1: src1, source2: src2)
+            bytes.append(imm)
+            return Encoded(bytes: bytes, patches: [])
+        case .vextractps(let dst, let src, let imm):
+            return Encoded(bytes: try encodeVextractps(destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -2236,6 +2242,28 @@ internal enum X86InstructionEncoder {
     }
 
     /// `66 [REX] 0F 38 F8 /r` — MOVDIR64B r, m512.
+    /// VEX VEXTRACTPS — `VEX.128.66.0F3A.WIG 17 /r ib` writing to r/m32.
+    /// The XMM source occupies ModR/M.reg; the r/m field carries the
+    /// GPR-or-memory destination.
+    private static func encodeVextractps(destination dst: X86.RegisterOrMemory, source src: UInt8, immediate: UInt8) throws -> [UInt8] {
+        let source2: X86.VectorOrMemory
+        switch dst {
+        case .register(let r):
+            guard r.width == .dword else {
+                throw AssemblerError.unsupportedOperand("vextractps: destination register must be r32")
+            }
+            source2 = .register(r.number)
+        case .memory(let mem, let width):
+            guard width == .dword else {
+                throw AssemblerError.unsupportedOperand("vextractps: destination memory must be m32")
+            }
+            source2 = .memory(mem)
+        }
+        var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: 0x17, lBit: 0, destination: src, source1: 0, source2: source2)
+        bytes.append(immediate)
+        return bytes
+    }
+
     /// ENQCMD / ENQCMDS — `[F2|F3] 0F 38 F8 /r`. The destination is a
     /// tag register (implicit r64 in 64-bit mode).
     private static func encodeEnqcmd(_ kind: X86.EnqcmdKind, destination dst: X86.Register, memory: X86.MemoryOperand) throws -> [UInt8] {

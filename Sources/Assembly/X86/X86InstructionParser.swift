@@ -235,6 +235,12 @@ internal enum X86Parser {
         if let kind = X86.EnqcmdKind(rawValue: instruction.mnemonic) {
             return try parseEnqcmd(kind, instruction)
         }
+        if instruction.mnemonic == "vinsertps" {
+            return try parseVinsertps(instruction)
+        }
+        if instruction.mnemonic == "vextractps" {
+            return try parseVextractps(instruction)
+        }
         if instruction.mnemonic == "xabort" {
             guard instruction.operands.count == 1 else {
                 throw AssemblerError.invalidOperandCount(instruction: "xabort", expected: "1 operand", actual: instruction.operands.count)
@@ -1353,6 +1359,39 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// VEX VINSERTPS — `xmm, xmm, xmm/m32, imm8`.
+    private static func parseVinsertps(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 4 else {
+            throw AssemblerError.invalidOperandCount(instruction: "vinsertps", expected: "4 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]),
+              let src1 = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("vinsertps: first two operands must be XMM registers")
+        }
+        let src2 = try parseVectorOrMemory(instruction.operands[2], size: .xmm, memoryWidth: .dword, mnemonic: "vinsertps")
+        let imm = try immediateAny(instruction.operands[3])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "vinsertps", value: imm, range: 0...255)
+        }
+        return .vinsertps(destination: dst.number, source1: src1.number, source2: src2, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// VEX VEXTRACTPS — `r/m32, xmm, imm8`.
+    private static func parseVextractps(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: "vextractps", expected: "3 operands", actual: instruction.operands.count)
+        }
+        let dst = try parseGPROrSizedMemory(instruction.operands[0], expectedWidth: .dword, mnemonic: "vextractps")
+        guard let src = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("vextractps: source must be an XMM register")
+        }
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "vextractps", value: imm, range: 0...255)
+        }
+        return .vextractps(destination: dst, source: src.number, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
     /// ENQCMD / ENQCMDS — `r64, m512`. The memory width is m512 which
     /// isn't part of the size-hint vocabulary, so we accept the bare
     /// `[...]` form (matching movdir64b).

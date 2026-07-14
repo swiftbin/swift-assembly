@@ -1001,6 +1001,14 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// VEX VINSERTPS — `xmm, xmm, xmm/m32, imm8`.
+        /// 3-op NDS on `VEX.128.66.0F3A.WIG 21 /r ib` with an m32 memory
+        /// source when the third operand is a memory reference.
+        case vinsertps(destination: UInt8, source1: UInt8, source2: VectorOrMemory, immediate: UInt8)
+        /// VEX VEXTRACTPS — `r/m32, xmm, imm8`.
+        /// 2-op on `VEX.128.66.0F3A.WIG 17 /r ib`. The destination is a
+        /// 32-bit GPR or memory.
+        case vextractps(destination: RegisterOrMemory, source: UInt8, immediate: UInt8)
         /// ENQCMD / ENQCMDS — enqueue a 64-byte command to a device.
         /// The destination register carries the tag (implicit r64 in
         /// 64-bit mode, address-size dependent); the source is m512.
