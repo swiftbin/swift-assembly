@@ -918,6 +918,30 @@ internal enum X86InstructionDecoder {
             let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
             return Decoded(instruction: .vexBroadcast(kind, size: size, destination: dst, source: src), length: cursor.consumed)
         }
+        // VMASKMOV / VPMASKMOV — load and store forms. Memory operand
+        // required (mod != 11).
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 {
+            if let kind = X86.VexMaskMovKind.decodeLoad(opcode: opcode, w: v.w) {
+                let modrm = try cursor.peekByte()
+                if X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister {
+                    _ = try cursor.takeByte()
+                    let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+                    return Decoded(instruction: .vexMaskMov(kind, direction: .load, size: size, register: regNum, mask: v.vvvv & 0xF, memory: mem), length: cursor.consumed)
+                }
+            }
+            if let kind = X86.VexMaskMovKind.decodeStore(opcode: opcode, w: v.w) {
+                let modrm = try cursor.peekByte()
+                if X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister {
+                    _ = try cursor.takeByte()
+                    let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+                    return Decoded(instruction: .vexMaskMov(kind, direction: .store, size: size, register: regNum, mask: v.vvvv & 0xF, memory: mem), length: cursor.consumed)
+                }
+            }
+        }
         // AVX2 VPERMD / VPERMPS — VEX.NDS.256.66.0F38.W0 36|16 /r.
         if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.l == 1 && v.w == 0,
            let kind = X86.VPermRegKind.decode(opcode: opcode) {

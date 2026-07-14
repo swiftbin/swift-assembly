@@ -1001,6 +1001,11 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// VMASKMOVPS/PD and VPMASKMOVD/Q — conditional loads/stores.
+        /// Load: `xmm/ymm, xmm/ymm mask, m{128|256}`.
+        /// Store: `m{128|256}, xmm/ymm mask, xmm/ymm`.
+        /// Encoded as `VEX.NDS.128/256.66.0F38.W{0|1} [2C-2F|8C|8E] /r`.
+        case vexMaskMov(VexMaskMovKind, direction: VexMaskMovDirection, size: AVXVectorSize, register: UInt8, mask: UInt8, memory: MemoryOperand)
         /// AVX2 VPERMD / VPERMPS — 3-op NDS, ymm-only.
         /// Encoded as `VEX.NDS.256.66.0F38.W0 36|16 /r`.
         case vpermReg(VPermRegKind, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
@@ -1040,6 +1045,53 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VexMaskMovDirection: Equatable { case load, store }
+
+    enum VexMaskMovKind: String, Equatable, CaseIterable {
+        case vmaskmovps     // 0F 38, W0, load 2C, store 2E
+        case vmaskmovpd     // 0F 38, W0, load 2D, store 2F
+        case vpmaskmovd     // 0F 38, W0, load 8C, store 8E
+        case vpmaskmovq     // 0F 38, W1, load 8C, store 8E
+
+        var w: UInt8 { self == .vpmaskmovq ? 1 : 0 }
+
+        var loadOpcode: UInt8 {
+            switch self {
+            case .vmaskmovps: return 0x2C
+            case .vmaskmovpd: return 0x2D
+            case .vpmaskmovd, .vpmaskmovq: return 0x8C
+            }
+        }
+
+        var storeOpcode: UInt8 {
+            switch self {
+            case .vmaskmovps: return 0x2E
+            case .vmaskmovpd: return 0x2F
+            case .vpmaskmovd, .vpmaskmovq: return 0x8E
+            }
+        }
+
+        static func decodeLoad(opcode: UInt8, w: UInt8) -> VexMaskMovKind? {
+            switch (opcode, w) {
+            case (0x2C, 0): return .vmaskmovps
+            case (0x2D, 0): return .vmaskmovpd
+            case (0x8C, 0): return .vpmaskmovd
+            case (0x8C, 1): return .vpmaskmovq
+            default: return nil
+            }
+        }
+
+        static func decodeStore(opcode: UInt8, w: UInt8) -> VexMaskMovKind? {
+            switch (opcode, w) {
+            case (0x2E, 0): return .vmaskmovps
+            case (0x2F, 0): return .vmaskmovpd
+            case (0x8E, 0): return .vpmaskmovd
+            case (0x8E, 1): return .vpmaskmovq
+            default: return nil
+            }
+        }
     }
 
     enum VPermRegKind: String, Equatable, CaseIterable {

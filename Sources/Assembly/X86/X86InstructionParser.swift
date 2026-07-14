@@ -244,6 +244,9 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcastF(kind, instruction)
         }
+        if let kind = X86.VexMaskMovKind(rawValue: instruction.mnemonic) {
+            return try parseVexMaskMov(kind, instruction)
+        }
         if let kind = X86.VPermRegKind(rawValue: instruction.mnemonic) {
             return try parseVpermReg(kind, instruction)
         }
@@ -1377,6 +1380,32 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// VMASKMOVPS/PD and VPMASKMOVD/Q. Direction is inferred from the
+    /// operand shape (register-register-memory = load; the reverse is
+    /// store).
+    private static func parseVexMaskMov(_ kind: X86.VexMaskMovKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "3 operands", actual: instruction.operands.count)
+        }
+        // Load: `xmm/ymm, xmm/ymm, m`. Store: `m, xmm/ymm, xmm/ymm`.
+        if let (size, reg) = try? parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false) {
+            let (maskSize, mask) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+            guard maskSize == size else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): mask width must match destination")
+            }
+            let mem = try parseSizedMemory(instruction.operands[2], expected: size.packedMemoryWidth, mnemonic: kind.rawValue)
+            return .vexMaskMov(kind, direction: .load, size: size, register: reg, mask: mask, memory: mem)
+        }
+        // Store form: first operand is memory.
+        let (maskSize, mask) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        let (regSize, reg) = try parseVectorRegister(instruction.operands[2], mnemonic: kind.rawValue, scalarOnly: false)
+        guard maskSize == regSize else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): mask width must match source")
+        }
+        let mem = try parseSizedMemory(instruction.operands[0], expected: regSize.packedMemoryWidth, mnemonic: kind.rawValue)
+        return .vexMaskMov(kind, direction: .store, size: regSize, register: reg, mask: mask, memory: mem)
+    }
+
     /// AVX2 VPERMD / VPERMPS — `ymm, ymm, ymm/m256`.
     private static func parseVpermReg(_ kind: X86.VPermRegKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 3 else {
