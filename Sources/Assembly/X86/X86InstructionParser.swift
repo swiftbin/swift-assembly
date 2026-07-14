@@ -229,6 +229,19 @@ internal enum X86Parser {
         if instruction.mnemonic == "vcvtps2ph" {
             return try parseVcvtps2ph(instruction)
         }
+        if instruction.mnemonic == "xbegin" {
+            return .xbegin(target: try parseSingleBranchTarget(instruction))
+        }
+        if instruction.mnemonic == "xabort" {
+            guard instruction.operands.count == 1 else {
+                throw AssemblerError.invalidOperandCount(instruction: "xabort", expected: "1 operand", actual: instruction.operands.count)
+            }
+            let imm = try immediateAny(instruction.operands[0])
+            guard imm >= 0 && imm <= 255 else {
+                throw AssemblerError.immediateOutOfRange(instruction: "xabort", value: imm, range: 0...255)
+            }
+            return .xabort(immediate: UInt8(truncatingIfNeeded: imm))
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),

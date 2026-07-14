@@ -2380,8 +2380,13 @@ internal enum X86InstructionDecoder {
 
     /// `C6 /0 ib`. Accepts both register-direct (`mod == 11`) and memory
     /// (`mod != 11`) destinations; the ModR/M `reg` field must be 0.
+    /// The special encoding `C6 F8 ib` is XABORT.
     private static func decodeMovMI8(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
+        if modrm == 0xF8 {
+            let imm = try cursor.takeByte()
+            return Decoded(instruction: .xabort(immediate: imm), length: cursor.consumed)
+        }
         try requireSlash0(modrm: modrm, opcode: 0xC6)
         let destination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: .byte, cursor: &cursor)
         let imm = Int64(try cursor.takeByte())
@@ -2389,9 +2394,14 @@ internal enum X86InstructionDecoder {
     }
 
     /// `C7 /0 i{w,d}`. The qword form sign-extends imm32 to Int64 so the
-    /// encoder's "fits in Int32" canonical path round-trips.
+    /// encoder's "fits in Int32" canonical path round-trips. The special
+    /// encoding `C7 F8 cd` is XBEGIN with a rel32 fallback offset.
     private static func decodeMovMIWord(prefixes: Prefixes, cursor: inout Cursor) throws -> Decoded {
         let modrm = try cursor.takeByte()
+        if modrm == 0xF8 {
+            let delta = Int64(Int32(bitPattern: try cursor.takeLE32()))
+            return Decoded(instruction: .xbegin(target: .offset(delta)), length: cursor.consumed)
+        }
         try requireSlash0(modrm: modrm, opcode: 0xC7)
         let width = selectWidth(prefixes: prefixes)
         let destination = try decodeRMDestination(modrm: modrm, prefixes: prefixes, width: width, cursor: &cursor)

@@ -299,6 +299,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVcvtph2ps(size: size, destination: dst, source: src), patches: [])
         case .vcvtps2ph(let size, let dst, let src, let imm):
             return Encoded(bytes: try encodeVcvtps2ph(size: size, destination: dst, source: src, immediate: imm), patches: [])
+        case .xbegin(let target):
+            return try encodeXbegin(target: target, pc: pc, labels: labels)
+        case .xabort(let imm):
+            return Encoded(bytes: [0xC6, 0xF8, imm], patches: [])
         }
     }
 
@@ -414,6 +418,36 @@ internal enum X86InstructionEncoder {
             return Encoded(
                 bytes: [0xE8, 0x00, 0x00, 0x00, 0x00],
                 patches: [Patch(byteOffset: 1, width: 4, label: name, instructionEndOffset: 5)]
+            )
+        }
+    }
+
+    /// TSX XBEGIN — 6-byte `C7 F8 cd` with a rel32 fallback target.
+    /// The transaction aborts jump to `rip + rel32` (computed from the
+    /// end of the XBEGIN instruction, i.e. `pc + 6`).
+    private static func encodeXbegin(target: X86.BranchTarget, pc: Int64, labels: [String: Int64]) throws -> Encoded {
+        let mnemonic = "xbegin"
+        switch target {
+        case .offset(let delta):
+            guard delta >= Int64(Int32.min) && delta <= Int64(Int32.max) else {
+                throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: "#\(delta)", byteOffset: delta)
+            }
+            var bytes: [UInt8] = [0xC7, 0xF8]
+            appendLE32(UInt32(truncatingIfNeeded: delta), into: &bytes)
+            return Encoded(bytes: bytes, patches: [])
+        case .label(let name):
+            if let labelOffset = labels[name] {
+                let delta = labelOffset - (pc + 6)
+                guard delta >= Int64(Int32.min) && delta <= Int64(Int32.max) else {
+                    throw AssemblerError.branchOutOfRange(instruction: mnemonic, label: name, byteOffset: delta)
+                }
+                var bytes: [UInt8] = [0xC7, 0xF8]
+                appendLE32(UInt32(truncatingIfNeeded: delta), into: &bytes)
+                return Encoded(bytes: bytes, patches: [])
+            }
+            return Encoded(
+                bytes: [0xC7, 0xF8, 0x00, 0x00, 0x00, 0x00],
+                patches: [Patch(byteOffset: 2, width: 4, label: name, instructionEndOffset: 6)]
             )
         }
     }

@@ -5007,4 +5007,46 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18aq TSX XBEGIN / XABORT
+
+    private static let tsxBranchCases: [(String, [UInt8])] = [
+        ("xabort 0",   [0xC6, 0xF8, 0x00]),
+        ("xabort 1",   [0xC6, 0xF8, 0x01]),
+        ("xabort 255", [0xC6, 0xF8, 0xFF]),
+        ("xabort 128", [0xC6, 0xF8, 0x80]),
+        // Numeric-offset forms of XBEGIN (rel32).
+        ("xbegin 0",   [0xC7, 0xF8, 0x00, 0x00, 0x00, 0x00]),
+        ("xbegin 16",  [0xC7, 0xF8, 0x10, 0x00, 0x00, 0x00]),
+        ("xbegin -1",  [0xC7, 0xF8, 0xFF, 0xFF, 0xFF, 0xFF]),
+    ]
+
+    func testTsxBranchAssembles() throws {
+        for (source, expected) in Self.tsxBranchCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testTsxBranchDisassembles() throws {
+        for (source, bytes) in Self.tsxBranchCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
+    func testXbeginForwardLabel() throws {
+        // xbegin skips six bytes forward to `fallback:`.
+        let source = """
+        xbegin fallback
+        nop
+        nop
+        fallback:
+        ret
+        """
+        let expected: [UInt8] = [
+            0xC7, 0xF8, 0x02, 0x00, 0x00, 0x00,  // xbegin +2 (fallback at offset 8)
+            0x90, 0x90,
+            0xC3,
+        ]
+        XCTAssertEqual(try X86Assembler.assemble(source), expected)
+    }
 }

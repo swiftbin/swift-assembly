@@ -996,6 +996,11 @@ internal enum X86 {
         /// `VEX.256.66.0F3A.W0 1D /r ib` writes `xmm/m128`. The
         /// destination width is half the source vector width.
         case vcvtps2ph(size: AVXVectorSize, destination: VectorOrMemory, source: UInt8, immediate: UInt8)
+        /// TSX XBEGIN rel32 — start a restricted transaction; the target
+        /// is the fallback handler. Encoded as `C7 F8 cd` in 64-bit mode.
+        case xbegin(target: BranchTarget)
+        /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
+        case xabort(immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {

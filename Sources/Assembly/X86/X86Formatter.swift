@@ -437,6 +437,10 @@ internal enum X86InstructionFormatter {
             case .memory(let m):   srcStr = "\(sizeHintPrefix(srcWidth)) \(formatMemory(m))"
             }
             return "vcvtph2ps \(dstPrefix)\(dst), \(srcStr)"
+        case .xbegin(let target):
+            return "xbegin \(formatBranchTarget(target))"
+        case .xabort(let imm):
+            return "xabort \(imm)"
         case .vcvtps2ph(let size, let dst, let src, let imm):
             let srcPrefix = size == .xmm ? "xmm" : "ymm"
             // Memory dst is m64 for xmm src, m128 for ymm src.
