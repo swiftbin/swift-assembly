@@ -5033,6 +5033,35 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18at VEX VPINSRB/W + VPEXTRB/W
+
+    private static let vexInsertExtractBWCases: [(String, [UInt8])] = [
+        // VPINSRB
+        ("vpinsrb xmm1, xmm2, eax, 0",              [0xC4, 0xE3, 0x69, 0x20, 0xC8, 0x00]),
+        ("vpinsrb xmm3, xmm4, byte ptr [rdi], 3",   [0xC4, 0xE3, 0x59, 0x20, 0x1F, 0x03]),
+        // VPINSRW (2-byte VEX, 0F escape)
+        ("vpinsrw xmm1, xmm2, ecx, 4",              [0xC5, 0xE9, 0xC4, 0xC9, 0x04]),
+        ("vpinsrw xmm1, xmm2, word ptr [rdi], 2",   [0xC5, 0xE9, 0xC4, 0x0F, 0x02]),
+        // VPEXTRB
+        ("vpextrb eax, xmm1, 0",                    [0xC4, 0xE3, 0x79, 0x14, 0xC8, 0x00]),
+        ("vpextrb byte ptr [rdi], xmm2, 3",         [0xC4, 0xE3, 0x79, 0x14, 0x17, 0x03]),
+        // VPEXTRW (SSE4.1 memory-capable form)
+        ("vpextrw eax, xmm1, 4",                    [0xC4, 0xE3, 0x79, 0x15, 0xC8, 0x04]),
+        ("vpextrw word ptr [rdi], xmm3, 5",         [0xC4, 0xE3, 0x79, 0x15, 0x1F, 0x05]),
+    ]
+
+    func testVexInsertExtractBWAssembles() throws {
+        for (source, expected) in Self.vexInsertExtractBWCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexInsertExtractBWDisassembles() throws {
+        for (source, bytes) in Self.vexInsertExtractBWCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18as VEX VINSERTPS / VEXTRACTPS
 
     private static let vexInsertExtractPsCases: [(String, [UInt8])] = [

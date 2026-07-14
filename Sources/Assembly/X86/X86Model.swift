@@ -1001,6 +1001,12 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// VEX VPINSRB / VPINSRW — `xmm, xmm, r32/m{8|16}, imm8`.
+        /// VPINSRB rides `66 0F 3A 20 /r ib`, VPINSRW rides `66 0F C4 /r ib`.
+        case vexInsertLaneBW(VexInsertLaneBWKind, destination: UInt8, source1: UInt8, source2: RegisterOrMemory, immediate: UInt8)
+        /// VEX VPEXTRB / VPEXTRW — `r32/m{8|16}, xmm, imm8`. Both ride
+        /// `66 0F 3A 14|15 /r ib` (memory-capable form).
+        case vexExtractLaneBW(VexExtractLaneBWKind, destination: RegisterOrMemory, source: UInt8, immediate: UInt8)
         /// VEX VINSERTPS — `xmm, xmm, xmm/m32, imm8`.
         /// 3-op NDS on `VEX.128.66.0F3A.WIG 21 /r ib` with an m32 memory
         /// source when the third operand is a memory reference.
@@ -1020,6 +1026,19 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VexInsertLaneBWKind: String, Equatable, CaseIterable {
+        case vpinsrb        // 66 0F 3A 20 /r ib
+        case vpinsrw        // 66 0F C4    /r ib
+        var memoryWidth: RegisterWidth { self == .vpinsrb ? .byte : .word }
+    }
+
+    enum VexExtractLaneBWKind: String, Equatable, CaseIterable {
+        case vpextrb        // 66 0F 3A 14 /r ib
+        case vpextrw        // 66 0F 3A 15 /r ib
+        var opcode: UInt8 { self == .vpextrb ? 0x14 : 0x15 }
+        var memoryWidth: RegisterWidth { self == .vpextrb ? .byte : .word }
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {

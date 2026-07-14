@@ -947,6 +947,41 @@ internal enum X86InstructionDecoder {
                 let imm = try cursor.takeByte()
                 return Decoded(instruction: .vexCmpStr(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
             }
+            // VEX VPINSRB — VEX.NDS.128.66.0F3A.W0 20 /r ib. r/m field
+            // is r32 (low byte used) or m8; ModR/M.reg is the destination.
+            if v.pp == 0b01 && opcode == 0x20 {
+                let modrm = try cursor.takeByte()
+                let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let dstNum = regNum
+                let src1 = v.vvvv & 0xF
+                let src2: X86.RegisterOrMemory
+                if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                    let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                    src2 = .register(makeRegister(number: rmNum, width: .dword, hasREX: prefixes.hasREX))
+                } else {
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    src2 = .memory(mem, width: .byte)
+                }
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vexInsertLaneBW(.vpinsrb, destination: dstNum, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
+            }
+            // VEX VPEXTRB / VPEXTRW — VEX.128.66.0F3A.W0 14|15 /r ib.
+            if v.pp == 0b01 && (opcode == 0x14 || opcode == 0x15) && v.vvvv == 0 {
+                let kind: X86.VexExtractLaneBWKind = opcode == 0x14 ? .vpextrb : .vpextrw
+                let modrm = try cursor.takeByte()
+                let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let src = regNum
+                let dst: X86.RegisterOrMemory
+                if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                    let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                    dst = .register(makeRegister(number: rmNum, width: .dword, hasREX: prefixes.hasREX))
+                } else {
+                    let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                    dst = .memory(mem, width: kind.memoryWidth)
+                }
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vexExtractLaneBW(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
             // VEX VINSERTPS — VEX.NDS.128.66.0F3A.WIG 21 /r ib.
             if v.pp == 0b01 && opcode == 0x21 {
                 let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
@@ -1121,6 +1156,24 @@ internal enum X86InstructionDecoder {
                 gpr = .memory(mem, width: gprWidth)
             }
             return Decoded(instruction: .vexMovDQ(kind, direction: direction, xmm: xmm, gpr: gpr), length: cursor.consumed)
+        }
+        // VEX VPINSRW — VEX.NDS.128.66.0F.W0 C4 /r ib. GPR source is r32
+        // (low word used) or m16; ModR/M.reg is the destination.
+        if v.pp == 0b01 && opcode == 0xC4 {
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dstNum = regNum
+            let src1 = v.vvvv & 0xF
+            let src2: X86.RegisterOrMemory
+            if X86.ModRM.mod.extract(modrm) == X86.ModRM.modRegister {
+                let rmNum = (prefixes.rexB << 3) | X86.ModRM.rm.extract(modrm)
+                src2 = .register(makeRegister(number: rmNum, width: .dword, hasREX: prefixes.hasREX))
+            } else {
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                src2 = .memory(mem, width: .word)
+            }
+            let imm = try cursor.takeByte()
+            return Decoded(instruction: .vexInsertLaneBW(.vpinsrw, destination: dstNum, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
         }
         // Imm8 SIMD shifts (66 0F 71/72/73 /n ib) under VEX use NDD —
         // the destination lives in vvvv and the source in ModR/M.rm.

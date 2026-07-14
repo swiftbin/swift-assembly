@@ -241,6 +241,12 @@ internal enum X86Parser {
         if instruction.mnemonic == "vextractps" {
             return try parseVextractps(instruction)
         }
+        if let kind = X86.VexInsertLaneBWKind(rawValue: instruction.mnemonic) {
+            return try parseVexInsertLaneBW(kind, instruction)
+        }
+        if let kind = X86.VexExtractLaneBWKind(rawValue: instruction.mnemonic) {
+            return try parseVexExtractLaneBW(kind, instruction)
+        }
         if instruction.mnemonic == "xabort" {
             guard instruction.operands.count == 1 else {
                 throw AssemblerError.invalidOperandCount(instruction: "xabort", expected: "1 operand", actual: instruction.operands.count)
@@ -1359,6 +1365,62 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// VEX VPINSRB / VPINSRW — `xmm, xmm, r32/m{8|16}, imm8`.
+    private static func parseVexInsertLaneBW(_ kind: X86.VexInsertLaneBWKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 4 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "4 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]),
+              let src1 = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): first two operands must be XMM registers")
+        }
+        // GPR form is r32 (low bits used); memory form is m8/m16.
+        let src2 = try parseInsertBWSource(instruction.operands[2], memoryWidth: kind.memoryWidth, mnemonic: kind.rawValue)
+        let imm = try immediateAny(instruction.operands[3])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vexInsertLaneBW(kind, destination: dst.number, source1: src1.number, source2: src2, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// VEX VPEXTRB / VPEXTRW — `r32/m{8|16}, xmm, imm8`.
+    private static func parseVexExtractLaneBW(_ kind: X86.VexExtractLaneBWKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "3 operands", actual: instruction.operands.count)
+        }
+        let dst = try parseInsertBWSource(instruction.operands[0], memoryWidth: kind.memoryWidth, mnemonic: kind.rawValue)
+        guard let src = parseXMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): source must be an XMM register")
+        }
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vexExtractLaneBW(kind, destination: dst, source: src.number, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// Shared helper for VPINSRB/W and VPEXTRB/W: accept an r32 register
+    /// or a size-hinted memory operand at the mnemonic's memoryWidth.
+    private static func parseInsertBWSource(_ text: String, memoryWidth: X86.RegisterWidth, mnemonic: String) throws -> X86.RegisterOrMemory {
+        if let r = try? register(text) {
+            guard r.width == .dword else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): register operand must be r32")
+            }
+            return .register(r)
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let (w, body) = stripSizeHint(trimmed) {
+            guard w == memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(mnemonic): memory operand width disagrees with mnemonic")
+            }
+            return .memory(try memoryOperand(body), width: w)
+        }
+        if trimmed.hasPrefix("[") {
+            return .memory(try memoryOperand(trimmed), width: memoryWidth)
+        }
+        throw AssemblerError.unsupportedOperand("\(mnemonic): expected a register or memory operand")
+    }
+
     /// VEX VINSERTPS — `xmm, xmm, xmm/m32, imm8`.
     private static func parseVinsertps(_ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 4 else {

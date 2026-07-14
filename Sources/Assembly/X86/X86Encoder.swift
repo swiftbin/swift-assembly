@@ -305,6 +305,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: [0xC6, 0xF8, imm], patches: [])
         case .enqcmd(let kind, let dst, let mem):
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
+        case .vexInsertLaneBW(let kind, let dst, let src1, let src2, let imm):
+            return Encoded(bytes: try encodeVexInsertLaneBW(kind, destination: dst, source1: src1, source2: src2, immediate: imm), patches: [])
+        case .vexExtractLaneBW(let kind, let dst, let src, let imm):
+            return Encoded(bytes: try encodeVexExtractLaneBW(kind, destination: dst, source: src, immediate: imm), patches: [])
         case .vinsertps(let dst, let src1, let src2, let imm):
             var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: 0x21, lBit: 0, destination: dst, source1: src1, source2: src2)
             bytes.append(imm)
@@ -2242,6 +2246,54 @@ internal enum X86InstructionEncoder {
     }
 
     /// `66 [REX] 0F 38 F8 /r` — MOVDIR64B r, m512.
+    /// VEX VPINSRB / VPINSRW — 3-op NDS + imm8. The GPR source is r32
+    /// (only the low byte / word is read); memory is m8 / m16.
+    private static func encodeVexInsertLaneBW(_ kind: X86.VexInsertLaneBWKind, destination dst: UInt8, source1 src1: UInt8, source2: X86.RegisterOrMemory, immediate: UInt8) throws -> [UInt8] {
+        let opcode: UInt8
+        let escape: UInt8
+        switch kind {
+        case .vpinsrb: opcode = 0x20; escape = X86.VEX.escape0F3A
+        case .vpinsrw: opcode = 0xC4; escape = X86.VEX.escape0F
+        }
+        let source2Vec: X86.VectorOrMemory
+        switch source2 {
+        case .register(let r):
+            guard r.width == .dword else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): register source must be r32")
+            }
+            source2Vec = .register(r.number)
+        case .memory(let mem, let width):
+            guard width == kind.memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory source width mismatch")
+            }
+            source2Vec = .memory(mem)
+        }
+        var bytes = try encodeVexThreeOp(escape: escape, w: 0, pp: 0b01, opcode: opcode, lBit: 0, destination: dst, source1: src1, source2: source2Vec)
+        bytes.append(immediate)
+        return bytes
+    }
+
+    /// VEX VPEXTRB / VPEXTRW — `r32/m{8|16}, xmm, imm8`. The XMM source
+    /// occupies ModR/M.reg; the destination lives in r/m.
+    private static func encodeVexExtractLaneBW(_ kind: X86.VexExtractLaneBWKind, destination dst: X86.RegisterOrMemory, source src: UInt8, immediate: UInt8) throws -> [UInt8] {
+        let source2Vec: X86.VectorOrMemory
+        switch dst {
+        case .register(let r):
+            guard r.width == .dword else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination register must be r32")
+            }
+            source2Vec = .register(r.number)
+        case .memory(let mem, let width):
+            guard width == kind.memoryWidth else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination memory width mismatch")
+            }
+            source2Vec = .memory(mem)
+        }
+        var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: kind.opcode, lBit: 0, destination: src, source1: 0, source2: source2Vec)
+        bytes.append(immediate)
+        return bytes
+    }
+
     /// VEX VEXTRACTPS — `VEX.128.66.0F3A.WIG 17 /r ib` writing to r/m32.
     /// The XMM source occupies ModR/M.reg; the r/m field carries the
     /// GPR-or-memory destination.
