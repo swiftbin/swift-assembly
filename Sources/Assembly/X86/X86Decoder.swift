@@ -918,6 +918,12 @@ internal enum X86InstructionDecoder {
             let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
             return Decoded(instruction: .vexBroadcast(kind, size: size, destination: dst, source: src), length: cursor.consumed)
         }
+        // AVX2 VPERMD / VPERMPS — VEX.NDS.256.66.0F38.W0 36|16 /r.
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.l == 1 && v.w == 0,
+           let kind = X86.VPermRegKind.decode(opcode: opcode) {
+            let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+            return Decoded(instruction: .vpermReg(kind, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
+        }
         // AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 —
         // VEX.128/256.66.0F38.W0 18|19|1A /r with a memory source only
         // (register-source AVX2 forms are deferred).
@@ -995,6 +1001,20 @@ internal enum X86InstructionDecoder {
                 }
                 let imm = try cursor.takeByte()
                 return Decoded(instruction: .vexExtractLaneBW(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
+            // AVX2 VPERMQ / VPERMPD — VEX.256.66.0F3A.W1 00|01 /r ib.
+            if v.pp == 0b01 && v.vvvv == 0 && v.w == 1 && v.l == 1,
+               let kind = X86.VPermImmKind.decode(opcode: opcode) {
+                let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vpermImm(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
+            // AVX/AVX2 VPERM2F128 / VPERM2I128 — VEX.NDS.256.66.0F3A.W0 06|46 /r ib.
+            if v.pp == 0b01 && v.w == 0 && v.l == 1,
+               let kind = X86.VPerm2LaneKind.decode(opcode: opcode) {
+                let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                return Decoded(instruction: .vperm2Lane(kind, destination: dst, source1: src1, source2: src2, immediate: imm), length: cursor.consumed)
             }
             // VEX VINSERTPS — VEX.NDS.128.66.0F3A.WIG 21 /r ib.
             if v.pp == 0b01 && opcode == 0x21 {

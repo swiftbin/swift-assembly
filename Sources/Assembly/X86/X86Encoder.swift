@@ -307,6 +307,16 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             return Encoded(bytes: try encodeVexBroadcastF(kind, size: size, destination: dst, memory: mem), patches: [])
+        case .vpermReg(let kind, let dst, let src1, let src2):
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: kind.opcode, lBit: 1, destination: dst, source1: src1, source2: src2), patches: [])
+        case .vpermImm(let kind, let dst, let src, let imm):
+            var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 1, pp: 0b01, opcode: kind.opcode, lBit: 1, destination: dst, source1: 0, source2: src)
+            bytes.append(imm)
+            return Encoded(bytes: bytes, patches: [])
+        case .vperm2Lane(let kind, let dst, let src1, let src2, let imm):
+            var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: kind.opcode, lBit: 1, destination: dst, source1: src1, source2: src2)
+            bytes.append(imm)
+            return Encoded(bytes: bytes, patches: [])
         case .vexInsertLaneBW(let kind, let dst, let src1, let src2, let imm):
             return Encoded(bytes: try encodeVexInsertLaneBW(kind, destination: dst, source1: src1, source2: src2, immediate: imm), patches: [])
         case .vexExtractLaneBW(let kind, let dst, let src, let imm):

@@ -5033,6 +5033,32 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18av AVX2 VPERM* family
+
+    private static let vpermCases: [(String, [UInt8])] = [
+        // 3-op NDS.
+        ("vpermd ymm1, ymm2, ymm3",                             [0xC4, 0xE2, 0x6D, 0x36, 0xCB]),
+        ("vpermps ymm1, ymm2, ymmword ptr [rdi]",               [0xC4, 0xE2, 0x6D, 0x16, 0x0F]),
+        // 2-op + imm8 (VEX.W1).
+        ("vpermq ymm1, ymm2, 27",                               [0xC4, 0xE3, 0xFD, 0x00, 0xCA, 0x1B]),
+        ("vpermpd ymm3, ymmword ptr [rax], 39",                 [0xC4, 0xE3, 0xFD, 0x01, 0x18, 0x27]),
+        // 3-op + imm8.
+        ("vperm2f128 ymm1, ymm2, ymm3, 48",                     [0xC4, 0xE3, 0x6D, 0x06, 0xCB, 0x30]),
+        ("vperm2i128 ymm4, ymm5, ymmword ptr [rax], 32",        [0xC4, 0xE3, 0x55, 0x46, 0x20, 0x20]),
+    ]
+
+    func testVpermAssembles() throws {
+        for (source, expected) in Self.vpermCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVpermDisassembles() throws {
+        for (source, bytes) in Self.vpermCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18au VBROADCASTSS/SD/F128 (memory)
 
     private static let vexBroadcastFCases: [(String, [UInt8])] = [

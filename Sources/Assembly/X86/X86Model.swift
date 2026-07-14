@@ -1001,6 +1001,15 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// AVX2 VPERMD / VPERMPS — 3-op NDS, ymm-only.
+        /// Encoded as `VEX.NDS.256.66.0F38.W0 36|16 /r`.
+        case vpermReg(VPermRegKind, destination: UInt8, source1: UInt8, source2: VectorOrMemory)
+        /// AVX2 VPERMQ / VPERMPD — 2-op + imm8, ymm-only.
+        /// Encoded as `VEX.256.66.0F3A.W1 00|01 /r ib`.
+        case vpermImm(VPermImmKind, destination: UInt8, source: VectorOrMemory, immediate: UInt8)
+        /// AVX VPERM2F128 / AVX2 VPERM2I128 — 3-op + imm8, ymm-only.
+        /// Encoded as `VEX.NDS.256.66.0F3A.W0 06|46 /r ib`.
+        case vperm2Lane(VPerm2LaneKind, destination: UInt8, source1: UInt8, source2: VectorOrMemory, immediate: UInt8)
         /// AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 — replicate a
         /// scalar / dqword from memory into every lane. Encoded on
         /// `VEX.128/256.66.0F38.W0 18|19|1A /r`; VBROADCASTSD and
@@ -1031,6 +1040,33 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VPermRegKind: String, Equatable, CaseIterable {
+        case vpermd     // 0F 38 36 W0
+        case vpermps    // 0F 38 16 W0
+        var opcode: UInt8 { self == .vpermd ? 0x36 : 0x16 }
+        static func decode(opcode: UInt8) -> VPermRegKind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    enum VPermImmKind: String, Equatable, CaseIterable {
+        case vpermq     // 0F 3A 00 W1
+        case vpermpd    // 0F 3A 01 W1
+        var opcode: UInt8 { self == .vpermq ? 0x00 : 0x01 }
+        static func decode(opcode: UInt8) -> VPermImmKind? {
+            allCases.first { $0.opcode == opcode }
+        }
+    }
+
+    enum VPerm2LaneKind: String, Equatable, CaseIterable {
+        case vperm2f128     // 0F 3A 06 W0
+        case vperm2i128     // 0F 3A 46 W0
+        var opcode: UInt8 { self == .vperm2f128 ? 0x06 : 0x46 }
+        static func decode(opcode: UInt8) -> VPerm2LaneKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     enum VexBroadcastFKind: String, Equatable, CaseIterable {

@@ -446,6 +446,27 @@ internal enum X86InstructionFormatter {
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             let dstPrefix = size == .xmm ? "xmm" : "ymm"
             return "\(kind.rawValue) \(dstPrefix)\(dst), \(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(mem))"
+        case .vpermReg(let kind, let dst, let src1, let src2):
+            let src2Str: String
+            switch src2 {
+            case .register(let n): src2Str = "ymm\(n)"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(.ymmword)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) ymm\(dst), ymm\(src1), \(src2Str)"
+        case .vpermImm(let kind, let dst, let src, let imm):
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "ymm\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(.ymmword)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) ymm\(dst), \(srcStr), \(imm)"
+        case .vperm2Lane(let kind, let dst, let src1, let src2, let imm):
+            let src2Str: String
+            switch src2 {
+            case .register(let n): src2Str = "ymm\(n)"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(.ymmword)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) ymm\(dst), ymm\(src1), \(src2Str), \(imm)"
         case .vexInsertLaneBW(let kind, let dst, let src1, let src2, let imm):
             let srcStr: String
             switch src2 {

@@ -244,6 +244,15 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcastF(kind, instruction)
         }
+        if let kind = X86.VPermRegKind(rawValue: instruction.mnemonic) {
+            return try parseVpermReg(kind, instruction)
+        }
+        if let kind = X86.VPermImmKind(rawValue: instruction.mnemonic) {
+            return try parseVpermImm(kind, instruction)
+        }
+        if let kind = X86.VPerm2LaneKind(rawValue: instruction.mnemonic) {
+            return try parseVperm2Lane(kind, instruction)
+        }
         if let kind = X86.VexInsertLaneBWKind(rawValue: instruction.mnemonic) {
             return try parseVexInsertLaneBW(kind, instruction)
         }
@@ -1368,6 +1377,52 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// AVX2 VPERMD / VPERMPS — `ymm, ymm, ymm/m256`.
+    private static func parseVpermReg(_ kind: X86.VPermRegKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "3 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseYMMRegister(instruction.operands[0]),
+              let src1 = parseYMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): first two operands must be YMM registers")
+        }
+        let src2 = try parseVectorOrMemory(instruction.operands[2], size: .ymm, memoryWidth: .ymmword, mnemonic: kind.rawValue)
+        return .vpermReg(kind, destination: dst.number, source1: src1.number, source2: src2)
+    }
+
+    /// AVX2 VPERMQ / VPERMPD — `ymm, ymm/m256, imm8`.
+    private static func parseVpermImm(_ kind: X86.VPermImmKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "3 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseYMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a YMM register")
+        }
+        let src = try parseVectorOrMemory(instruction.operands[1], size: .ymm, memoryWidth: .ymmword, mnemonic: kind.rawValue)
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vpermImm(kind, destination: dst.number, source: src, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
+    /// AVX VPERM2F128 / AVX2 VPERM2I128 — `ymm, ymm, ymm/m256, imm8`.
+    private static func parseVperm2Lane(_ kind: X86.VPerm2LaneKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 4 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "4 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseYMMRegister(instruction.operands[0]),
+              let src1 = parseYMMRegister(instruction.operands[1]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): first two operands must be YMM registers")
+        }
+        let src2 = try parseVectorOrMemory(instruction.operands[2], size: .ymm, memoryWidth: .ymmword, mnemonic: kind.rawValue)
+        let imm = try immediateAny(instruction.operands[3])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: kind.rawValue, value: imm, range: 0...255)
+        }
+        return .vperm2Lane(kind, destination: dst.number, source1: src1.number, source2: src2, immediate: UInt8(truncatingIfNeeded: imm))
+    }
+
     /// AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 —
     /// `xmm/ymm, m{32|64|128}`.
     private static func parseVexBroadcastF(_ kind: X86.VexBroadcastFKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
