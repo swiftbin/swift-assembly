@@ -232,6 +232,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "xbegin" {
             return .xbegin(target: try parseSingleBranchTarget(instruction))
         }
+        if let kind = X86.EnqcmdKind(rawValue: instruction.mnemonic) {
+            return try parseEnqcmd(kind, instruction)
+        }
         if instruction.mnemonic == "xabort" {
             guard instruction.operands.count == 1 else {
                 throw AssemblerError.invalidOperandCount(instruction: "xabort", expected: "1 operand", actual: instruction.operands.count)
@@ -1350,6 +1353,22 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// ENQCMD / ENQCMDS — `r64, m512`. The memory width is m512 which
+    /// isn't part of the size-hint vocabulary, so we accept the bare
+    /// `[...]` form (matching movdir64b).
+    private static func parseEnqcmd(_ kind: X86.EnqcmdKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "2 operands", actual: instruction.operands.count)
+        }
+        let dst = try register(instruction.operands[0])
+        let text = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard text.hasPrefix("[") else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): expected a memory operand")
+        }
+        let mem = try memoryOperand(text)
+        return .enqcmd(kind, destination: dst, memory: mem)
+    }
+
     private static func parseMovdir64b(_ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 2 else {
             throw AssemblerError.invalidOperandCount(instruction: "movdir64b", expected: "2 operands", actual: instruction.operands.count)

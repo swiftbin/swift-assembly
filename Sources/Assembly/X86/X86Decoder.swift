@@ -608,6 +608,15 @@ internal enum X86InstructionDecoder {
             let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
             return Decoded(instruction: .movdir64b(destination: dst, memory: mem), length: cursor.consumed)
         }
+        // ENQCMD / ENQCMDS — [F2|F3] 0F 38 F8 /r.
+        if opcode3 == 0xF8, prefixes.f2Prefix || prefixes.f3Prefix {
+            let kind: X86.EnqcmdKind = prefixes.f2Prefix ? .enqcmd : .enqcmds
+            let modrm = try cursor.takeByte()
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let dst = makeRegister(number: regNum, width: .qword, hasREX: prefixes.hasREX)
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            return Decoded(instruction: .enqcmd(kind, destination: dst, memory: mem), length: cursor.consumed)
+        }
         guard prefixes.operandSize else {
             // MMX forms of these opcodes aren't modelled.
             throw AssemblerError.unknownEncoding(0x38)

@@ -303,6 +303,8 @@ internal enum X86InstructionEncoder {
             return try encodeXbegin(target: target, pc: pc, labels: labels)
         case .xabort(let imm):
             return Encoded(bytes: [0xC6, 0xF8, imm], patches: [])
+        case .enqcmd(let kind, let dst, let mem):
+            return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
         }
     }
 
@@ -2234,6 +2236,24 @@ internal enum X86InstructionEncoder {
     }
 
     /// `66 [REX] 0F 38 F8 /r` — MOVDIR64B r, m512.
+    /// ENQCMD / ENQCMDS — `[F2|F3] 0F 38 F8 /r`. The destination is a
+    /// tag register (implicit r64 in 64-bit mode).
+    private static func encodeEnqcmd(_ kind: X86.EnqcmdKind, destination dst: X86.Register, memory: X86.MemoryOperand) throws -> [UInt8] {
+        guard dst.width == .qword else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be r64")
+        }
+        var bytes: [UInt8] = [kind.prefix]
+        let (addressing, rexX, rexB) = try encodeMemoryAddressing(memory, regField: dst.lowBits)
+        if let rex = X86.REX.build(r: dst.highBit, x: rexX, b: rexB) {
+            bytes.append(rex)
+        }
+        bytes.append(0x0F)
+        bytes.append(0x38)
+        bytes.append(0xF8)
+        bytes.append(contentsOf: addressing)
+        return bytes
+    }
+
     private static func encodeMovdir64b(destination dst: X86.Register, memory: X86.MemoryOperand) throws -> [UInt8] {
         guard dst.width == .qword else {
             throw AssemblerError.unsupportedOperand("movdir64b: destination must be r64")

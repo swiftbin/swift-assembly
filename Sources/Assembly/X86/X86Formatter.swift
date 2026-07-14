@@ -441,6 +441,8 @@ internal enum X86InstructionFormatter {
             return "xbegin \(formatBranchTarget(target))"
         case .xabort(let imm):
             return "xabort \(imm)"
+        case .enqcmd(let kind, let dst, let mem):
+            return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatMemory(mem))"
         case .vcvtps2ph(let size, let dst, let src, let imm):
             let srcPrefix = size == .xmm ? "xmm" : "ymm"
             // Memory dst is m64 for xmm src, m128 for ymm src.

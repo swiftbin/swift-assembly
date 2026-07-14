@@ -5033,6 +5033,27 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18ar ENQCMD / ENQCMDS
+
+    private static let enqcmdCases: [(String, [UInt8])] = [
+        ("enqcmd rax, [rdi]",       [0xF2, 0x0F, 0x38, 0xF8, 0x07]),
+        ("enqcmds rcx, [rbx + 8]",  [0xF3, 0x0F, 0x38, 0xF8, 0x4B, 0x08]),
+        ("enqcmd r10, [r9]",        [0xF2, 0x45, 0x0F, 0x38, 0xF8, 0x11]),
+        ("enqcmds r15, [r8]",       [0xF3, 0x45, 0x0F, 0x38, 0xF8, 0x38]),
+    ]
+
+    func testEnqcmdAssembles() throws {
+        for (source, expected) in Self.enqcmdCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testEnqcmdDisassembles() throws {
+        for (source, bytes) in Self.enqcmdCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     func testXbeginForwardLabel() throws {
         // xbegin skips six bytes forward to `fallback:`.
         let source = """

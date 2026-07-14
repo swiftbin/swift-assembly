@@ -1001,6 +1001,17 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// ENQCMD / ENQCMDS — enqueue a 64-byte command to a device.
+        /// The destination register carries the tag (implicit r64 in
+        /// 64-bit mode, address-size dependent); the source is m512.
+        /// Encoded as `[F2|F3] 0F 38 F8 /r`.
+        case enqcmd(EnqcmdKind, destination: Register, memory: MemoryOperand)
+    }
+
+    enum EnqcmdKind: String, Equatable, CaseIterable {
+        case enqcmd     // F2 mandatory prefix
+        case enqcmds    // F3 mandatory prefix
+        var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
