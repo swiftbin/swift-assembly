@@ -1001,6 +1001,11 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 — replicate a
+        /// scalar / dqword from memory into every lane. Encoded on
+        /// `VEX.128/256.66.0F38.W0 18|19|1A /r`; VBROADCASTSD and
+        /// VBROADCASTF128 require a YMM destination.
+        case vexBroadcastF(VexBroadcastFKind, size: AVXVectorSize, destination: UInt8, memory: MemoryOperand)
         /// VEX VPINSRB / VPINSRW — `xmm, xmm, r32/m{8|16}, imm8`.
         /// VPINSRB rides `66 0F 3A 20 /r ib`, VPINSRW rides `66 0F C4 /r ib`.
         case vexInsertLaneBW(VexInsertLaneBWKind, destination: UInt8, source1: UInt8, source2: RegisterOrMemory, immediate: UInt8)
@@ -1026,6 +1031,36 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VexBroadcastFKind: String, Equatable, CaseIterable {
+        case vbroadcastss       // 0F 38 18, m32   → all lanes
+        case vbroadcastsd       // 0F 38 19, m64   → 4 lanes (YMM only)
+        case vbroadcastf128     // 0F 38 1A, m128  → 2 lanes (YMM only)
+
+        var opcode: UInt8 {
+            switch self {
+            case .vbroadcastss:   return 0x18
+            case .vbroadcastsd:   return 0x19
+            case .vbroadcastf128: return 0x1A
+            }
+        }
+
+        var memoryWidth: RegisterWidth {
+            switch self {
+            case .vbroadcastss:   return .dword
+            case .vbroadcastsd:   return .qword
+            case .vbroadcastf128: return .xmmword
+            }
+        }
+
+        /// True when the mnemonic requires a YMM destination (the m64
+        /// and m128 forms only make sense with a 256-bit target).
+        var requiresYMM: Bool { self != .vbroadcastss }
+
+        static func decode(opcode: UInt8) -> VexBroadcastFKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     enum VexInsertLaneBWKind: String, Equatable, CaseIterable {

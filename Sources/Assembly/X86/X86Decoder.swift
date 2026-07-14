@@ -918,6 +918,20 @@ internal enum X86InstructionDecoder {
             let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
             return Decoded(instruction: .vexBroadcast(kind, size: size, destination: dst, source: src), length: cursor.consumed)
         }
+        // AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 —
+        // VEX.128/256.66.0F38.W0 18|19|1A /r with a memory source only
+        // (register-source AVX2 forms are deferred).
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.vvvv == 0 && v.w == 0,
+           let kind = X86.VexBroadcastFKind.decode(opcode: opcode) {
+            let modrm = try cursor.takeByte()
+            guard X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+            let regNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vexBroadcastF(kind, size: size, destination: regNum, memory: mem), length: cursor.consumed)
+        }
         // F16C VCVTPH2PS — VEX.128/256.66.0F38.W0 13 /r (vvvv reserved).
         if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.vvvv == 0 && v.w == 0 && opcode == 0x13 {
             let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)

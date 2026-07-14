@@ -5033,6 +5033,30 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18au VBROADCASTSS/SD/F128 (memory)
+
+    private static let vexBroadcastFCases: [(String, [UInt8])] = [
+        // VBROADCASTSS — xmm/ymm from m32.
+        ("vbroadcastss xmm1, dword ptr [rdi]",      [0xC4, 0xE2, 0x79, 0x18, 0x0F]),
+        ("vbroadcastss ymm2, dword ptr [rax]",      [0xC4, 0xE2, 0x7D, 0x18, 0x10]),
+        // VBROADCASTSD — ymm-only from m64.
+        ("vbroadcastsd ymm1, qword ptr [rdi]",      [0xC4, 0xE2, 0x7D, 0x19, 0x0F]),
+        // VBROADCASTF128 — ymm-only from m128.
+        ("vbroadcastf128 ymm3, xmmword ptr [rax]",  [0xC4, 0xE2, 0x7D, 0x1A, 0x18]),
+    ]
+
+    func testVexBroadcastFAssembles() throws {
+        for (source, expected) in Self.vexBroadcastFCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexBroadcastFDisassembles() throws {
+        for (source, bytes) in Self.vexBroadcastFCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18at VEX VPINSRB/W + VPEXTRB/W
 
     private static let vexInsertExtractBWCases: [(String, [UInt8])] = [

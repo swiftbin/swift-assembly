@@ -305,6 +305,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: [0xC6, 0xF8, imm], patches: [])
         case .enqcmd(let kind, let dst, let mem):
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
+        case .vexBroadcastF(let kind, let size, let dst, let mem):
+            return Encoded(bytes: try encodeVexBroadcastF(kind, size: size, destination: dst, memory: mem), patches: [])
         case .vexInsertLaneBW(let kind, let dst, let src1, let src2, let imm):
             return Encoded(bytes: try encodeVexInsertLaneBW(kind, destination: dst, source1: src1, source2: src2, immediate: imm), patches: [])
         case .vexExtractLaneBW(let kind, let dst, let src, let imm):
@@ -2246,6 +2248,15 @@ internal enum X86InstructionEncoder {
     }
 
     /// `66 [REX] 0F 38 F8 /r` — MOVDIR64B r, m512.
+    /// AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 —
+    /// `VEX.128/256.66.0F38.W0 18|19|1A /r` with vvvv reserved.
+    private static func encodeVexBroadcastF(_ kind: X86.VexBroadcastFKind, size: X86.AVXVectorSize, destination dst: UInt8, memory: X86.MemoryOperand) throws -> [UInt8] {
+        if kind.requiresYMM, size != .ymm {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a YMM register")
+        }
+        return try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: .memory(memory))
+    }
+
     /// VEX VPINSRB / VPINSRW — 3-op NDS + imm8. The GPR source is r32
     /// (only the low byte / word is read); memory is m8 / m16.
     private static func encodeVexInsertLaneBW(_ kind: X86.VexInsertLaneBWKind, destination dst: UInt8, source1 src1: UInt8, source2: X86.RegisterOrMemory, immediate: UInt8) throws -> [UInt8] {

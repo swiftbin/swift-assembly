@@ -241,6 +241,9 @@ internal enum X86Parser {
         if instruction.mnemonic == "vextractps" {
             return try parseVextractps(instruction)
         }
+        if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
+            return try parseVexBroadcastF(kind, instruction)
+        }
         if let kind = X86.VexInsertLaneBWKind(rawValue: instruction.mnemonic) {
             return try parseVexInsertLaneBW(kind, instruction)
         }
@@ -1365,6 +1368,20 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 —
+    /// `xmm/ymm, m{32|64|128}`.
+    private static func parseVexBroadcastF(_ kind: X86.VexBroadcastFKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "2 operands", actual: instruction.operands.count)
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        if kind.requiresYMM, size != .ymm {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be a YMM register")
+        }
+        let mem = try parseSizedMemory(instruction.operands[1], expected: kind.memoryWidth, mnemonic: kind.rawValue)
+        return .vexBroadcastF(kind, size: size, destination: dst, memory: mem)
+    }
+
     /// VEX VPINSRB / VPINSRW — `xmm, xmm, r32/m{8|16}, imm8`.
     private static func parseVexInsertLaneBW(_ kind: X86.VexInsertLaneBWKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 4 else {

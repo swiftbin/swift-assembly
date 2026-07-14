@@ -443,6 +443,9 @@ internal enum X86InstructionFormatter {
             return "xabort \(imm)"
         case .enqcmd(let kind, let dst, let mem):
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: dst)), \(formatMemory(mem))"
+        case .vexBroadcastF(let kind, let size, let dst, let mem):
+            let dstPrefix = size == .xmm ? "xmm" : "ymm"
+            return "\(kind.rawValue) \(dstPrefix)\(dst), \(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(mem))"
         case .vexInsertLaneBW(let kind, let dst, let src1, let src2, let imm):
             let srcStr: String
             switch src2 {
