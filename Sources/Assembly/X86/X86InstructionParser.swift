@@ -223,6 +223,12 @@ internal enum X86Parser {
         if let kind = X86.WaitpkgKind(rawValue: instruction.mnemonic) {
             return try parseWaitpkg(kind, instruction)
         }
+        if instruction.mnemonic == "vcvtph2ps" {
+            return try parseVcvtph2ps(instruction)
+        }
+        if instruction.mnemonic == "vcvtps2ph" {
+            return try parseVcvtps2ph(instruction)
+        }
         // `cmpsd` overlaps with the string-op CMPSD; route to the SSE
         // form only when it carries the SSE shape (3 operands).
         if let kind = X86.SSECompareKind(rawValue: instruction.mnemonic),
@@ -1218,6 +1224,35 @@ internal enum X86Parser {
         }
         let reg = try register(instruction.operands[0])
         return .waitpkg(kind, register: reg)
+    }
+
+    /// F16C VCVTPH2PS — `xmm/ymm, xmm/m64|m128`. The memory source is
+    /// half the destination width (m64 for xmm dst, m128 for ymm dst).
+    private static func parseVcvtph2ps(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: "vcvtph2ps", expected: "2 operands", actual: instruction.operands.count)
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: "vcvtph2ps", scalarOnly: false)
+        let sourceMemoryWidth: X86.RegisterWidth = size == .xmm ? .qword : .xmmword
+        // The register form is always an XMM (the low 128 bits carry 8 halves).
+        let src = try parseVectorOrMemory(instruction.operands[1], size: .xmm, memoryWidth: sourceMemoryWidth, mnemonic: "vcvtph2ps")
+        return .vcvtph2ps(size: size, destination: dst, source: src)
+    }
+
+    /// F16C VCVTPS2PH — `xmm/m64|m128, xmm/ymm, imm8`. The memory
+    /// destination is half the source vector width.
+    private static func parseVcvtps2ph(_ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: "vcvtps2ph", expected: "3 operands", actual: instruction.operands.count)
+        }
+        let (size, src) = try parseVectorRegister(instruction.operands[1], mnemonic: "vcvtps2ph", scalarOnly: false)
+        let destMemoryWidth: X86.RegisterWidth = size == .xmm ? .qword : .xmmword
+        let dst = try parseVectorOrMemory(instruction.operands[0], size: .xmm, memoryWidth: destMemoryWidth, mnemonic: "vcvtps2ph")
+        let imm = try immediateAny(instruction.operands[2])
+        guard imm >= 0 && imm <= 255 else {
+            throw AssemblerError.immediateOutOfRange(instruction: "vcvtps2ph", value: imm, range: 0...255)
+        }
+        return .vcvtps2ph(size: size, destination: dst, source: src, immediate: UInt8(truncatingIfNeeded: imm))
     }
 
     /// VPINSRD / VPINSRQ — `xmm, xmm, r/m, imm8`.

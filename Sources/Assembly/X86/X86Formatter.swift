@@ -427,6 +427,26 @@ internal enum X86InstructionFormatter {
             return "\(mnemonic) \(dstStr), xmm\(src), \(imm)"
         case .waitpkg(let kind, let reg):
             return "\(kind.rawValue) \(X86.RegisterTable.canonicalName(for: reg))"
+        case .vcvtph2ps(let size, let dst, let src):
+            let dstPrefix = size == .xmm ? "xmm" : "ymm"
+            // Memory source is m64 for xmm dst, m128 for ymm dst.
+            let srcWidth: X86.RegisterWidth = size == .xmm ? .qword : .xmmword
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "xmm\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(srcWidth)) \(formatMemory(m))"
+            }
+            return "vcvtph2ps \(dstPrefix)\(dst), \(srcStr)"
+        case .vcvtps2ph(let size, let dst, let src, let imm):
+            let srcPrefix = size == .xmm ? "xmm" : "ymm"
+            // Memory dst is m64 for xmm src, m128 for ymm src.
+            let dstWidth: X86.RegisterWidth = size == .xmm ? .qword : .xmmword
+            let dstStr: String
+            switch dst {
+            case .register(let n): dstStr = "xmm\(n)"
+            case .memory(let m):   dstStr = "\(sizeHintPrefix(dstWidth)) \(formatMemory(m))"
+            }
+            return "vcvtps2ph \(dstStr), \(srcPrefix)\(src), \(imm)"
         case .movDQ(let kind, let direction, let xmm, let gpr):
             let xmmStr = "xmm\(xmm.number)"
             let gprStr = formatMovDQGPROperand(gpr, width: kind.gprWidth)

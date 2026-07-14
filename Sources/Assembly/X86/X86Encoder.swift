@@ -295,6 +295,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeVexExtractLaneDQ(width: width, destination: dst, source: src, immediate: imm), patches: [])
         case .waitpkg(let kind, let reg):
             return Encoded(bytes: try encodeWaitpkg(kind, register: reg), patches: [])
+        case .vcvtph2ps(let size, let dst, let src):
+            return Encoded(bytes: try encodeVcvtph2ps(size: size, destination: dst, source: src), patches: [])
+        case .vcvtps2ph(let size, let dst, let src, let imm):
+            return Encoded(bytes: try encodeVcvtps2ph(size: size, destination: dst, source: src, immediate: imm), patches: [])
         }
     }
 
@@ -2024,6 +2028,23 @@ internal enum X86InstructionEncoder {
         bytes.append(0x0F)
         bytes.append(0xAE)
         bytes.append(X86.ModRM.make(mod: X86.ModRM.modRegister, reg: 6, rm: reg.lowBits))
+        return bytes
+    }
+
+    /// F16C VCVTPH2PS — `VEX.128/256.66.0F38.W0 13 /r` :
+    /// `xmm/ymm, xmm/m64|m128`. The memory source is always half the
+    /// destination width (m64 for xmm dst, m128 for ymm dst).
+    private static func encodeVcvtph2ps(size: X86.AVXVectorSize, destination dst: UInt8, source: X86.VectorOrMemory) throws -> [UInt8] {
+        return try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: 0, pp: 0b01, opcode: 0x13, lBit: size.lBit, destination: dst, source1: 0, source2: source)
+    }
+
+    /// F16C VCVTPS2PH — `VEX.128/256.66.0F3A.W0 1D /r ib` :
+    /// `xmm/m64|m128, xmm/ymm, imm8`. The memory destination is always
+    /// half the source vector width.
+    private static func encodeVcvtps2ph(size: X86.AVXVectorSize, destination: X86.VectorOrMemory, source src: UInt8, immediate: UInt8) throws -> [UInt8] {
+        // The register operand in ModR/M.reg is the *source* (VEX terminology treats it as the second slot).
+        var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: 0x1D, lBit: size.lBit, destination: src, source1: 0, source2: destination)
+        bytes.append(immediate)
         return bytes
     }
 

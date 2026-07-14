@@ -909,6 +909,12 @@ internal enum X86InstructionDecoder {
             let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
             return Decoded(instruction: .vexBroadcast(kind, size: size, destination: dst, source: src), length: cursor.consumed)
         }
+        // F16C VCVTPH2PS — VEX.128/256.66.0F38.W0 13 /r (vvvv reserved).
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.vvvv == 0 && v.w == 0 && opcode == 0x13 {
+            let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vcvtph2ps(size: size, destination: dst, source: src), length: cursor.consumed)
+        }
         // AVX2 variable shifts.
         if v.escape == X86.VEX.escape0F38 && v.pp == 0b01,
            let kind = X86.VexVarShiftKind.decode(opcode: opcode, w: v.w) {
@@ -931,6 +937,15 @@ internal enum X86InstructionDecoder {
                 let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
                 let imm = try cursor.takeByte()
                 return Decoded(instruction: .vexCmpStr(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
+            }
+            // F16C VCVTPS2PH — VEX.128/256.66.0F3A.W0 1D /r ib (vvvv reserved).
+            // The ModR/M.reg field holds the XMM/YMM *source*; the r/m
+            // field is the XMM-or-memory destination.
+            if v.pp == 0b01 && v.vvvv == 0 && v.w == 0 && opcode == 0x1D {
+                let (src, _, dst) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+                return Decoded(instruction: .vcvtps2ph(size: size, destination: dst, source: src, immediate: imm), length: cursor.consumed)
             }
             // VROUNDPS / VROUNDPD — packed 2-op + imm8.
             if v.pp == 0b01 && v.vvvv == 0,

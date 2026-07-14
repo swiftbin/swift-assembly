@@ -4980,4 +4980,31 @@ final class X86AssemblerTests: XCTestCase {
             XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
         }
     }
+
+    // MARK: - Phase 18ap F16C (VCVTPH2PS / VCVTPS2PH)
+
+    private static let f16cCases: [(String, [UInt8])] = [
+        // VCVTPH2PS — half → single precision.
+        ("vcvtph2ps xmm1, xmm2",                    [0xC4, 0xE2, 0x79, 0x13, 0xCA]),
+        ("vcvtph2ps ymm1, xmm2",                    [0xC4, 0xE2, 0x7D, 0x13, 0xCA]),
+        ("vcvtph2ps xmm0, qword ptr [rdi]",         [0xC4, 0xE2, 0x79, 0x13, 0x07]),
+        ("vcvtph2ps ymm0, xmmword ptr [rdi]",       [0xC4, 0xE2, 0x7D, 0x13, 0x07]),
+        // VCVTPS2PH — single → half precision.
+        ("vcvtps2ph xmm2, xmm1, 0",                 [0xC4, 0xE3, 0x79, 0x1D, 0xCA, 0x00]),
+        ("vcvtps2ph xmm2, ymm1, 3",                 [0xC4, 0xE3, 0x7D, 0x1D, 0xCA, 0x03]),
+        ("vcvtps2ph qword ptr [rdi], xmm0, 4",      [0xC4, 0xE3, 0x79, 0x1D, 0x07, 0x04]),
+        ("vcvtps2ph xmmword ptr [rdi], ymm0, 5",    [0xC4, 0xE3, 0x7D, 0x1D, 0x07, 0x05]),
+    ]
+
+    func testF16CAssembles() throws {
+        for (source, expected) in Self.f16cCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testF16CDisassembles() throws {
+        for (source, bytes) in Self.f16cCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
 }

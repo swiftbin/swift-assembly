@@ -986,6 +986,16 @@ internal enum X86 {
         /// WAITPKG UMWAIT/UMONITOR/TPAUSE — single GPR operand,
         /// encoded as `[prefix] 0F AE /6` with mod=11.
         case waitpkg(WaitpkgKind, register: Register)
+        /// F16C VCVTPH2PS — half-precision to single-precision.
+        /// `VEX.128.66.0F38.W0 13 /r` : `xmm, xmm/m64`.
+        /// `VEX.256.66.0F38.W0 13 /r` : `ymm, xmm/m128`.
+        /// The memory source is always half the destination width.
+        case vcvtph2ps(size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
+        /// F16C VCVTPS2PH — single-precision to half-precision with imm8
+        /// rounding control. `VEX.128.66.0F3A.W0 1D /r ib` writes `xmm/m64`;
+        /// `VEX.256.66.0F3A.W0 1D /r ib` writes `xmm/m128`. The
+        /// destination width is half the source vector width.
+        case vcvtps2ph(size: AVXVectorSize, destination: VectorOrMemory, source: UInt8, immediate: UInt8)
     }
 
     enum SSEImmediateShiftKind: String, Equatable, CaseIterable {
