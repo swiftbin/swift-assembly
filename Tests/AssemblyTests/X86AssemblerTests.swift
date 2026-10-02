@@ -5033,6 +5033,27 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18ba AVX2 gather (VSIB)
+
+    private static let vgatherCases: [(String, [UInt8])] = [
+        ("vpgatherdd xmm1, [rdi + xmm2 * 4], xmm3",             [0xC4, 0xE2, 0x61, 0x90, 0x0C, 0x97]),
+        ("vpgatherdq ymm1, [rax + xmm2 * 8], ymm3",             [0xC4, 0xE2, 0xE5, 0x90, 0x0C, 0xD0]),
+        ("vgatherdps ymm1, [rsi + ymm2 * 4 + 32], ymm3",        [0xC4, 0xE2, 0x65, 0x92, 0x4C, 0x96, 0x20]),
+        ("vgatherqpd xmm1, [rdi + xmm15 * 2], xmm0",            [0xC4, 0xA2, 0xF9, 0x93, 0x0C, 0x7F]),
+    ]
+
+    func testVgatherAssembles() throws {
+        for (source, expected) in Self.vgatherCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVgatherDisassembles() throws {
+        for (source, bytes) in Self.vgatherCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18az 非対称 VCVT family
 
     private static let vcvtAsymmCases: [(String, [UInt8])] = [

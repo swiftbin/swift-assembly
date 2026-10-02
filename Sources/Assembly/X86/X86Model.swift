@@ -1001,6 +1001,10 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// AVX2 gather instructions. The memory operand is VSIB —
+        /// SIB with a vector index register. The mask (3rd operand) is
+        /// read via VEX.vvvv.
+        case vgather(VGatherKind, size: AVXVectorSize, destination: UInt8, memory: VSIBMemory, mask: UInt8)
         /// VCVTPS2PD / VCVTDQ2PD — single/int32 → double. The destination
         /// vector width picks the mnemonic size (xmm reads half of its
         /// source register; ymm reads the full XMM). Memory source is
@@ -1066,6 +1070,61 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    /// A VSIB memory reference: `[base + index_vector * scale + disp]`,
+    /// where `index` is an XMM or YMM register number.
+    struct VSIBMemory: Equatable {
+        var base: Register?
+        var index: UInt8
+        var indexSize: AVXVectorSize
+        var scale: UInt8            // 1, 2, 4, or 8
+        var displacement: Int32
+    }
+
+    enum VGatherKind: String, Equatable, CaseIterable {
+        case vgatherdps     // 92, W0, index=dst width
+        case vgatherdpd     // 92, W1, index=xmm when dst=ymm (dq)
+        case vgatherqps     // 93, W0
+        case vgatherqpd     // 93, W1
+        case vpgatherdd     // 90, W0
+        case vpgatherdq     // 90, W1
+        case vpgatherqd     // 91, W0
+        case vpgatherqq     // 91, W1
+
+        var opcode: UInt8 {
+            switch self {
+            case .vpgatherdd, .vpgatherdq: return 0x90
+            case .vpgatherqd, .vpgatherqq: return 0x91
+            case .vgatherdps, .vgatherdpd: return 0x92
+            case .vgatherqps, .vgatherqpd: return 0x93
+            }
+        }
+
+        var w: UInt8 {
+            switch self {
+            case .vgatherdps, .vgatherqps, .vpgatherdd, .vpgatherqd: return 0
+            case .vgatherdpd, .vgatherqpd, .vpgatherdq, .vpgatherqq: return 1
+            }
+        }
+
+        static func decode(opcode: UInt8, w: UInt8) -> VGatherKind? {
+            allCases.first { $0.opcode == opcode && $0.w == w }
+        }
+
+        /// Canonical index-register vector size for formatting. When a
+        /// Q-element gather uses a D-sized index, the index register is
+        /// always XMM because only four dwords are consumed.
+        func indexDisplaySize(forDestinationSize dst: AVXVectorSize) -> AVXVectorSize {
+            switch self {
+            case .vgatherdpd, .vpgatherdq:
+                // D-sized index, Q-sized element → index stays xmm even
+                // when destination is ymm.
+                return .xmm
+            default:
+                return dst
+            }
+        }
     }
 
     enum VCvtAsymmUpKind: String, Equatable, CaseIterable {

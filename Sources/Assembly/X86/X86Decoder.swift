@@ -942,6 +942,42 @@ internal enum X86InstructionDecoder {
                 }
             }
         }
+        // AVX2 gather — VEX.DDS.128/256.66.0F38.W{0|1} 90..93 /r
+        // with a VSIB memory operand (rm = 4, SIB with vector index).
+        if v.escape == X86.VEX.escape0F38 && v.pp == 0b01,
+           let kind = X86.VGatherKind.decode(opcode: opcode, w: v.w) {
+            let modrm = try cursor.takeByte()
+            guard X86.ModRM.rm.extract(modrm) == 4,
+                  X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister else {
+                throw AssemblerError.unknownEncoding(UInt32(opcode))
+            }
+            let dstNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+            let sib = try cursor.takeByte()
+            let scaleBits = (sib >> 6) & 0x3
+            let scale: UInt8 = 1 << scaleBits
+            let indexLow = (sib >> 3) & 0x7
+            let baseLow = sib & 0x7
+            let indexNum = (prefixes.rexX << 3) | indexLow
+            let mod = X86.ModRM.mod.extract(modrm)
+            var disp: Int32 = 0
+            var base: X86.Register? = nil
+            if mod == 0b00 && baseLow == 5 {
+                // [index*scale + disp32]
+                disp = Int32(bitPattern: try cursor.takeLE32())
+            } else {
+                let baseNum = (prefixes.rexB << 3) | baseLow
+                base = makeRegister(number: baseNum, width: .qword, hasREX: prefixes.hasREX)
+                if mod == 0b01 {
+                    disp = Int32(Int8(bitPattern: try cursor.takeByte()))
+                } else if mod == 0b10 {
+                    disp = Int32(bitPattern: try cursor.takeLE32())
+                }
+            }
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            let indexSize = kind.indexDisplaySize(forDestinationSize: size)
+            let vsib = X86.VSIBMemory(base: base, index: indexNum, indexSize: indexSize, scale: scale, displacement: disp)
+            return Decoded(instruction: .vgather(kind, size: size, destination: dstNum, memory: vsib, mask: v.vvvv & 0xF), length: cursor.consumed)
+        }
         // AVX2 VPERMD / VPERMPS — VEX.NDS.256.66.0F38.W0 36|16 /r.
         if v.escape == X86.VEX.escape0F38 && v.pp == 0b01 && v.l == 1 && v.w == 0,
            let kind = X86.VPermRegKind.decode(opcode: opcode) {

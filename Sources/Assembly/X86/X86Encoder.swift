@@ -307,6 +307,8 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             return Encoded(bytes: try encodeVexBroadcastF(kind, size: size, destination: dst, memory: mem), patches: [])
+        case .vgather(let kind, let size, let dst, let mem, let mask):
+            return Encoded(bytes: try encodeVGather(kind, size: size, destination: dst, memory: mem, mask: mask), patches: [])
         case .vcvtAsymmUp(let kind, let size, let dst, let src):
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
         case .vcvtAsymmDown(let kind, let size, let dst, let src):
@@ -2274,6 +2276,60 @@ internal enum X86InstructionEncoder {
     }
 
     /// `66 [REX] 0F 38 F8 /r` — MOVDIR64B r, m512.
+    /// AVX2 gather — VEX.DDS.128/256.66.0F38.W{0|1} 90..93 /r with a
+    /// vector-SIB memory operand.
+    private static func encodeVGather(_ kind: X86.VGatherKind, size: X86.AVXVectorSize, destination dst: UInt8, memory: X86.VSIBMemory, mask: UInt8) throws -> [UInt8] {
+        guard memory.scale == 1 || memory.scale == 2 || memory.scale == 4 || memory.scale == 8 else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): scale must be 1, 2, 4, or 8")
+        }
+        // Encode mod + displacement.
+        let mod: UInt8
+        var dispBytes: [UInt8] = []
+        if memory.base == nil {
+            // [index*scale + disp32] — use SIB.base = 5, mod = 00.
+            mod = 0b00
+            let le = memory.displacement
+            dispBytes = [UInt8(truncatingIfNeeded: le), UInt8(truncatingIfNeeded: le >> 8), UInt8(truncatingIfNeeded: le >> 16), UInt8(truncatingIfNeeded: le >> 24)]
+        } else {
+            let baseLow3 = memory.base!.lowBits
+            // When base.low3 == 5 (rbp/r13), a disp8 is mandatory even if 0.
+            let forceDisp = baseLow3 == 5
+            if memory.displacement == 0 && !forceDisp {
+                mod = 0b00
+            } else if memory.displacement >= Int32(Int8.min) && memory.displacement <= Int32(Int8.max) {
+                mod = 0b01
+                dispBytes = [UInt8(bitPattern: Int8(truncatingIfNeeded: memory.displacement))]
+            } else {
+                mod = 0b10
+                dispBytes = [UInt8(truncatingIfNeeded: memory.displacement),
+                             UInt8(truncatingIfNeeded: memory.displacement >> 8),
+                             UInt8(truncatingIfNeeded: memory.displacement >> 16),
+                             UInt8(truncatingIfNeeded: memory.displacement >> 24)]
+            }
+        }
+        let modrm = X86.ModRM.make(mod: mod, reg: dst & 0x7, rm: 4)   // rm=4 → SIB follows
+        let scaleBits: UInt8
+        switch memory.scale {
+        case 1: scaleBits = 0
+        case 2: scaleBits = 1
+        case 4: scaleBits = 2
+        case 8: scaleBits = 3
+        default: fatalError()
+        }
+        let sibBase: UInt8 = memory.base?.lowBits ?? 5
+        let sib: UInt8 = (scaleBits << 6) | ((memory.index & 0x7) << 3) | (sibBase & 0x7)
+        let rexR = (dst >> 3) & 1
+        let rexX = (memory.index >> 3) & 1
+        let rexB = memory.base?.highBit ?? 0
+        let lBit: UInt8 = size.lBit
+        var bytes = X86.VEX.build(r: rexR, x: rexX, b: rexB, escape: X86.VEX.escape0F38, w: kind.w, vvvv: mask, l: lBit, pp: 0b01)
+        bytes.append(kind.opcode)
+        bytes.append(modrm)
+        bytes.append(sib)
+        bytes.append(contentsOf: dispBytes)
+        return bytes
+    }
+
     /// AVX VBROADCASTSS / VBROADCASTSD / VBROADCASTF128 —
     /// `VEX.128/256.66.0F38.W0 18|19|1A /r` with vvvv reserved.
     private static func encodeVexBroadcastF(_ kind: X86.VexBroadcastFKind, size: X86.AVXVectorSize, destination dst: UInt8, memory: X86.MemoryOperand) throws -> [UInt8] {

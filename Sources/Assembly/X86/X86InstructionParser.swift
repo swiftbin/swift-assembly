@@ -244,6 +244,9 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcastF(kind, instruction)
         }
+        if let kind = X86.VGatherKind(rawValue: instruction.mnemonic) {
+            return try parseVGather(kind, instruction)
+        }
         if let kind = X86.VCvtAsymmUpKind(rawValue: instruction.mnemonic) {
             return try parseVcvtAsymmUp(kind, instruction)
         }
@@ -1392,6 +1395,109 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// AVX2 gather: `dst, [base + vec*scale + disp], mask`.
+    private static func parseVGather(_ kind: X86.VGatherKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 3 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "3 operands", actual: instruction.operands.count)
+        }
+        let (dstSize, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let vsib = try parseVSIBMemory(instruction.operands[1], mnemonic: kind.rawValue)
+        let (maskSize, mask) = try parseVectorRegister(instruction.operands[2], mnemonic: kind.rawValue, scalarOnly: false)
+        guard maskSize == dstSize else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): mask width must match destination")
+        }
+        return .vgather(kind, size: dstSize, destination: dst, memory: vsib, mask: mask)
+    }
+
+    /// Parse `[base + xmm/ymm * scale + disp]`.
+    private static func parseVSIBMemory(_ text: String, mnemonic: String) throws -> X86.VSIBMemory {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("["), trimmed.hasSuffix("]") else {
+            throw AssemblerError.invalidMemoryOperand(text)
+        }
+        let inner = String(trimmed.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+
+        var base: X86.Register? = nil
+        var indexNumber: UInt8? = nil
+        var indexSize: X86.AVXVectorSize = .xmm
+        var scale: UInt8 = 1
+        var displacement: Int64 = 0
+
+        for (sign, atom) in splitAtomsBySign(inner) {
+            let term = atom.trimmingCharacters(in: .whitespacesAndNewlines)
+            if term.isEmpty { throw AssemblerError.invalidMemoryOperand(text) }
+
+            if term.contains("*") {
+                guard sign == 1 else { throw AssemblerError.invalidMemoryOperand(text) }
+                guard indexNumber == nil else {
+                    throw AssemblerError.invalidMemoryOperand("\(text): too many scaled index terms")
+                }
+                let (idx, idxSize, factor) = try parseVectorScaledTerm(term, mnemonic: mnemonic, original: text)
+                indexNumber = idx
+                indexSize = idxSize
+                scale = factor
+                continue
+            }
+            if let reg = try? register(term) {
+                guard sign == 1 else { throw AssemblerError.invalidMemoryOperand(text) }
+                guard reg.width == .qword else {
+                    throw AssemblerError.invalidMemoryOperand("\(text): base must be 64-bit")
+                }
+                guard base == nil else {
+                    throw AssemblerError.invalidMemoryOperand("\(text): too many base registers")
+                }
+                base = reg
+                continue
+            }
+            if let (num, size) = parseVectorRegisterToken(term) {
+                guard sign == 1, indexNumber == nil else {
+                    throw AssemblerError.invalidMemoryOperand("\(text): too many scaled index terms")
+                }
+                indexNumber = num
+                indexSize = size
+                scale = 1
+                continue
+            }
+            let value = try immediateAny(term)
+            displacement &+= sign * value
+        }
+        guard let idx = indexNumber else {
+            throw AssemblerError.invalidMemoryOperand("\(text): gather memory requires a vector index")
+        }
+        guard displacement >= Int64(Int32.min) && displacement <= Int64(Int32.max) else {
+            throw AssemblerError.invalidMemoryOperand("\(text): displacement out of int32 range")
+        }
+        return X86.VSIBMemory(base: base, index: idx, indexSize: indexSize, scale: scale, displacement: Int32(truncatingIfNeeded: displacement))
+    }
+
+    /// Parse `xmm/ymm * scale` or `scale * xmm/ymm` (scale defaults to 1
+    /// when omitted).
+    private static func parseVectorScaledTerm(_ term: String, mnemonic: String, original: String) throws -> (UInt8, X86.AVXVectorSize, UInt8) {
+        let parts = term.split(separator: "*", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        guard parts.count == 2 else {
+            throw AssemblerError.invalidMemoryOperand(original)
+        }
+        func parseFactor(_ s: String) -> UInt8? {
+            guard let v = UInt8(s) else { return nil }
+            return (v == 1 || v == 2 || v == 4 || v == 8) ? v : nil
+        }
+        if let (num, size) = parseVectorRegisterToken(parts[0]), let f = parseFactor(parts[1]) {
+            return (num, size, f)
+        }
+        if let f = parseFactor(parts[0]), let (num, size) = parseVectorRegisterToken(parts[1]) {
+            return (num, size, f)
+        }
+        throw AssemblerError.invalidMemoryOperand("\(original): scaled index must be xmm/ymm * 1|2|4|8")
+    }
+
+    /// Match `xmmN` or `ymmN` and return (number, size), or nil.
+    private static func parseVectorRegisterToken(_ text: String) -> (UInt8, X86.AVXVectorSize)? {
+        let s = text.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if let xmm = parseXMMRegister(s) { return (xmm.number, .xmm) }
+        if let ymm = parseYMMRegister(s) { return (ymm.number, .ymm) }
+        return nil
+    }
+
     /// VCVTPS2PD / VCVTDQ2PD — destination size drives mnemonic.
     private static func parseVcvtAsymmUp(_ kind: X86.VCvtAsymmUpKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
         guard instruction.operands.count == 2 else {

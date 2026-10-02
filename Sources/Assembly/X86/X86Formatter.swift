@@ -446,6 +446,26 @@ internal enum X86InstructionFormatter {
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             let dstPrefix = size == .xmm ? "xmm" : "ymm"
             return "\(kind.rawValue) \(dstPrefix)\(dst), \(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(mem))"
+        case .vgather(let kind, let size, let dst, let mem, let mask):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            let indexPrefix = mem.indexSize == .xmm ? "xmm" : "ymm"
+            var vsib = "["
+            var first = true
+            if let base = mem.base {
+                vsib += X86.RegisterTable.canonicalName(for: base)
+                first = false
+            }
+            if !first { vsib += " + " }
+            vsib += "\(indexPrefix)\(mem.index) * \(mem.scale)"
+            if mem.displacement != 0 {
+                if mem.displacement > 0 {
+                    vsib += " + \(mem.displacement)"
+                } else {
+                    vsib += " - \(-Int64(mem.displacement))"
+                }
+            }
+            vsib += "]"
+            return "\(kind.rawValue) \(prefix)\(dst), \(vsib), \(prefix)\(mask)"
         case .vcvtAsymmUp(let kind, let size, let dst, let src):
             // Up-conversion: dst width is the mnemonic's size; src is XMM
             // or half-width memory (m64 for xmm dst, m128 for ymm dst).
