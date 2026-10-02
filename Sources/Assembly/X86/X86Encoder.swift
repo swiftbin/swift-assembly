@@ -307,6 +307,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             return Encoded(bytes: try encodeVexBroadcastF(kind, size: size, destination: dst, memory: mem), patches: [])
+        case .vcvtAsymmUp(let kind, let size, let dst, let src):
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
+        case .vcvtAsymmDown(let kind, let size, let dst, let src):
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: 0, source2: src), patches: [])
         case .vblendv(let kind, let size, let dst, let src1, let src2, let mask):
             var bytes = try encodeVexThreeOp(escape: X86.VEX.escape0F3A, w: 0, pp: 0b01, opcode: kind.opcode, lBit: size.lBit, destination: dst, source1: src1, source2: src2)
             // `/is4` imm8: mask register in the top nibble (bits 7:4).

@@ -1001,6 +1001,16 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// VCVTPS2PD / VCVTDQ2PD — single/int32 → double. The destination
+        /// vector width picks the mnemonic size (xmm reads half of its
+        /// source register; ymm reads the full XMM). Memory source is
+        /// m64 for xmm dst and m128 for ymm dst.
+        case vcvtAsymmUp(VCvtAsymmUpKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
+        /// VCVTPD2PS / VCVTPD2DQ / VCVTTPD2DQ — double → single/int32.
+        /// The destination is always XMM; the source vector width picks
+        /// the mnemonic size. Memory source is m128 for xmm src and
+        /// m256 for ymm src.
+        case vcvtAsymmDown(VCvtAsymmDownKind, size: AVXVectorSize, destination: UInt8, source: VectorOrMemory)
         /// AVX VBLENDVPS / VBLENDVPD / VPBLENDVB — variable 4-op blend
         /// using the `/is4` form: a trailing imm8 whose high nibble
         /// names the mask (4th) register. Encoded on
@@ -1056,6 +1066,42 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VCvtAsymmUpKind: String, Equatable, CaseIterable {
+        case vcvtps2pd      // NP 0F 5A  (pp=0)
+        case vcvtdq2pd      // F3 0F E6  (pp=10)
+
+        var opcode: UInt8 { self == .vcvtps2pd ? 0x5A : 0xE6 }
+        var ppBits: UInt8 { self == .vcvtps2pd ? 0 : 0b10 }
+
+        static func decode(opcode: UInt8, ppBits: UInt8) -> VCvtAsymmUpKind? {
+            allCases.first { $0.opcode == opcode && $0.ppBits == ppBits }
+        }
+    }
+
+    enum VCvtAsymmDownKind: String, Equatable, CaseIterable {
+        case vcvtpd2ps      // 66 0F 5A  (pp=01)
+        case vcvtpd2dq      // F2 0F E6  (pp=11)
+        case vcvttpd2dq     // 66 0F E6  (pp=01)
+
+        var opcode: UInt8 {
+            switch self {
+            case .vcvtpd2ps:   return 0x5A
+            case .vcvtpd2dq, .vcvttpd2dq: return 0xE6
+            }
+        }
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vcvtpd2ps, .vcvttpd2dq: return 0b01
+            case .vcvtpd2dq:              return 0b11
+            }
+        }
+
+        static func decode(opcode: UInt8, ppBits: UInt8) -> VCvtAsymmDownKind? {
+            allCases.first { $0.opcode == opcode && $0.ppBits == ppBits }
+        }
     }
 
     enum VBlendvKind: String, Equatable, CaseIterable {

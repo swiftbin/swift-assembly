@@ -446,6 +446,28 @@ internal enum X86InstructionFormatter {
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             let dstPrefix = size == .xmm ? "xmm" : "ymm"
             return "\(kind.rawValue) \(dstPrefix)\(dst), \(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(mem))"
+        case .vcvtAsymmUp(let kind, let size, let dst, let src):
+            // Up-conversion: dst width is the mnemonic's size; src is XMM
+            // or half-width memory (m64 for xmm dst, m128 for ymm dst).
+            let dstPrefix = size == .xmm ? "xmm" : "ymm"
+            let srcMemoryWidth: X86.RegisterWidth = size == .xmm ? .qword : .xmmword
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "xmm\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(srcMemoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(dstPrefix)\(dst), \(srcStr)"
+        case .vcvtAsymmDown(let kind, let size, let dst, let src):
+            // Down-conversion: dst is always XMM; src width is the
+            // mnemonic's size (xmm/m128 or ymm/m256).
+            let srcPrefix = size == .xmm ? "xmm" : "ymm"
+            let srcMemoryWidth: X86.RegisterWidth = size.packedMemoryWidth
+            let srcStr: String
+            switch src {
+            case .register(let n): srcStr = "\(srcPrefix)\(n)"
+            case .memory(let m):   srcStr = "\(sizeHintPrefix(srcMemoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) xmm\(dst), \(srcStr)"
         case .vblendv(let kind, let size, let dst, let src1, let src2, let mask):
             let prefix = size == .xmm ? "xmm" : "ymm"
             let src2Str: String

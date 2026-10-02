@@ -244,6 +244,12 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcastF(kind, instruction)
         }
+        if let kind = X86.VCvtAsymmUpKind(rawValue: instruction.mnemonic) {
+            return try parseVcvtAsymmUp(kind, instruction)
+        }
+        if let kind = X86.VCvtAsymmDownKind(rawValue: instruction.mnemonic) {
+            return try parseVcvtAsymmDown(kind, instruction)
+        }
         if let kind = X86.VBlendvKind(rawValue: instruction.mnemonic) {
             return try parseVblendv(kind, instruction)
         }
@@ -1386,6 +1392,46 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// VCVTPS2PD / VCVTDQ2PD — destination size drives mnemonic.
+    private static func parseVcvtAsymmUp(_ kind: X86.VCvtAsymmUpKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "2 operands", actual: instruction.operands.count)
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let srcMemoryWidth: X86.RegisterWidth = size == .xmm ? .qword : .xmmword
+        // The register form is always XMM (holds half of the destination).
+        let src = try parseVectorOrMemory(instruction.operands[1], size: .xmm, memoryWidth: srcMemoryWidth, mnemonic: kind.rawValue)
+        return .vcvtAsymmUp(kind, size: size, destination: dst, source: src)
+    }
+
+    /// VCVTPD2PS / VCVTPD2DQ / VCVTTPD2DQ — source size drives mnemonic.
+    private static func parseVcvtAsymmDown(_ kind: X86.VCvtAsymmDownKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 2 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "2 operands", actual: instruction.operands.count)
+        }
+        guard let dst = parseXMMRegister(instruction.operands[0]) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): destination must be an XMM register")
+        }
+        // Source can be XMM (m128) or YMM (m256) — the register tells us
+        // which, memory alone defaults to ymm/m256.
+        let text = instruction.operands[1].trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        if parseYMMRegister(text) != nil {
+            let src = try parseVectorOrMemory(instruction.operands[1], size: .ymm, memoryWidth: .ymmword, mnemonic: kind.rawValue)
+            return .vcvtAsymmDown(kind, size: .ymm, destination: dst.number, source: src)
+        }
+        if parseXMMRegister(text) != nil {
+            let src = try parseVectorOrMemory(instruction.operands[1], size: .xmm, memoryWidth: .xmmword, mnemonic: kind.rawValue)
+            return .vcvtAsymmDown(kind, size: .xmm, destination: dst.number, source: src)
+        }
+        // Memory source: pick the size from the width hint.
+        guard let (width, _) = stripSizeHint(text) else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): memory source needs a size hint (xmmword or ymmword ptr)")
+        }
+        let size: X86.AVXVectorSize = width == .ymmword ? .ymm : .xmm
+        let src = try parseVectorOrMemory(instruction.operands[1], size: size, memoryWidth: size.packedMemoryWidth, mnemonic: kind.rawValue)
+        return .vcvtAsymmDown(kind, size: size, destination: dst.number, source: src)
+    }
+
     /// AVX VBLENDV* — `xmm/ymm, xmm/ymm, xmm/ymm/m, xmm/ymm`. The mask
     /// (4th operand) is encoded in the `/is4` imm8 high nibble.
     private static func parseVblendv(_ kind: X86.VBlendvKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {

@@ -5033,6 +5033,37 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18az 非対称 VCVT family
+
+    private static let vcvtAsymmCases: [(String, [UInt8])] = [
+        // VCVTPS2PD — single → double (dst width drives size).
+        ("vcvtps2pd xmm1, xmm2",                            [0xC5, 0xF8, 0x5A, 0xCA]),
+        ("vcvtps2pd xmm1, qword ptr [rdi]",                 [0xC5, 0xF8, 0x5A, 0x0F]),
+        ("vcvtps2pd ymm1, xmm2",                            [0xC5, 0xFC, 0x5A, 0xCA]),
+        ("vcvtps2pd ymm1, xmmword ptr [rdi]",               [0xC5, 0xFC, 0x5A, 0x0F]),
+        // VCVTDQ2PD — int32 → double.
+        ("vcvtdq2pd xmm1, xmm2",                            [0xC5, 0xFA, 0xE6, 0xCA]),
+        // VCVTPD2PS — double → single (src width drives size).
+        ("vcvtpd2ps xmm1, xmm2",                            [0xC5, 0xF9, 0x5A, 0xCA]),
+        ("vcvtpd2ps xmm1, ymm2",                            [0xC5, 0xFD, 0x5A, 0xCA]),
+        // VCVTPD2DQ — double → int32.
+        ("vcvtpd2dq xmm1, ymmword ptr [rax]",               [0xC5, 0xFF, 0xE6, 0x08]),
+        // VCVTTPD2DQ — double → int32 (truncate).
+        ("vcvttpd2dq xmm1, xmm2",                           [0xC5, 0xF9, 0xE6, 0xCA]),
+    ]
+
+    func testVcvtAsymmAssembles() throws {
+        for (source, expected) in Self.vcvtAsymmCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVcvtAsymmDisassembles() throws {
+        for (source, bytes) in Self.vcvtAsymmCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18ay AVX VBLENDV* (/is4)
 
     private static let vblendvCases: [(String, [UInt8])] = [

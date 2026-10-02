@@ -1152,6 +1152,18 @@ internal enum X86InstructionDecoder {
         guard v.escape == X86.VEX.escape0F else {
             throw AssemblerError.unknownEncoding(UInt32(opcode))
         }
+        // Asymmetric VCVT: destination-sized (VCVTPS2PD / VCVTDQ2PD).
+        if v.vvvv == 0, let kind = X86.VCvtAsymmUpKind.decode(opcode: opcode, ppBits: v.pp) {
+            let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vcvtAsymmUp(kind, size: size, destination: dst, source: src), length: cursor.consumed)
+        }
+        // Asymmetric VCVT: source-sized (VCVTPD2PS / VCVTPD2DQ / VCVTTPD2DQ).
+        if v.vvvv == 0, let kind = X86.VCvtAsymmDownKind.decode(opcode: opcode, ppBits: v.pp) {
+            let (dst, _, src) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: 0, cursor: &cursor)
+            let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+            return Decoded(instruction: .vcvtAsymmDown(kind, size: size, destination: dst, source: src), length: cursor.consumed)
+        }
         // VSQRTPS/PD, VRSQRTPS, VRCPPS — 2-op packed; the vvvv slot is
         // reserved and encoded all-ones, which un-inverts to 0.
         if v.vvvv == 0, let kind = X86.VexUnaryKind.decode(ppBits: v.pp, opcode: opcode) {
