@@ -1001,6 +1001,11 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// AVX VBLENDVPS / VBLENDVPD / VPBLENDVB — variable 4-op blend
+        /// using the `/is4` form: a trailing imm8 whose high nibble
+        /// names the mask (4th) register. Encoded on
+        /// `VEX.NDS.128/256.66.0F3A.W0 4A|4B|4C /r ib`.
+        case vblendv(VBlendvKind, size: AVXVectorSize, destination: UInt8, source1: UInt8, source2: VectorOrMemory, mask: UInt8)
         /// VEX VMOVLPS / VMOVHPS / VMOVLPD / VMOVHPD — memory load (3-op
         /// NDS, `xmm, xmm, m64`) and memory store (2-op, `m64, xmm`).
         /// Load encoded on `VEX.NDS.128.[66].0F 12|16 /r`; store on
@@ -1051,6 +1056,24 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VBlendvKind: String, Equatable, CaseIterable {
+        case vblendvps  // 4A
+        case vblendvpd  // 4B
+        case vpblendvb  // 4C
+
+        var opcode: UInt8 {
+            switch self {
+            case .vblendvps: return 0x4A
+            case .vblendvpd: return 0x4B
+            case .vpblendvb: return 0x4C
+            }
+        }
+
+        static func decode(opcode: UInt8) -> VBlendvKind? {
+            allCases.first { $0.opcode == opcode }
+        }
     }
 
     enum VexHalfMoveMemKind: String, Equatable, CaseIterable {

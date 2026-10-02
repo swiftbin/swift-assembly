@@ -1026,6 +1026,16 @@ internal enum X86InstructionDecoder {
                 let imm = try cursor.takeByte()
                 return Decoded(instruction: .vexExtractLaneBW(kind, destination: dst, source: src, immediate: imm), length: cursor.consumed)
             }
+            // AVX VBLENDV* — VEX.NDS.128/256.66.0F3A.W0 4A|4B|4C /r ib.
+            // The imm8 is the /is4 encoding; the mask register lives in
+            // the top nibble.
+            if v.pp == 0b01 && v.w == 0, let kind = X86.VBlendvKind.decode(opcode: opcode) {
+                let (dst, src1, src2) = try decodeVexThreeOpOperands(prefixes: prefixes, vvvv: v.vvvv, cursor: &cursor)
+                let imm = try cursor.takeByte()
+                let mask = (imm >> 4) & 0xF
+                let size: X86.AVXVectorSize = v.l == 1 ? .ymm : .xmm
+                return Decoded(instruction: .vblendv(kind, size: size, destination: dst, source1: src1, source2: src2, mask: mask), length: cursor.consumed)
+            }
             // AVX2 VPERMQ / VPERMPD — VEX.256.66.0F3A.W1 00|01 /r ib.
             if v.pp == 0b01 && v.vvvv == 0 && v.w == 1 && v.l == 1,
                let kind = X86.VPermImmKind.decode(opcode: opcode) {

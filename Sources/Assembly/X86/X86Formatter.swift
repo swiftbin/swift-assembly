@@ -446,6 +446,14 @@ internal enum X86InstructionFormatter {
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             let dstPrefix = size == .xmm ? "xmm" : "ymm"
             return "\(kind.rawValue) \(dstPrefix)\(dst), \(sizeHintPrefix(kind.memoryWidth)) \(formatMemory(mem))"
+        case .vblendv(let kind, let size, let dst, let src1, let src2, let mask):
+            let prefix = size == .xmm ? "xmm" : "ymm"
+            let src2Str: String
+            switch src2 {
+            case .register(let n): src2Str = "\(prefix)\(n)"
+            case .memory(let m):   src2Str = "\(sizeHintPrefix(size.packedMemoryWidth)) \(formatMemory(m))"
+            }
+            return "\(kind.rawValue) \(prefix)\(dst), \(prefix)\(src1), \(src2Str), \(prefix)\(mask)"
         case .vexHalfMoveMemLoad(let kind, let dst, let src1, let mem):
             return "\(kind.rawValue) xmm\(dst), xmm\(src1), \(sizeHintPrefix(.qword)) \(formatMemory(mem))"
         case .vexHalfMoveMemStore(let kind, let mem, let src):

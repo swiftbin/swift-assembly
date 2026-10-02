@@ -244,6 +244,9 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcastF(kind, instruction)
         }
+        if let kind = X86.VBlendvKind(rawValue: instruction.mnemonic) {
+            return try parseVblendv(kind, instruction)
+        }
         if let kind = X86.VexHalfMoveMemKind(rawValue: instruction.mnemonic) {
             return try parseVexHalfMoveMem(kind, instruction)
         }
@@ -1383,6 +1386,25 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// AVX VBLENDV* — `xmm/ymm, xmm/ymm, xmm/ymm/m, xmm/ymm`. The mask
+    /// (4th operand) is encoded in the `/is4` imm8 high nibble.
+    private static func parseVblendv(_ kind: X86.VBlendvKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        guard instruction.operands.count == 4 else {
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "4 operands", actual: instruction.operands.count)
+        }
+        let (size, dst) = try parseVectorRegister(instruction.operands[0], mnemonic: kind.rawValue, scalarOnly: false)
+        let (size1, src1) = try parseVectorRegister(instruction.operands[1], mnemonic: kind.rawValue, scalarOnly: false)
+        guard size1 == size else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): all operands must share a vector width")
+        }
+        let src2 = try parseVectorOrMemory(instruction.operands[2], size: size, memoryWidth: size.packedMemoryWidth, mnemonic: kind.rawValue)
+        let (sizeM, mask) = try parseVectorRegister(instruction.operands[3], mnemonic: kind.rawValue, scalarOnly: false)
+        guard sizeM == size else {
+            throw AssemblerError.unsupportedOperand("\(kind.rawValue): mask width must match destination")
+        }
+        return .vblendv(kind, size: size, destination: dst, source1: src1, source2: src2, mask: mask)
+    }
+
     /// VMOVLPS / VMOVHPS / VMOVLPD / VMOVHPD — memory load (3 operands,
     /// `xmm, xmm, m64`) or memory store (2 operands, `m64, xmm`).
     private static func parseVexHalfMoveMem(_ kind: X86.VexHalfMoveMemKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {

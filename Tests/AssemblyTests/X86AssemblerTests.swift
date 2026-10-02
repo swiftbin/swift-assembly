@@ -5033,6 +5033,27 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18ay AVX VBLENDV* (/is4)
+
+    private static let vblendvCases: [(String, [UInt8])] = [
+        ("vblendvps xmm1, xmm2, xmm3, xmm4",                        [0xC4, 0xE3, 0x69, 0x4A, 0xCB, 0x40]),
+        ("vblendvpd ymm0, ymm1, ymm2, ymm3",                        [0xC4, 0xE3, 0x75, 0x4B, 0xC2, 0x30]),
+        ("vpblendvb xmm5, xmm6, xmmword ptr [rdi], xmm7",           [0xC4, 0xE3, 0x49, 0x4C, 0x2F, 0x70]),
+        ("vpblendvb ymm15, ymm14, ymmword ptr [rax], ymm13",        [0xC4, 0x63, 0x0D, 0x4C, 0x38, 0xD0]),
+    ]
+
+    func testVblendvAssembles() throws {
+        for (source, expected) in Self.vblendvCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVblendvDisassembles() throws {
+        for (source, bytes) in Self.vblendvCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18ax VEX 半幅 MOV memory forms
 
     private static let vexHalfMoveMemCases: [(String, [UInt8])] = [
