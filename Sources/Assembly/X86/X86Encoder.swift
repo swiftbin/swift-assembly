@@ -307,6 +307,10 @@ internal enum X86InstructionEncoder {
             return Encoded(bytes: try encodeEnqcmd(kind, destination: dst, memory: mem), patches: [])
         case .vexBroadcastF(let kind, let size, let dst, let mem):
             return Encoded(bytes: try encodeVexBroadcastF(kind, size: size, destination: dst, memory: mem), patches: [])
+        case .vexHalfMoveMemLoad(let kind, let dst, let src1, let mem):
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.loadOpcode, lBit: 0, destination: dst, source1: src1, source2: .memory(mem)), patches: [])
+        case .vexHalfMoveMemStore(let kind, let mem, let src):
+            return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F, w: 0, pp: kind.ppBits, opcode: kind.storeOpcode, lBit: 0, destination: src, source1: 0, source2: .memory(mem)), patches: [])
         case .vexMaskMov(let kind, let direction, let size, let reg, let mask, let mem):
             let opcode: UInt8 = direction == .load ? kind.loadOpcode : kind.storeOpcode
             return Encoded(bytes: try encodeVexThreeOp(escape: X86.VEX.escape0F38, w: kind.w, pp: 0b01, opcode: opcode, lBit: size.lBit, destination: reg, source1: mask, source2: .memory(mem)), patches: [])

@@ -5033,6 +5033,33 @@ final class X86AssemblerTests: XCTestCase {
         }
     }
 
+    // MARK: - Phase 18ax VEX 半幅 MOV memory forms
+
+    private static let vexHalfMoveMemCases: [(String, [UInt8])] = [
+        // Load (xmm, xmm, m64).
+        ("vmovlps xmm1, xmm2, qword ptr [rdi]",     [0xC5, 0xE8, 0x12, 0x0F]),
+        ("vmovhps xmm1, xmm2, qword ptr [rdi]",     [0xC5, 0xE8, 0x16, 0x0F]),
+        ("vmovlpd xmm1, xmm2, qword ptr [rax]",     [0xC5, 0xE9, 0x12, 0x08]),
+        ("vmovhpd xmm3, xmm4, qword ptr [rsi]",     [0xC5, 0xD9, 0x16, 0x1E]),
+        // Store (m64, xmm).
+        ("vmovlps qword ptr [rdi], xmm1",           [0xC5, 0xF8, 0x13, 0x0F]),
+        ("vmovhps qword ptr [rax], xmm2",           [0xC5, 0xF8, 0x17, 0x10]),
+        ("vmovlpd qword ptr [rcx], xmm0",           [0xC5, 0xF9, 0x13, 0x01]),
+        ("vmovhpd qword ptr [rdx], xmm5",           [0xC5, 0xF9, 0x17, 0x2A]),
+    ]
+
+    func testVexHalfMoveMemAssembles() throws {
+        for (source, expected) in Self.vexHalfMoveMemCases {
+            XCTAssertEqual(try X86Assembler.assemble(source), expected, "assemble \(source)")
+        }
+    }
+
+    func testVexHalfMoveMemDisassembles() throws {
+        for (source, bytes) in Self.vexHalfMoveMemCases {
+            XCTAssertEqual(try X86Assembler.disassemble(bytes), source, "disassemble \(bytes.map { String($0, radix: 16) })")
+        }
+    }
+
     // MARK: - Phase 18aw VEX MASKMOV family
 
     private static let vexMaskMovCases: [(String, [UInt8])] = [

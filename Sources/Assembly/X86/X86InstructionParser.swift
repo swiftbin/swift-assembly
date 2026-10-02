@@ -244,6 +244,9 @@ internal enum X86Parser {
         if let kind = X86.VexBroadcastFKind(rawValue: instruction.mnemonic) {
             return try parseVexBroadcastF(kind, instruction)
         }
+        if let kind = X86.VexHalfMoveMemKind(rawValue: instruction.mnemonic) {
+            return try parseVexHalfMoveMem(kind, instruction)
+        }
         if let kind = X86.VexMaskMovKind(rawValue: instruction.mnemonic) {
             return try parseVexMaskMov(kind, instruction)
         }
@@ -1380,6 +1383,28 @@ internal enum X86Parser {
     }
 
     /// MOVDIR64B r64, m512.
+    /// VMOVLPS / VMOVHPS / VMOVLPD / VMOVHPD — memory load (3 operands,
+    /// `xmm, xmm, m64`) or memory store (2 operands, `m64, xmm`).
+    private static func parseVexHalfMoveMem(_ kind: X86.VexHalfMoveMemKind, _ instruction: ParsedInstruction) throws -> X86.Instruction {
+        switch instruction.operands.count {
+        case 3:
+            guard let dst = parseXMMRegister(instruction.operands[0]),
+                  let src1 = parseXMMRegister(instruction.operands[1]) else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): first two operands must be XMM registers")
+            }
+            let mem = try parseSizedMemory(instruction.operands[2], expected: .qword, mnemonic: kind.rawValue)
+            return .vexHalfMoveMemLoad(kind, destination: dst.number, source1: src1.number, memory: mem)
+        case 2:
+            let mem = try parseSizedMemory(instruction.operands[0], expected: .qword, mnemonic: kind.rawValue)
+            guard let src = parseXMMRegister(instruction.operands[1]) else {
+                throw AssemblerError.unsupportedOperand("\(kind.rawValue): source must be an XMM register")
+            }
+            return .vexHalfMoveMemStore(kind, memory: mem, source: src.number)
+        default:
+            throw AssemblerError.invalidOperandCount(instruction: kind.rawValue, expected: "2 or 3 operands", actual: instruction.operands.count)
+        }
+    }
+
     /// VMASKMOVPS/PD and VPMASKMOVD/Q. Direction is inferred from the
     /// operand shape (register-register-memory = load; the reverse is
     /// store).

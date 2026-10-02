@@ -1001,6 +1001,12 @@ internal enum X86 {
         case xbegin(target: BranchTarget)
         /// TSX XABORT imm8 — abort a restricted transaction. `C6 F8 ib`.
         case xabort(immediate: UInt8)
+        /// VEX VMOVLPS / VMOVHPS / VMOVLPD / VMOVHPD — memory load (3-op
+        /// NDS, `xmm, xmm, m64`) and memory store (2-op, `m64, xmm`).
+        /// Load encoded on `VEX.NDS.128.[66].0F 12|16 /r`; store on
+        /// `VEX.128.[66].0F 13|17 /r` (vvvv reserved).
+        case vexHalfMoveMemLoad(VexHalfMoveMemKind, destination: UInt8, source1: UInt8, memory: MemoryOperand)
+        case vexHalfMoveMemStore(VexHalfMoveMemKind, memory: MemoryOperand, source: UInt8)
         /// VMASKMOVPS/PD and VPMASKMOVD/Q — conditional loads/stores.
         /// Load: `xmm/ymm, xmm/ymm mask, m{128|256}`.
         /// Store: `m{128|256}, xmm/ymm mask, xmm/ymm`.
@@ -1045,6 +1051,37 @@ internal enum X86 {
         case enqcmd     // F2 mandatory prefix
         case enqcmds    // F3 mandatory prefix
         var prefix: UInt8 { self == .enqcmd ? 0xF2 : 0xF3 }
+    }
+
+    enum VexHalfMoveMemKind: String, Equatable, CaseIterable {
+        case vmovlps        // 0F    12/13, pp=0
+        case vmovhps        // 0F    16/17, pp=0
+        case vmovlpd        // 66 0F 12/13, pp=1
+        case vmovhpd        // 66 0F 16/17, pp=1
+
+        var ppBits: UInt8 {
+            switch self {
+            case .vmovlps, .vmovhps: return 0
+            case .vmovlpd, .vmovhpd: return 0b01
+            }
+        }
+
+        var loadOpcode: UInt8 {
+            switch self {
+            case .vmovlps, .vmovlpd: return 0x12
+            case .vmovhps, .vmovhpd: return 0x16
+            }
+        }
+
+        var storeOpcode: UInt8 { loadOpcode + 1 }
+
+        static func decode(ppBits: UInt8, loadOpcode: UInt8) -> VexHalfMoveMemKind? {
+            allCases.first { $0.ppBits == ppBits && $0.loadOpcode == loadOpcode }
+        }
+
+        static func decode(ppBits: UInt8, storeOpcode: UInt8) -> VexHalfMoveMemKind? {
+            allCases.first { $0.ppBits == ppBits && $0.storeOpcode == storeOpcode }
+        }
     }
 
     enum VexMaskMovDirection: Equatable { case load, store }

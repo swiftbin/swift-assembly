@@ -1197,6 +1197,28 @@ internal enum X86InstructionDecoder {
                 return Decoded(instruction: .vexHalfMoveReg(kind, destination: dst, source1: src1, source2: src2), length: cursor.consumed)
             }
         }
+        // VMOVLPS/HPS/LPD/HPD memory load — 0F 12/16 with mod != 11.
+        if let kind = X86.VexHalfMoveMemKind.decode(ppBits: v.pp, loadOpcode: opcode) {
+            let modrm = try cursor.peekByte()
+            if X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister {
+                _ = try cursor.takeByte()
+                let dstNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let src1 = v.vvvv & 0xF
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                return Decoded(instruction: .vexHalfMoveMemLoad(kind, destination: dstNum, source1: src1, memory: mem), length: cursor.consumed)
+            }
+        }
+        // VMOVLPS/HPS/LPD/HPD memory store — 0F 13/17 with memory-only
+        // destination and vvvv reserved.
+        if v.vvvv == 0, let kind = X86.VexHalfMoveMemKind.decode(ppBits: v.pp, storeOpcode: opcode) {
+            let modrm = try cursor.peekByte()
+            if X86.ModRM.mod.extract(modrm) != X86.ModRM.modRegister {
+                _ = try cursor.takeByte()
+                let srcNum = (prefixes.rexR << 3) | X86.ModRM.reg.extract(modrm)
+                let mem = try decodeMemoryAddressing(modrm: modrm, prefixes: prefixes, cursor: &cursor)
+                return Decoded(instruction: .vexHalfMoveMemStore(kind, memory: mem, source: srcNum), length: cursor.consumed)
+            }
+        }
         // VMOVD / VMOVQ — VEX.128.66.0F.W0|W1 6E (load) / 7E (store).
         if v.vvvv == 0 && v.pp == 0b01 && (opcode == 0x6E || opcode == 0x7E) {
             let kind: X86.MovDQKind = v.w == 1 ? .movq : .movd
